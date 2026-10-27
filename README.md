@@ -1,0 +1,152 @@
+# MinecraftTogether
+
+An AI companion for **modded Minecraft 1.20.1 (Forge)** — play together with an
+LLM-driven player that chats, follows you, gathers resources, and acts in the
+world like a real companion, not a chatbot overlay.
+
+Unlike most Minecraft AI projects, this targets **modded environments from day
+one**: every address (items, blocks, entities) is a `modid:name` registry ID,
+so `mekanism:osmium_ore` works exactly like `minecraft:rabbit`.
+
+```
+Minecraft client (bot account)
+  └─ agent-mod (Forge) ── Baritone pathing, WebSocket server :25587
+         │  ws://127.0.0.1:25587
+         ▼
+  bridge (Node/TS) ── MCP server :25589/mcp, skill loader, event buffer,
+         │           chat→LLM runner
+         ▼
+  MCP host (Codex tested; Muse and others pluggable)
+```
+
+The bot is a **separate Minecraft client** (second account/instance) that joins
+your dedicated Forge server like any player. In-game chat is the primary
+interface: you type "砂を5個集めて", the companion acknowledges in chat, goes
+mining, and reports back in chat.
+
+## Features
+
+- **Chat-driven companion** — talk in game chat; it answers and acts
+- **Skills layer** — `follow_player`, `gather`, `come_here`, `give`, `stop_all`,
+  each a single hot-reloadable JS file in `skills/` exposed as an MCP tool
+- **Two-layer API** — high-level skills for the LLM, low-level primitives
+  (`move`, `dig`, `look_at`, `equip`, `toss`, Baritone `goto`/`mine`/`follow`)
+  as an escape hatch
+- **Mod-aware** — registry IDs for modded blocks/entities, modded ore drop
+  counting (`mekanism:tin_ore` → `raw_tin` verified), Japanese display-name
+  item search (`find_item`)
+- **Real-world capabilities** — waypoint memory, screenshots, entity lookup,
+  area scans, emotes, server commands (op-gated), task lifecycle with
+  `task_id`/status/result/cancel events
+- **Hot-reload skills** — drop a `.mjs` file in `skills/`, it becomes a tool
+
+## Repository layout
+
+| Path | What |
+|---|---|
+| `agent-mod/` | Forge 1.20.1 client mod (Java). WS API, Baritone integration, task system |
+| `bridge/` | Node/TypeScript MCP server + WS client + skill loader + chat runner |
+| `skills/` | One JS module per skill: `{name, description, params, run(ctx, args)}` |
+| `tools/mock-mod/` | Mock game-side WS impl — test the bridge with no Minecraft |
+| `docs/` | Design, spec, verification log, mod-compat notes (mostly Japanese) |
+
+## Quickstart
+
+Requires: JDK 17, Node 18+, a Forge 1.20.1 dedicated server, a second
+Minecraft instance for the bot (Prism Launcher recommended), Baritone
+(`baritone-api-forge`) + agent-mod in the bot instance.
+
+```bash
+# 1. Build the client mod → deploy jar into the bot instance's mods/
+cd agent-mod && ./gradlew build
+cp build/libs/agentmod-*-all.jar <bot instance>/.minecraft/mods/
+
+# 2. Run the dedicated server (same mod set as clients — see docs/mod-compat.md)
+cd server && ./run.bat        # or run.sh on Linux
+
+# 3. Run the bridge
+cd bridge && npm install && npm run build
+node dist/index.js            # listens on http://127.0.0.1:25589/mcp
+
+# 4. Launch the bot client — it auto-connects to the server and to the bridge
+```
+
+Endpoints: agent-mod WS `ws://127.0.0.1:25587`, bridge MCP
+`http://127.0.0.1:25589/mcp`, health `GET /healthz`. Point your MCP host
+(Codex config, etc.) at the MCP URL. Set `BRIDGE_TOKEN` to require
+`Authorization: Bearer <token>` when exposing the endpoint via a tunnel.
+
+`bridge/mcp-call.mjs` is a small CLI for calling tools directly:
+
+```bash
+node mcp-call.mjs get_state '{}'
+node mcp-call.mjs gather '{"block":"mekanism:tin_ore","count":4}'
+node mcp-call.mjs mine '{"block":"minecraft:stone","count":3,"mode":"additional"}'
+```
+
+## Skills
+
+A skill is a default-exported object in `skills/*.mjs`:
+
+```js
+export default {
+  name: 'gather',
+  description: 'Gather blocks via Baritone mine until the count is collected.',
+  params: { block: { type: 'string', required: true },
+            count: { type: 'integer' } },
+  async run(ctx, { block, count = 1 }) {
+    await ctx.say(`${block} を${count}個集めてくるね`);
+    const r = await ctx.call('baritone.mine', { block, count, mode: 'ensure' });
+    const d = await ctx.waitTask(r.task_id, 300_000);
+    // ...report in chat, return a result object
+  },
+};
+```
+
+`ctx`: `call` (mod RPC), `state`, `say` (chat), `waitTask`, `sleep`, `signal`
+(cancellation). Files are watched and hot-reloaded; `reload_skills` forces it.
+
+### `mine` semantics — important
+
+`baritone.mine` / the `mine` tool take `mode`:
+
+- `"additional"` (default) — collect N **more** items
+- `"ensure"` — target N **total** in inventory; mines only the shortfall and
+  succeeds immediately if already held
+
+The `gather` skill uses `ensure`, which is the natural reading of "get me 5
+sand" — if you already have 6 it just says so instead of digging anyway.
+
+## Companion prerequisites learned the hard way
+
+- **Give the bot a pickaxe.** Baritone can't path to encased ore/stone
+  bare-handed (its mining cost explodes past search limits → endless
+  blacklist loop). With an iron pickaxe it works instantly.
+- **`obs.entity` excludes the bot itself** — `give`/`come_here` need a *real
+  second player*; you can't self-target.
+- **`run_command` requires the bot to be op** on the server. Powerful: an
+  LLM with op can `/give` but also `/stop`. Use on private servers only.
+
+## Safety
+
+- Everything binds `127.0.0.1` by default — nothing is exposed unless you
+  tunnel it (then set `BRIDGE_TOKEN`).
+- `run_command` executes server commands with the bot's permission level.
+  Keep the bot un-op'd on servers you don't control.
+- `skills/debug_entity.mjs` is a dev/debug skill; delete before publishing
+  your own deployment if unwanted.
+
+## Status & roadmap
+
+Milestones M0–M5 verified live on a **262-mod pack** (see
+`docs/verification-m2.5.md` for the full field log and `docs/mod-compat.md`
+for the mod compatibility notes — several mods needed removal/patching).
+
+Done: environment, mod skeleton, primitives, Baritone, skills, companion MVP,
+full-pack validation. Not done: crafting/container/GUI ops (planned as
+meaning-level slot ops, see `docs/design.md`), positive-path `give`/`come_here`
+tests, Muse host connection, long-duration soak.
+
+## License
+
+MIT — see [LICENSE](LICENSE).

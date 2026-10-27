@@ -1,0 +1,33 @@
+# ---- Runtime environments (not part of the source tree) ----
+# The dedicated Forge server, its world, and mod packs are deployment artifacts.
+# Mod jars cannot be redistributed; see docs/setup for how to assemble your own.
+/server/
+/packs/
+/research/
+/tmp/
+/nul
+
+# ---- Java / Gradle ----
+agent-mod/build/
+agent-mod/run/
+agent-mod/.gradle/
+.gradle/
+*.class
+
+# ---- Node / TypeScript ----
+node_modules/
+bridge/dist/
+bridge/logs/
+tools/mock-mod/node_modules/
+
+# ---- Logs & runtime state ----
+*.log
+logs/
+agentmod-shots/
+
+# ---- OS / editor ----
+Thumbs.db
+Desktop.ini
+.DS_Store
+.idea/
+.vscode/

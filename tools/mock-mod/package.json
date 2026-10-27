@@ -1,0 +1,11 @@
+{
+  "name": "mock-mod",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node mock-mod.mjs"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
