@@ -31,3 +31,9 @@ Desktop.ini
 .DS_Store
 .idea/
 .vscode/
+
+# generated jarJar metadata at project root (build artifact)
+agent-mod/META-INF/
+
+# third-party tunnel binary — download cloudflared yourself
+tools/tunnel/
