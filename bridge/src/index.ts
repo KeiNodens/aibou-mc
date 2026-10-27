@@ -74,6 +74,9 @@ if (RUNNER) {
     logDir: 'logs',
     debounceMs: 1500,
     botName: process.env.BOT_NAME ?? 'Rin',
+    promptFile: process.env.RUNNER_PROMPT_FILE,
+    runTimeoutMs: Number(process.env.RUNNER_TIMEOUT_MS ?? 600_000),
+    command: process.env.RUNNER_COMMAND,
   });
   console.log('[bridge] runner on (chatイベント→codex exec)');
 }

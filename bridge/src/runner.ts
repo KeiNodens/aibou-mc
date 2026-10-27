@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { State } from './state.js';
 
@@ -9,8 +9,11 @@ export interface RunnerOpts {
   logDir: string;
   debounceMs?: number;
   command?: string;
+  /** テンプレ内の {chatLog} を履歴で置換。未指定なら内蔵プロンプトを使う */
   promptFile?: string;
   botName?: string;
+  /** codex exec が応答しない場合の強制終了までの時間。default 10min */
+  runTimeoutMs?: number;
 }
 
 // mc-mcpのシステムプロンプト (research/sources/lafkpages-mc-mcp.md) を下地に、
@@ -69,7 +72,13 @@ export function startRunner(state: State, opts: RunnerOpts) {
 
   async function run() {
     const chatLog = state.chat(50).map((c) => `[${c.from}] ${c.text}`).join('\n') || '(なし)';
-    const prompt = buildPrompt(chatLog);
+    let prompt: string;
+    if (opts.promptFile) {
+      const tpl = readFileSync(opts.promptFile, 'utf8');
+      prompt = tpl.includes('{chatLog}') ? tpl.replace('{chatLog}', chatLog) : `${tpl}\n\n${chatLog}`;
+    } else {
+      prompt = buildPrompt(chatLog);
+    }
     mkdirSync(opts.logDir, { recursive: true });
     const outFile = path.join(opts.logDir, `codex-last-${Date.now()}.md`);
     const args = [
@@ -91,6 +100,10 @@ export function startRunner(state: State, opts: RunnerOpts) {
     await new Promise<void>((resolve) => {
       const p = spawn(opts.command ?? 'codex', args, { shell: true });
       let out = '';
+      const killer = setTimeout(() => {
+        console.log('[runner] codex timeout; killing');
+        p.kill('SIGKILL');
+      }, opts.runTimeoutMs ?? 600_000);
       p.stdout?.on('data', (d) => {
         out += d;
       });
@@ -98,12 +111,14 @@ export function startRunner(state: State, opts: RunnerOpts) {
       p.stdin?.write(prompt);
       p.stdin?.end();
       p.on('close', (code) => {
+        clearTimeout(killer);
         console.log(`[runner] codex 終了 code=${code} (last message: ${outFile})`);
         const tail = out.trim().slice(-600);
         if (tail) console.log('[runner] stdout tail:', tail);
         resolve();
       });
       p.on('error', (e) => {
+        clearTimeout(killer);
         console.log('[runner] spawn error:', e.message);
         resolve();
       });

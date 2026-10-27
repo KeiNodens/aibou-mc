@@ -76,6 +76,20 @@ Endpoints: agent-mod WS `ws://127.0.0.1:25587`, bridge MCP
 (Codex config, etc.) at the MCP URL. Set `BRIDGE_TOKEN` to require
 `Authorization: Bearer <token>` when exposing the endpoint via a tunnel.
 
+### Bridge env vars
+
+| Var | Default | Purpose |
+|---|---|---|
+| `MOD_URL` | `ws://127.0.0.1:25587` | agent-mod WebSocket |
+| `MCP_PORT` | `25589` | MCP HTTP port |
+| `BRIDGE_TOKEN` | (unset = no auth) | bearer token for exposed endpoints |
+| `SKILLS_DIR` | `../skills` | skill directory |
+| `RUNNER` | `on` | set `off` to disable the chat→LLM runner |
+| `RUNNER_COMMAND` | `codex` | LLM CLI invoked per chat batch |
+| `RUNNER_PROMPT_FILE` | (built-in) | prompt template; `{chatLog}` is replaced with history |
+| `RUNNER_TIMEOUT_MS` | `600000` | kill a hung LLM run |
+| `BOT_NAME` | `Rin` | bot's player name (self-message filter) |
+
 `bridge/mcp-call.mjs` is a small CLI for calling tools directly:
 
 ```bash

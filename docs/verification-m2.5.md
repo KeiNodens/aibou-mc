@@ -288,3 +288,22 @@ path不達の巡回はBaritone側が終了しないため、タスクが無限ru
 
 - `ops.json` にRin (level 4) を追加済 — `run_command` 経由でgive/tp等が使える。**LLM駆動botのopは強力なので、公開鯖では推奨しない** (OSS化時にREADME注意書き要)
 - 相棒の採集技能はツール (鉄ツルハシ以上) の所持が事実上の前提。現状は手動付与、M6以降で自動化検討
+
+---
+
+# M6: OSS公開準備・安定化 (03:20)
+
+## 実施内容
+
+- **git init + 初期コミット** (55ファイル)。`.gitignore` で server/(3.9GB)・packs/・research/・node_modules・build/dist・logs・生成jarjarメタ・cloudflared.exe(53MB) を除外
+- **LICENSE** (MIT), **README.md** (英語: アーキテクチャ・quickstart・mine 2モード・ツール前提・安全注意・env変数表), **AGENTS.md** (ビルド/実行/規約), **docs/mod-compat.md** (262mod互換性の知見を独立文書化 — 除外mod一覧・両側必要mod・パックデータバグ・単一プレイで隠れる理由)
+- **runner.ts 安定化**: 未使用だった `promptFile` を実装 (`{chatLog}` 置換)、Codexハング時の `runTimeoutMs` (default 10min) 追加。index.ts に `RUNNER_PROMPT_FILE`/`RUNNER_TIMEOUT_MS`/`RUNNER_COMMAND`/`BOT_NAME` env配線
+- bridge/package.json に description/license 追加、agentsトムルにjarJar warning解消
+
+## OSSとして未整備の残件
+
+- crafting/container/GUI 操作は未実装 (design §5 の段階対応は設計済み)
+- give/come_here の対人positive検証 (要第2プレイヤー)
+- Muse接続 (docs/muse-connection.md にメモあり)
+- CI無し (build手順はAGENTS.md記載)
+- 長時間soak未測定
