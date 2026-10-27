@@ -307,3 +307,49 @@ path不達の巡回はBaritone側が終了しないため、タスクが無限ru
 - Muse接続 (docs/muse-connection.md にメモあり)
 - CI無し (build手順はAGENTS.md記載)
 - 長時間soak未測定
+
+---
+
+# M6.5: use_item・コンテナ・クラフト実装と検証 (08:30)
+
+## 新規API (Phase 1: 標準クラフト)
+
+- `obs.block` (bridge: `find_block`) — 指定ブロックの座標検索、距離順最大16件
+- `use_item` — 空中use (食べる・投げる等) / x,y,z+face指定でブロック右クリック (設置・GUI開く)
+- `container.read` / `container.click` / `container.close` — 意味レベルslot操作。clickの `menu_id` 不一致で `STALE_STATE`
+- `recipe.lookup` (bridge: `recipe_lookup`) — 同期済みレシピマネージャから成果物→{type,材料(tag展開),個数}。機械系RecipeTypeも列挙される
+- `craft` (bridge: `craft_menu`) — `ServerboundPlaceRecipePacket` でグリッド配置→結果スロット取り出しをtask繰り返し。2x2=インベントリmenu、3x3=CraftingMenu要
+- `skills/craft.mjs` — craft試行→`NEED_TABLE`なら`obs.block`で作業台探索→reach内ならgoto省略→`use_item`で開く→再試行→`container.close`
+
+## 実機検証結果 (フルパック)
+
+| 機能 | 結果 |
+|---|---|
+| 作業台を `use_item` で設置 | success、find_blockで確認 |
+| 作業台・チェストを `use_item` で開く | `minecraft:crafting` (46slots) / `generic_9x3` (63slots) menu確認 |
+| `container_click` swap (inv↔hotbar) / quick_move (player→chest) | 両方成功、dioriteがchest slot0へ |
+| `container_click` 誤った `menu_id` | `STALE_STATE` で拒否 |
+| `craft_menu` 3x3 (furnace) | cobblestone 12→4消→4消費、furnace獲得 |
+| `craft` skill 2x2 (stick x8) | planks 16→12、sticks獲得 |
+| `craft` skill 3x3 (chest) | NEED_TABLE→作業台発見→開く→craft→close 全自動 |
+| `craft_menu` bedrock / 3x3をinvで / 材料不足 | `NO_RECIPE` / `NEED_TABLE` / `RECIPE_REJECTED` |
+| `use_item` 食事 (steak) | consume→腹0→20回復。**solapplepie が onFoodEaten で FoodListNotFoundException → kick** (mod側bug、後述) |
+| `recipe_lookup` stick | 全RecipeType列挙 (sawmill/cutting/emptying/crafting/mod製代替recipe含む)、材料tag展開済み |
+
+## 検証で発見・修正した不具合
+
+1. `InventoryMenu.getType()` が `UnsupportedOperationException` → try/catch で `player_inventory` fallback
+2. **FastSuite** がPlaceRecipe処理を非同期化 → `PLACE_WAIT` 4→20tick (4tickだと常にgrid未充填判定)
+3. 同名成果物の代替recipe (mod追加) が多い → `satisfiable()`: 全材料がインベントリにあるrecipeを優先選択
+4. `task.done` イベントは `error:{code,message}` ネスト形、skill側はflat `error_code` を参照 → emitDoneにflat field併記 (互換で両方)
+5. `obs.block` がソート未実装 → 距離順ソート+16件cap
+6. **`equip` が `ServerboundSetCarriedItemPacket` を送っていなかった** → 鯖が古いslotのitemで操作するdesync (use_item/tossの実効対象がずれる、原因不明のアイテム消失に見える) → packet送信で修正
+7. `GoalBlock` 指定がソリッドな作業台座標では失敗しやすい → craft skillはreach (dist≤3.5) 内ならgoto省略
+8. mods/ に旧 `agentmod-0.1.0.jar` と新 `agentmod.jar` が同居し旧コードがロードされていた → 旧ファイル削除
+
+## 既知の制約・mod互換
+
+- **solapplepie**: Rinが食事を完了するたび `FoodListNotFoundException` でkickされる (offline/bot playerにfood capabilityが付かないmod側問題)。食事自体は成功する。恒久対策はsolapplepie除外または修正版待ち
+- `use_item` の設置: クリック面がreplaceable/airだと鯖が拒否・位置がずれることがある (回復不能ではないが座標確認推奨)
+- peacefulではhungerが減らず食事できない (ゲーム仕様)
+- Phase 2以降 (機械GUI/自動化) はmachine定義JSON+汎用slot操作で対応予定 — design §5 参照

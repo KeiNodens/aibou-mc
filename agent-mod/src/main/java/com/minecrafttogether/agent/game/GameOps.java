@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.minecrafttogether.agent.AgentMod;
 import com.minecrafttogether.agent.task.AgentTask;
+import com.minecrafttogether.agent.task.CraftTask;
 import com.minecrafttogether.agent.task.DigTask;
 import com.minecrafttogether.agent.task.EmoteTask;
 import com.minecrafttogether.agent.task.FollowTask;
@@ -27,8 +28,15 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.RecipeBookMenu;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -55,6 +63,13 @@ public final class GameOps {
             case "obs.state" -> obsState();
             case "obs.entity" -> obsEntity(params);
             case "obs.scan" -> obsScan(params);
+            case "obs.block" -> obsBlock(params);
+            case "use_item" -> useItem(params);
+            case "container.read" -> containerRead();
+            case "container.click" -> containerClick(params);
+            case "container.close" -> containerClose();
+            case "recipe.lookup" -> recipeLookup(params);
+            case "craft" -> craft(params);
             case "emote" -> emote(params);
             case "screenshot" -> screenshot();
             case "find_item" -> findItem(params);
@@ -157,6 +172,9 @@ public final class GameOps {
         int slot = params.get("slot").getAsInt();
         if (slot < 0 || slot > 8) throw new ApiError("BAD_REQUEST", "slot must be 0-8 (hotbar)");
         p.getInventory().selected = slot;
+        // 手持ち選択はサーバーが別管理 — 通知しないとサーバーは古いslotのitemを使う
+        if (p.connection != null)
+            p.connection.send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(slot));
         JsonObject r = new JsonObject();
         r.addProperty("slot", slot);
         return r;
@@ -294,6 +312,251 @@ public final class GameOps {
         JsonArray caps = new JsonArray();
         AgentWsCapabilities.all().forEach(caps::add);
         r.add("capabilities", caps);
+        return r;
+    }
+
+    /**
+     * 右クリック使用。target無し=空中使用 (食べる/道具)、
+     * {x,y,z,face}指定=ブロックへの使用 (設置/コンテナを開く/操作)。
+     */
+    private static JsonObject useItem(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer p = requirePlayer();
+        InteractionHand hand = params.has("hand")
+            && params.get("hand").getAsString().equalsIgnoreCase("off")
+            ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
+        JsonObject r = new JsonObject();
+        if (params.has("x")) {
+            BlockPos pos = new BlockPos(
+                params.get("x").getAsInt(),
+                params.get("y").getAsInt(),
+                params.get("z").getAsInt());
+            Direction face = Direction.UP;
+            if (params.has("face")) {
+                try { face = Direction.byName(params.get("face").getAsString()); }
+                catch (Exception ignored) {}
+            }
+            Vec3 hit = Vec3.atCenterOf(pos).relative(face, 0.5);
+            var res = mc.gameMode.useItemOn(p, hand, new BlockHitResult(hit, face, pos, false));
+            r.addProperty("used_on", pos.toShortString());
+            r.addProperty("result", res.toString().toLowerCase());
+        } else {
+            var res = mc.gameMode.useItem(p, hand);
+            r.addProperty("result", res.toString().toLowerCase());
+        }
+        return r;
+    }
+
+    /**
+     * 指定ブロックの座標検索。プレイヤー中心の球範囲から近い順に最大16件。
+     * 作業台・チェスト・機械を見つけるための観測。radius上限64。
+     */
+    private static JsonObject obsBlock(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer p = requirePlayer();
+        String name = params.get("block").getAsString();
+        ResourceLocation want = ResourceLocation.tryParse(name);
+        if (want == null) throw new ApiError("BAD_REQUEST", "bad block id: " + name);
+        int radius = params.has("radius") ? params.get("radius").getAsInt() : 32;
+        radius = Math.min(Math.max(radius, 1), 64);
+
+        JsonArray found = new JsonArray();
+        if (mc.level != null) {
+            BlockPos c = p.blockPosition();
+            BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
+            int r2 = radius * radius;
+            for (int dy = -radius; dy <= radius; dy++) {
+                for (int dx = -radius; dx <= radius; dx++) {
+                    for (int dz = -radius; dz <= radius; dz++) {
+                        int d2 = dx * dx + dy * dy + dz * dz;
+                        if (d2 > r2) continue;
+                        mpos.set(c.getX() + dx, c.getY() + dy, c.getZ() + dz);
+                        if (!mc.level.hasChunkAt(mpos)) continue;
+                        var state = mc.level.getBlockState(mpos);
+                        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+                        if (key == null || !key.equals(want)) continue;
+                        JsonObject o = new JsonObject();
+                        o.addProperty("x", mpos.getX());
+                        o.addProperty("y", mpos.getY());
+                        o.addProperty("z", mpos.getZ());
+                        o.addProperty("d2", d2);
+                        o.addProperty("dist", Math.round(Math.sqrt(d2) * 10.0) / 10.0);
+                        found.add(o);
+                    }
+                }
+            }
+        }
+        // 近い順にソートして最大16件 (d2は内部ソート用)
+        java.util.List<JsonObject> sorted = new java.util.ArrayList<>();
+        for (var e : found) sorted.add(e.getAsJsonObject());
+        sorted.sort(java.util.Comparator.comparingInt(o -> o.get("d2").getAsInt()));
+        JsonArray out = new JsonArray();
+        for (int i = 0; i < Math.min(16, sorted.size()); i++) {
+            JsonObject o = sorted.get(i);
+            o.remove("d2");
+            out.add(o);
+        }
+        JsonObject r = new JsonObject();
+        r.addProperty("block", name);
+        r.addProperty("radius", radius);
+        r.add("found", out);
+        r.addProperty("count", out.size());
+        return r;
+    }
+
+    // ---- コンテナ/slot操作 (意味レベル、画面座標ではない) ----
+
+    private static JsonObject menuJson(AbstractContainerMenu menu) {
+        JsonObject r = new JsonObject();
+        r.addProperty("container_id", menu.containerId);
+        ResourceLocation typeId = null;
+        try {
+            // InventoryMenu.getType() は UnsupportedOperationException を投げる
+            var type = menu.getType();
+            typeId = type != null ? BuiltInRegistries.MENU.getKey(type) : null;
+        } catch (Exception ignored) {}
+        r.addProperty("menu_id", typeId != null ? typeId.toString() : "player_inventory");
+        ItemStack carried = menu.getCarried();
+        ResourceLocation carriedId = BuiltInRegistries.ITEM.getKey(carried.getItem());
+        r.addProperty("carried", carried.isEmpty() ? null : carriedId + " x" + carried.getCount());
+        JsonArray slots = new JsonArray();
+        for (int i = 0; i < menu.slots.size(); i++) {
+            Slot s = menu.slots.get(i);
+            ItemStack st = s.getItem();
+            JsonObject o = new JsonObject();
+            o.addProperty("slot", i);
+            if (st.isEmpty()) {
+                o.addProperty("empty", true);
+            } else {
+                ResourceLocation id = BuiltInRegistries.ITEM.getKey(st.getItem());
+                o.addProperty("id", id != null ? id.toString() : "unknown");
+                o.addProperty("count", st.getCount());
+            }
+            slots.add(o);
+        }
+        r.add("slots", slots);
+        return r;
+    }
+
+    private static JsonObject containerRead() throws ApiError {
+        LocalPlayer p = requirePlayer();
+        return menuJson(p.containerMenu);
+    }
+
+    /**
+     * slotクリック。action: pickup|quick_move|swap|throw|clone|pickup_all|quick_craft
+     * button: 0=左 1=右。swapはbuttonがホットバーindex (0-8)。
+     */
+    private static JsonObject containerClick(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer p = requirePlayer();
+        int slot = params.get("slot").getAsInt();
+        int button = params.has("button") ? params.get("button").getAsInt() : 0;
+        String action = params.has("action") ? params.get("action").getAsString() : "pickup";
+        ClickType type = switch (action) {
+            case "pickup" -> ClickType.PICKUP;
+            case "quick_move" -> ClickType.QUICK_MOVE;
+            case "swap" -> ClickType.SWAP;
+            case "throw" -> ClickType.THROW;
+            case "clone" -> ClickType.CLONE;
+            case "pickup_all" -> ClickType.PICKUP_ALL;
+            case "quick_craft" -> ClickType.QUICK_CRAFT;
+            default -> throw new ApiError("BAD_REQUEST", "unknown action: " + action);
+        };
+        AbstractContainerMenu menu = p.containerMenu;
+        if (params.has("menu_id")) {
+            String want = params.get("menu_id").getAsString();
+            JsonObject cur = menuJson(menu);
+            if (!cur.get("menu_id").getAsString().equals(want))
+                throw new ApiError("STALE_STATE",
+                    "menu is now " + cur.get("menu_id").getAsString() + ", not " + want);
+        }
+        if (slot < 0 || slot >= menu.slots.size())
+            throw new ApiError("BAD_REQUEST", "slot out of range 0-" + (menu.slots.size() - 1));
+        mc.gameMode.handleInventoryMouseClick(menu.containerId, slot, button, type, p);
+        JsonObject r = new JsonObject();
+        r.addProperty("clicked", slot);
+        r.addProperty("action", action);
+        return r;
+    }
+
+    private static JsonObject containerClose() throws ApiError {
+        LocalPlayer p = requirePlayer();
+        p.clientSideCloseContainer();
+        JsonObject r = new JsonObject();
+        r.addProperty("closed", true);
+        return r;
+    }
+
+    /**
+     * 成果物アイテムからレシピ解決。クライアント同期済みレシピマネージャを
+     * 走査し {type, 材料, 投入数} を返す。機械系RecipeTypeも含む (FR-05)。
+     */
+    private static JsonObject recipeLookup(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        requirePlayer();
+        String itemName = params.get("item").getAsString();
+        ResourceLocation want = ResourceLocation.tryParse(itemName);
+        if (want == null) throw new ApiError("BAD_REQUEST", "bad item id: " + itemName);
+        JsonArray out = new JsonArray();
+        if (mc.level != null && mc.getConnection() != null) {
+            for (Recipe<?> rec : mc.getConnection().getRecipeManager().getRecipes()) {
+                ItemStack res = rec.getResultItem(mc.level.registryAccess());
+                ResourceLocation resId = BuiltInRegistries.ITEM.getKey(res.getItem());
+                if (resId == null || !resId.equals(want)) continue;
+                JsonObject o = new JsonObject();
+                o.addProperty("id", rec.getId().toString());
+                ResourceLocation t = BuiltInRegistries.RECIPE_TYPE.getKey(rec.getType());
+                o.addProperty("type", t != null ? t.toString() : "unknown");
+                if (rec instanceof net.minecraft.world.item.crafting.ShapedRecipe sh) {
+                    o.addProperty("width", sh.getWidth());
+                    o.addProperty("height", sh.getHeight());
+                }
+                JsonArray ings = new JsonArray();
+                for (Ingredient ing : rec.getIngredients()) {
+                    ItemStack[] opts = ing.getItems();
+                    JsonObject io = new JsonObject();
+                    if (opts.length == 0) {
+                        io.addProperty("empty", true);
+                    } else {
+                        JsonArray ids = new JsonArray();
+                        for (ItemStack it : opts) {
+                            ResourceLocation iid = BuiltInRegistries.ITEM.getKey(it.getItem());
+                            ids.add(iid != null ? iid.toString() : "unknown");
+                        }
+                        io.add("options", ids);
+                        io.addProperty("count", opts[0].getCount());
+                    }
+                    ings.add(io);
+                }
+                o.add("ingredients", ings);
+                JsonObject resObj = new JsonObject();
+                resObj.addProperty("id", resId.toString());
+                resObj.addProperty("count", res.getCount());
+                o.add("result", resObj);
+                out.add(o);
+            }
+        }
+        JsonObject r = new JsonObject();
+        r.addProperty("item", itemName);
+        r.add("recipes", out);
+        r.addProperty("count", out.size());
+        return r;
+    }
+
+    /**
+     * レシピ帳packetによる自動クラフト。現在開いているmenu
+     * (InventoryMenu=2x2 または CraftingMenu=3x3) で実行する。
+     * 対象レシピがプレイヤーのレシピ帳に未登録だとサーバーが弾く。
+     */
+    private static JsonObject craft(JsonObject params) throws ApiError {
+        requirePlayer();
+        String itemName = params.get("item").getAsString();
+        int count = params.has("count") ? params.get("count").getAsInt() : 1;
+        CraftTask t = new CraftTask(TaskManager.get().newId("craft"), itemName, count);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
         return r;
     }
 

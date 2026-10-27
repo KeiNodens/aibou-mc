@@ -32,6 +32,14 @@ noted.
 |---|---|---|
 | `sugar_delight` | `sgushenka.json` recipe output uses `sugar_delight:sugar_delight:chocomilk` (double colon) → datapack load kills the server | Edit jar: output `sugar_delight:chocomilk`, fix malformed ingredients/tags to real IDs (`sugar_delight:c_ondensedmilk`) |
 
+## Runtime quirks observed during bot play
+
+| Mod | Behavior | Impact / workaround |
+|---|---|---|
+| `solapplepie` (Sol Sweet Potato) | `FoodTracker.onFoodEaten` throws `FoodListNotFoundException` ("Player must have food capability attached, but none was found") → server kicks the bot with `Internal server error` **every time it finishes eating**. The eat itself succeeds (hunger restored) and auto-rejoin recovers. | The capability apparently isn't attached for the bot player (offline-mode account). Remove `solapplepie` server-side or accept kick+rejoin. |
+| `fastsuite` | Replaces `ServerPlaceRecipe` with a parallelized async implementation — recipe-book placement takes several ticks instead of 1 | Any packet-based crafting must wait ~20 ticks for the grid to fill. (`agent-mod` `CraftTask.PLACE_WAIT`) |
+| `modernfix` | "Enhanced recipe sync" — lazy client recipe sync | Client recipe manager may only contain unlocked recipes early on; `recipe give <bot> *` resolves. |
+
 ## Flaky but retryable
 
 - `urushi` dispenser registration races under parallel COMMON_SETUP (`fastutil` rehash `ArrayIndexOutOfBoundsException`). Restarting the server usually gets through. Not our code.

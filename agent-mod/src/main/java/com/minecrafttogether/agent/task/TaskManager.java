@@ -80,6 +80,9 @@ public class TaskManager {
             err.addProperty("code", t.errorCode);
             err.addProperty("message", t.errorMessage);
             data.add("error", err);
+            // task_status/task_result と同じflat名でも出す (skill側はこちらを読む)
+            data.addProperty("error_code", t.errorCode);
+            data.addProperty("error_message", t.errorMessage);
         }
         ws.emit("task.done", data);
     }

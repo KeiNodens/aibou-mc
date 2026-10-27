@@ -106,6 +106,152 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
   );
 
   server.registerTool(
+    'find_block',
+    {
+      description:
+        'Find positions of a specific block type near the bot (nearest first, up to 16). ' +
+        'Use to locate crafting tables, chests, machines.',
+      inputSchema: {
+        block: z.string().describe('registry name like minecraft:crafting_table'),
+        radius: z.number().int().min(1).max(64).optional(),
+      },
+    },
+    async ({ block, radius }) => {
+      try {
+        return json(await mod.call('obs.block', { block, radius: radius ?? 32 }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'use_item',
+    {
+      description:
+        'Right-click use. Without a target: eat/drink/use held item in air. ' +
+        'With x,y,z[,face]: use held item on that block (place block, open chest/crafting table, etc).',
+      inputSchema: {
+        x: z.number().int().optional(),
+        y: z.number().int().optional(),
+        z: z.number().int().optional(),
+        face: z.enum(['up', 'down', 'north', 'south', 'east', 'west']).optional(),
+        hand: z.enum(['main', 'off']).optional(),
+      },
+    },
+    async (a) => {
+      try {
+        return json(await mod.call('use_item', a));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'container_read',
+    {
+      description:
+        'Read the currently open container menu (slots, carried item, menu type). ' +
+        'Also works for the player inventory (no screen open).',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('container.read'));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'container_click',
+    {
+      description:
+        'Click a slot in the currently open container (meaning-level, not screen coords). ' +
+        'actions: pickup | quick_move (shift-click) | swap (button=hotbar index) | throw | clone | pickup_all | quick_craft',
+      inputSchema: {
+        slot: z.number().int().min(0),
+        button: z.number().int().min(0).max(8).optional(),
+        action: z
+          .enum(['pickup', 'quick_move', 'swap', 'throw', 'clone', 'pickup_all', 'quick_craft'])
+          .optional(),
+        menu_id: z
+          .string()
+          .optional()
+          .describe('expected menu_id from container_read; rejected with STALE_STATE if changed'),
+      },
+    },
+    async ({ slot, button, action, menu_id }) => {
+      try {
+        const p: Record<string, unknown> = {
+          slot,
+          button: button ?? 0,
+          action: action ?? 'pickup',
+        };
+        if (menu_id !== undefined) p.menu_id = menu_id;
+        return json(await mod.call('container.click', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'container_close',
+    {
+      description: 'Close the currently open container menu.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('container.close'));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'recipe_lookup',
+    {
+      description:
+        'Resolve crafting/processing recipes that produce an item, from the synced recipe manager. ' +
+        'Returns type, ingredients, result (covers modded machine recipe types too).',
+      inputSchema: { item: z.string().describe('result item like minecraft:stick or mekanism:ingot_steel') },
+    },
+    async ({ item }) => {
+      try {
+        return json(await mod.call('recipe.lookup', { item }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'craft_menu',
+    {
+      description:
+        'Craft an item using the recipe book packet in the currently open crafting menu ' +
+        '(player inventory 2x2 or open crafting table 3x3). Returns a task_id. ' +
+        'Requires the recipe to be unlocked in the bot recipe book.',
+      inputSchema: {
+        item: z.string().describe('result item like minecraft:stick'),
+        count: z.number().int().min(1).optional(),
+      },
+    },
+    async ({ item, count }) => {
+      try {
+        return json(await mod.call('craft', { item, count: count ?? 1 }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'mock_gather',
     {
       description:
