@@ -74,9 +74,9 @@ Minecraftを一緒にプレイするためのMCPサーバーへ接続するカ�
 
 - **イベントのプッシュ経路がない**: Museにはゲーム内チャットが届かない。依頼文末尾で`get_chat`/`wait_event`の定期確認を指示しているが、Museのスケジュール機能に乗るかは実際の応答次第。ダメならローカル側に通知プロセスを残す案を検討
 - **Codexとの併用**: runnerを有効にするとCodexとMuseの両方が応答する。切り替えは`RUNNER`環境変数で
-- **Tailscale経路の可能性**: tailnet内に`muse`ノード (<ip>) が存在するがping不通だった。MuseのVMがtailnetに参加できるなら、公開なしで`http://yourhost.<tailnet>.ts.net:25589/mcp`に届く代替経路になる
+- **Tailscale経路の可能性**: MuseのVMがtailnetに参加でき、bridge側マシンもtailnet参加済みなら、公開なしで`http://<bridge-host>.<tailnet>.ts.net:25589/mcp`に届く代替経路になる (要疎通確認)
 - **トークンの扱い**: 依頼文に平文で貼るため、遊び終わったら再発行する。リポジトリにはコミットしない
 - **use_item未実装**: 現状ツール一覧はM4時点のもの (原始14+task3+baritone4+skill5+reload)。その後 `emote` `screenshot` `find_item` `waypoint_*` を追加済み (計32ツール)
-- **人格**: ユーザーのMuseの名前が「ホストLLM」でbot名`Rin`と一致するため、ロールプレイ指示は不要。Muse自身がゲーム内のRinとして振る舞う前提で依頼文を書いている
+- **人格**: Muse側のエージェント名を「ホストLLM」としbot名`Rin`と一致させる前提のため、ロールプレイ指示は不要。Muse自身がゲーム内のRinとして振る舞う形で依頼文を書いている
 - **相棒感の追加機能 (実装済み・要クライアント再起動で有効化)**: 発言者を自動で向く `agentmod.autolook`、`emote`/`screenshot`/`waypoint.*` ツール、能動イベント (damage/death/昼夜/天候/近傍プレイヤー/pickup)。jar差し替え済みのためbotクライアントの再起動が必要
 - **自発行動の依頼**: Muse側に「定期的にget_chat/wait_eventを確認し、暇なら探索や提案をする」指示を入れると放置中も動く。能動イベントが増えたので、被弾や日没への反応も書ける

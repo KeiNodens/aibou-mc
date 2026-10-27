@@ -1,5 +1,7 @@
 # MinecraftTogether
 
+English | [日本語](README.ja.md)
+
 An AI companion for **modded Minecraft 1.20.1 (Forge)** — play together with an
 LLM-driven player that chats, follows you, gathers resources, and acts in the
 world like a real companion, not a chatbot overlay.

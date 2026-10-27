@@ -46,7 +46,7 @@ get_chat:
 
 - devパック: `packs/dev/mods/` (JEI 15.74.0.225 / Create 6.0.8 / Mekanism 10.4.16.80 / baritone-api-forge 1.10.3)
 - 専用サーバー: `server/` Forge 47.4.28・online-mode=false・`Done` 確認・新規ワールド生成済
-- bot Prismインスタンス `bot`: JDK17・6GB・オフラインアカウント `Rin` (profile.id `8f2da33d...0650`) に `UseAccountForInstance` でピン留め。実起動でタイトル画面到達確認
+- bot Prismインスタンス `bot`: JDK17・6GB・オフラインアカウント `Rin` (profile.id は環境固有のため省略) に `UseAccountForInstance` でピン留め。実起動でタイトル画面到達確認
 - 1回目の起動で ForgeWrapper の DOWNLOAD_MOJMAPS が一過性ネットワークtimeout → 再起動で解消。同時刻にGPUドライバハングが発生したが再起動で回復（mod構成起因ではない）
 
 ## M1 agent-modスケルトン (実機)
