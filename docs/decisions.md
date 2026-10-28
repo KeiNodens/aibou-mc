@@ -109,3 +109,21 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 ### R5. 退路案1の格付け変更
 
 「実装差し替えで済む」から「第一候補の仮説・要PoC」に格下げした。移動・採掘・コンテナ操作の最小実証を移行の条件とし、共通APIは意味操作で定義、実装別のcapabilitiesとUNSUPPORTEDエラーを規約とした (design §7)。
+
+## D19. 他プロジェクト比較に基づく機能追加方針 (2026-10-29)
+
+- **決定**: Minemind (Boyan253) / Elly AI Agent (Smekkamite) / minecraft-codex-companion (Hakurei-git) / Marionette (Prattlemob) と Numen / mc_aiplayer / AIRI / awesome-mineflayer-mcp との比較で出した差分機能を**全項目採用**する。実装は下記の順序で段階的に行う
+- **候補**: 一部のみ採用 (生存反射のみ / 記憶のみ) / 採用しない
+- **理由**: 比較の結果、本プロジェクトはmodded到達範囲 (AE2・機械定義・JEI/Jade/キー注入等) では突出している一方、「自律エージェントとしての体裁」(生存ループ・記憶・実行管理・権限) で全プロジェクトに見劣りする構図が確認された。ユーザーは「AIエージェントと遊んでる感」を重視し、自己保全は強制ではなく閾値低め・バランス重視の指示あり
+- **根拠**: ユーザー回答 (全カテゴリ「全部」採用) + 比較調査 (MinemindのFTB DAG、Ellyの直パース/生存反射、codex-companionのWorkGraph復帰/ローカルチェーン、mc_aiplayerの型付き事後条件/atomic snapshot/strictプロファイル、Numenの施設記憶/生存ループ、AIRIの4層認知)
+
+### 採用スコープと実装順序
+
+| Phase | 内容 | 由来 |
+|---|---|---|
+| P1 生存反射 | 自動食事 (閾値低め・非強制) / 退避・帰宅 (戦闘バランス) / 夜間睡眠 (夜作業許容) / 死亡→帰還・回収 | Elly, Numen |
+| P2 記憶継続 | goal.set/get 永続目標 / 施設・チェスト自動記憶 (waypoint拡張) / 中断作業の再起復帰 / 終了まとめ自動化 | Elly, Numen, codex-companion |
+| P3 実行管理 | pause/resume / 事後条件チェック / 再起動スナップショット復元 / 検証インフラ | mc_aiplayer |
+| P4 クエスト自律 | FTB SNBT→DAGオフライン解析 / チャット.goal差し込み / 失敗棚上げ / 達成記念撮影 | Minemind |
+| P5 技能・経路 | 明示コマンドのLLMレス直パース / 畑スキル / 構造物・バイオームlocate / schematic実建築 / エリトラ飛行 / ペット世話 | Elly, Numen, mc_aiplayer, codex-companion |
+| P6 権限・将来 | autonomy.level (0/1/2) + safe/assist/auto相当 / 複数bot・多段LLM | mc_aiplayer, Elly, codex-companion |
