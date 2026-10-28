@@ -489,6 +489,119 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'key_list',
+    {
+      description:
+        'List all registered key mappings incl. modded keybinds ' +
+        '(FTB Ultimine, Mekanism mode switch, SlashBlade…). Find the mapping ' +
+        'name to pass to `key`.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('key.list'));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'key',
+    {
+      description:
+        'Press or release a key mapping (substring match on name/category/' +
+        'display key). Hold-downs enable keybind-driven mod features — e.g. ' +
+        'key{mapping:"ftbultimine",down:true} then mine/dig for vein-mining, ' +
+        'or tap Mekanism mode-switch to cycle tool modes. Injects via the ' +
+        'client KeyboardHandler (works for most mods); use real:true for mods ' +
+        'with custom GLFW callbacks (e.g. Mekanism) — sends a genuine OS key ' +
+        'event and REQUIRES the game window to be focused.',
+      inputSchema: {
+        mapping: z.string().optional()
+          .describe('substring to match a key mapping name'),
+        code: z.number().optional()
+          .describe('raw GLFW keycode (e.g. 256=Escape) — bypasses mapping lookup'),
+        down: z.boolean().optional().describe('default true (press/hold); false releases'),
+        press: z.boolean().optional()
+          .describe('single tap (press+release, ~1 tick hold)'),
+        real: z.boolean().optional()
+          .describe('send a REAL OS key event via Robot — reaches custom GLFW ' +
+            'callbacks; needs the Minecraft window focused'),
+      },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('key', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'scroll',
+    {
+      description:
+        'Inject a mouse-wheel scroll event. Used for radial menus ' +
+        '(e.g. hold Mekanism mode key → scroll to pick mode → release) and ' +
+        'scrollable mod GUIs. Positive delta scrolls up.',
+      inputSchema: {
+        delta: z.number().optional()
+          .describe('scroll amount, positive=up (default 1)'),
+      },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('scroll', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'type_text',
+    {
+      description:
+        'Type text into a supported text-input GUI. Currently: anvil rename ' +
+        'field while an anvil menu is open.',
+      inputSchema: { text: z.string() },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('type', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'sign_write',
+    {
+      description:
+        'Write text onto a sign directly (no screen needed; server checks ' +
+        'reach/editable). Pass lines[] or text with \\n; front defaults true.',
+      inputSchema: {
+        x: z.number().int(),
+        y: z.number().int(),
+        z: z.number().int(),
+        lines: z.array(z.string()).max(4).optional(),
+        text: z.string().optional(),
+        front: z.boolean().optional(),
+      },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('sign.write', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'container_open_curios',
     {
       description:

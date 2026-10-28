@@ -22,6 +22,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Screenshot;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.Item;
+import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
@@ -94,6 +95,11 @@ public final class GameOps {
             case "quest.inspect" -> questInspect(params);
             case "move.set" -> moveSet(params);
             case "move.stop" -> moveStop();
+            case "key.list" -> keyList();
+            case "key" -> keySet(params);
+            case "scroll" -> scroll(params);
+            case "type" -> typeText(params);
+            case "sign.write" -> signWrite(params);
             case "look_at" -> lookAt(params);
             case "dig" -> dig(params);
             case "equip" -> equip(params);
@@ -124,6 +130,354 @@ public final class GameOps {
         if (params.has("sprint")) o.keySprint.setDown(params.get("sprint").getAsBoolean());
         JsonObject r = new JsonObject();
         r.addProperty("applied", true);
+        return r;
+    }
+
+    /**
+     * 登録済みKeyMappingを列挙。modのkeybind (FTB Ultimine・Mekanism mode
+     * switch・SlashBlade等) も含まれるので、key op対象の発見に使う。
+     */
+    private static JsonObject keyList() {
+        JsonArray out = new JsonArray();
+        for (var km : Minecraft.getInstance().options.keyMappings) {
+            JsonObject o = new JsonObject();
+            o.addProperty("name", km.getName());
+            o.addProperty("category", km.getCategory());
+            o.addProperty("key", km.getKey() != null
+                ? km.getKey().getDisplayName().getString() : "unbound");
+            if (km.isDown()) o.addProperty("down", true);
+            out.add(o);
+        }
+        JsonObject r = new JsonObject();
+        r.add("key_mappings", out);
+        return r;
+    }
+
+    /**
+     * KeyMappingの押下/解放。mappingはgetName()・category・表示キー名への
+     * 部分一致 (小文字)。FTB Ultimine長押しやMekanism mode switch等、
+     * keybind起点のmod機能へ到達するためのop。
+     */
+    private static JsonObject keySet(JsonObject params) throws ApiError {
+        requirePlayer();
+        // code直指定: KeyMappingを経由せず生GLFW/AWTキーコードを注入
+        // (Escape等マッピングに無いキーやスクリーン操作向け)
+        if (params.has("code")) {
+            int code = params.get("code").getAsInt();
+            boolean real = params.has("real")
+                && params.get("real").getAsBoolean();
+            JsonObject r = new JsonObject();
+            if (real) {
+                realKeyCode(code, params);
+                r.addProperty("real", true);
+            } else {
+                var mc = Minecraft.getInstance();
+                long win = mc.getWindow().getWindow();
+                if (params.has("press")
+                    && params.get("press").getAsBoolean()) {
+                    mc.keyboardHandler.keyPress(win, code, 0, GLFW_PRESS, 0);
+                    mc.keyboardHandler.keyPress(win, code, 0, GLFW_RELEASE, 0);
+                    r.addProperty("pressed", true);
+                } else {
+                    boolean down = !params.has("down")
+                        || params.get("down").getAsBoolean();
+                    mc.keyboardHandler.keyPress(win, code, 0,
+                        down ? GLFW_PRESS : GLFW_RELEASE, 0);
+                    r.addProperty("down", down);
+                }
+            }
+            r.addProperty("code", code);
+            return r;
+        }
+        String q = params.get("mapping").getAsString().toLowerCase();
+        var match = java.util.Arrays.stream(
+                Minecraft.getInstance().options.keyMappings)
+            .filter(km -> km.getName().toLowerCase().contains(q)
+                || km.getCategory().toLowerCase().contains(q)
+                || (km.getKey() != null && km.getKey().getDisplayName()
+                    .getString().toLowerCase().contains(q)))
+            .toList();
+        if (match.isEmpty())
+            throw new ApiError("NOT_FOUND", "no key mapping matching: " + q);
+        if (match.size() > 1)
+            throw new ApiError("BAD_REQUEST",
+                "ambiguous mapping (" + match.size() + " matches): "
+                    + match.stream().map(k -> k.getName()).toList());
+        var km = match.get(0);
+        JsonObject r = new JsonObject();
+        r.addProperty("mapping", km.getName());
+        boolean real = params.has("real") && params.get("real").getAsBoolean();
+        if (real) {
+            // Mekanism等の独自GLFWコールバックを持つmodはKeyboardHandler注入を
+            // 迂回されるため、OSレベルの本物のキー入力 (Robot) で届ける。
+            // ゲームウィンドウにフォーカスがある前提 — 無いと別窓へ入力が飛ぶ
+            var kk = km.getKey();
+            if (kk == null
+                || kk == com.mojang.blaze3d.platform.InputConstants.UNKNOWN)
+                throw new ApiError("BAD_REQUEST",
+                    "unbound mapping cannot use real input: " + km.getName());
+            if (kk.getType()
+                != com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM)
+                throw new ApiError("UNSUPPORTED",
+                    "non-keyboard binding (mouse/scancode): " + km.getName());
+            realKeyCode(kk.getValue(), params);
+            r.addProperty("real", true);
+            r.addProperty("is_down", km.isDown());
+            r.addProperty("key", km.getKey().getDisplayName().getString());
+            return r;
+        }
+        if (params.has("press") && params.get("press").getAsBoolean()) {
+            // ワンタップ: 本物のGLFWイベントをKeyboardHandlerに注入
+            // (KeyMapping.click/setDownではKeyboardInput#keyPress経由の
+            //  移動・ジャンプ系やclick待ちmodに届かない)
+            injectKey(km, GLFW_PRESS);
+            // isDownを1tick以上見せるためreleaseは遅延 (同フレーム離すと
+            // isDownポーリング系のmodに検出されない)
+            CompletableFuture.delayedExecutor(150,
+                java.util.concurrent.TimeUnit.MILLISECONDS)
+                .execute(() -> Minecraft.getInstance().execute(
+                    () -> injectKey(km, GLFW_RELEASE)));
+            r.addProperty("pressed", true);
+        } else {
+            boolean down = !params.has("down")
+                || params.get("down").getAsBoolean();
+            injectKey(km, down ? GLFW_PRESS : GLFW_RELEASE);
+            r.addProperty("down", down);
+        }
+        r.addProperty("is_down", km.isDown());
+        r.addProperty("key", km.getKey().getDisplayName().getString());
+        return r;
+    }
+
+    /** key解放時に仮バインドを戻すための追跡 */
+    private static final java.util.Map<KeyMapping,
+        com.mojang.blaze3d.platform.InputConstants.Key> TEMP_BOUND =
+        new java.util.HashMap<>();
+
+    /**
+     * KeyboardHandler#keyPressにGLFWイベントを注入してキー動作を再現する。
+     * 未バインドのmappingはF13以降の空きkeysymに一時バインドして発火させ、
+     * RELEASEで元に戻す (KeyMapping.setDownではKeyboardInput#keyPress経由の
+     * WASD/ジャンプ/スニークやclick待ちmodに届かないため)。
+     */
+    private static void injectKey(KeyMapping km, int action) {
+        var mc = Minecraft.getInstance();
+        long win = mc.getWindow().getWindow();
+        var k = km.getKey();
+        if (k == null || k == com.mojang.blaze3d.platform
+            .InputConstants.UNKNOWN) {
+            if (action == GLFW_PRESS) {
+                // 空きkeysymを探して仮バインド (F13=308以降は実機に無いので安全)
+                int free = -1;
+                for (int c = 308; c < 340; c++) {
+                    int cc = c;
+                    if (java.util.Arrays.stream(mc.options.keyMappings)
+                        .noneMatch(m -> m.getKey() != null
+                            && m.getKey().getValue() == cc)) {
+                        free = c;
+                        break;
+                    }
+                }
+                if (free < 0) return;
+                km.setKey(com.mojang.blaze3d.platform.InputConstants.Type
+                    .KEYSYM.getOrCreate(free));
+                TEMP_BOUND.put(km, km.getKey());
+                mc.keyboardHandler.keyPress(win, free, 0, action, 0);
+            } else if (TEMP_BOUND.containsKey(km)) {
+                var prev = TEMP_BOUND.remove(km);
+                mc.keyboardHandler.keyPress(win, prev.getValue(), 0,
+                    GLFW_RELEASE, 0);
+                km.setKey(com.mojang.blaze3d.platform.InputConstants.UNKNOWN);
+            }
+            return;
+        }
+        mc.keyboardHandler.keyPress(win, k.getValue(), 0, action, 0);
+    }
+
+    /**
+     * スクロール。画面オープン時はScreen#mouseScrolledを直接呼ぶ
+     * (MouseHandler#onScrollはprivateなので実イベント注入より確実)。
+     * 画面が無い場合 (ホットバー切替等) はreal=true推奨でOSホイールを送る。
+     */
+    private static JsonObject scroll(JsonObject params) throws ApiError {
+        requirePlayer();
+        var mc = Minecraft.getInstance();
+        double dy = params.has("delta") ? params.get("delta").getAsDouble() : 1;
+        JsonObject r = new JsonObject();
+        r.addProperty("delta", dy);
+        boolean real = params.has("real") && params.get("real").getAsBoolean();
+        if (mc.screen != null && !real) {
+            boolean handled = mc.screen.mouseScrolled(
+                mc.mouseHandler.xpos(), mc.mouseHandler.ypos(), dy);
+            r.addProperty("via", "screen");
+            r.addProperty("handled", handled);
+            return r;
+        }
+        // OSレベルのホイール入力 (フォーカス中の窓へ届く) — 先に自窓をフォーカス
+        CompletableFuture.runAsync(() -> {
+            org.lwjgl.glfw.GLFW.glfwFocusWindow(
+                Minecraft.getInstance().getWindow().getWindow());
+            try { Thread.sleep(60); } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+            }
+            User32.INSTANCE.mouse_event(0x0800, 0, 0, (int) (dy * 120), 0);
+        });
+        r.addProperty("via", "os_wheel");
+        return r;
+    }
+
+    private static final int GLFW_PRESS = 1;
+    private static final int GLFW_RELEASE = 0;
+
+    /** Win32 keybd_event/mouse_event をJNA経由で呼ぶ (javawはheadlessでRobot不可) */
+    private interface User32 extends com.sun.jna.Library {
+        User32 INSTANCE = com.sun.jna.Native.load("user32", User32.class);
+        /** dwFlags: 0=press, 2=KEYEVENTF_KEYUP */
+        void keybd_event(byte bVk, byte bScan, int dwFlags, int dwExtraInfo);
+        /** dwFlags: 0x0800=MOUSEEVENTF_WHEEL, dwData=±120刻み */
+        void mouse_event(int dwFlags, int dx, int dy, int dwData,
+            int dwExtraInfo);
+    }
+
+    /** OSレベルの実キー入力 (java.awt.Robot)。GLFW→AWT VK変換できるキーのみ */
+    private static void realKeyCode(int glfwCode, JsonObject params)
+        throws ApiError {
+        int vk = glfwToAwt(glfwCode);
+        if (vk < 0)
+            throw new ApiError("UNSUPPORTED",
+                "no AWT VK mapping for GLFW key " + glfwCode);
+        // OS入力はゲームスレッド外で実行。javawはheadlessなのでAWT Robotは
+        // 使えず、Minecraft同梱のJNA経由でWin32 keybd_eventを直接呼ぶ。
+        // 外部プロセスからのAppActivateはforeground-lockで失敗するので、
+        // 自前でglfwFocusWindowしてから入力を送る
+        CompletableFuture.runAsync(() -> {
+            try {
+                org.lwjgl.glfw.GLFW.glfwFocusWindow(
+                    Minecraft.getInstance().getWindow().getWindow());
+                try { Thread.sleep(60); } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                }
+                if (params.has("press") && params.get("press").getAsBoolean()) {
+                    User32.INSTANCE.keybd_event((byte) vk, (byte) 0, 0, 0);
+                    try { Thread.sleep(90); } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                    User32.INSTANCE.keybd_event((byte) vk, (byte) 0, 2, 0);
+                } else if (!params.has("down")
+                    || params.get("down").getAsBoolean()) {
+                    User32.INSTANCE.keybd_event((byte) vk, (byte) 0, 0, 0);
+                } else {
+                    User32.INSTANCE.keybd_event((byte) vk, (byte) 0, 2, 0);
+                }
+            } catch (Throwable t) {
+                AgentMod.LOGGER.warn("realKey failed: {}", t.getMessage());
+            }
+        });
+    }
+
+    /** GLFW keycode → java.awt.event.KeyEvent VK。未対応は-1 */
+    private static int glfwToAwt(int g) {
+        if (g >= 65 && g <= 90) return g;              // A-Z
+        if (g >= 48 && g <= 57) return g;              // 0-9
+        return switch (g) {
+            case 32 -> java.awt.event.KeyEvent.VK_SPACE;
+            case 39 -> java.awt.event.KeyEvent.VK_QUOTE;
+            case 44 -> java.awt.event.KeyEvent.VK_COMMA;
+            case 45 -> java.awt.event.KeyEvent.VK_MINUS;
+            case 46 -> java.awt.event.KeyEvent.VK_PERIOD;
+            case 47 -> java.awt.event.KeyEvent.VK_SLASH;
+            case 59 -> java.awt.event.KeyEvent.VK_SEMICOLON;
+            case 61 -> java.awt.event.KeyEvent.VK_EQUALS;
+            case 91 -> java.awt.event.KeyEvent.VK_OPEN_BRACKET;
+            case 92 -> java.awt.event.KeyEvent.VK_BACK_SLASH;
+            case 93 -> java.awt.event.KeyEvent.VK_CLOSE_BRACKET;
+            case 96 -> java.awt.event.KeyEvent.VK_BACK_QUOTE;
+            case 256 -> java.awt.event.KeyEvent.VK_ESCAPE;
+            case 257 -> java.awt.event.KeyEvent.VK_ENTER;
+            case 258 -> java.awt.event.KeyEvent.VK_TAB;
+            case 259 -> java.awt.event.KeyEvent.VK_BACK_SPACE;
+            case 260 -> java.awt.event.KeyEvent.VK_INSERT;
+            case 261 -> java.awt.event.KeyEvent.VK_DELETE;
+            case 262 -> java.awt.event.KeyEvent.VK_RIGHT;
+            case 263 -> java.awt.event.KeyEvent.VK_LEFT;
+            case 264 -> java.awt.event.KeyEvent.VK_DOWN;
+            case 265 -> java.awt.event.KeyEvent.VK_UP;
+            case 266 -> java.awt.event.KeyEvent.VK_PAGE_UP;
+            case 267 -> java.awt.event.KeyEvent.VK_PAGE_DOWN;
+            case 268 -> java.awt.event.KeyEvent.VK_HOME;
+            case 269 -> java.awt.event.KeyEvent.VK_END;
+            case 280 -> java.awt.event.KeyEvent.VK_CAPS_LOCK;
+            case 282 -> java.awt.event.KeyEvent.VK_NUM_LOCK;
+            case 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301 ->
+                java.awt.event.KeyEvent.VK_F1 + (g - 290);
+            case 320, 321, 322, 323, 324, 325, 326, 327, 328, 329 ->
+                java.awt.event.KeyEvent.VK_NUMPAD0 + (g - 320);
+            case 330 -> java.awt.event.KeyEvent.VK_DECIMAL;
+            case 331 -> java.awt.event.KeyEvent.VK_DIVIDE;
+            case 332 -> java.awt.event.KeyEvent.VK_MULTIPLY;
+            case 333 -> java.awt.event.KeyEvent.VK_SUBTRACT;
+            case 334 -> java.awt.event.KeyEvent.VK_ADD;
+            case 336 -> java.awt.event.KeyEvent.VK_ENTER;
+            case 340 -> java.awt.event.KeyEvent.VK_SHIFT;
+            case 341 -> java.awt.event.KeyEvent.VK_CONTROL;
+            case 342 -> java.awt.event.KeyEvent.VK_ALT;
+            case 343 -> java.awt.event.KeyEvent.VK_WINDOWS;
+            case 344 -> java.awt.event.KeyEvent.VK_SHIFT;
+            case 345 -> java.awt.event.KeyEvent.VK_CONTROL;
+            case 346 -> java.awt.event.KeyEvent.VK_ALT;
+            case 348 -> java.awt.event.KeyEvent.VK_ALT_GRAPH;
+            default -> -1;
+        };
+    }
+
+    /**
+     * テキスト入力GUIへの文字列送信。現在は金床のリネーム欄
+     * (AnvilMenu + ServerboundRenameItemPacket) に対応。
+     */
+    private static JsonObject typeText(JsonObject params) throws ApiError {
+        LocalPlayer p = requirePlayer();
+        String text = params.get("text").getAsString();
+        if (p.containerMenu instanceof net.minecraft.world.inventory.AnvilMenu) {
+            p.connection.send(new net.minecraft.network.protocol.game
+                .ServerboundRenameItemPacket(text));
+            JsonObject r = new JsonObject();
+            r.addProperty("target", "anvil_name");
+            r.addProperty("text", text);
+            return r;
+        }
+        throw new ApiError("UNSUPPORTED",
+            "no supported text input open (menu: "
+                + p.containerMenu.getClass().getSimpleName() + ")");
+    }
+
+    /**
+     * 看板テキストを直接書き込む。ServerboundSignUpdatePacketを送るだけで
+     * 画面を開かずに済む (サーバー側は到達距離と看板の編集可否を検査する)。
+     */
+    private static JsonObject signWrite(JsonObject params) throws ApiError {
+        LocalPlayer p = requirePlayer();
+        BlockPos pos = new BlockPos(
+            params.get("x").getAsInt(),
+            params.get("y").getAsInt(),
+            params.get("z").getAsInt());
+        String[] lines = new String[] {"", "", "", ""};
+        if (params.has("lines")) {
+            var arr = params.getAsJsonArray("lines");
+            for (int i = 0; i < Math.min(4, arr.size()); i++)
+                lines[i] = arr.get(i).getAsString();
+        } else if (params.has("text")) {
+            String[] parts = params.get("text").getAsString().split("\\n", -1);
+            for (int i = 0; i < Math.min(4, parts.length); i++) lines[i] = parts[i];
+        }
+        boolean front = !params.has("front") || params.get("front").getAsBoolean();
+        p.connection.send(new net.minecraft.network.protocol.game
+            .ServerboundSignUpdatePacket(pos, front, lines[0], lines[1],
+                lines[2], lines[3]));
+        JsonObject r = new JsonObject();
+        r.addProperty("sent", true);
+        r.addProperty("x", pos.getX());
+        r.addProperty("y", pos.getY());
+        r.addProperty("z", pos.getZ());
         return r;
     }
 
@@ -1102,6 +1456,9 @@ public final class GameOps {
         JsonObject container = new JsonObject();
         container.addProperty("menu_id", "player_inventory");
         container.addProperty("generation", inv.getTimesChanged());
+        // 開いているScreen (メニューとは別物 — CuriosScreen等menuを持たないGUI検出用)
+        container.addProperty("screen", mc.screen != null
+            ? mc.screen.getClass().getName() : null);
         r.add("container", container);
 
         // 周囲エンティティ集計 (半径24)。ブロック走査はM2以降
@@ -1441,6 +1798,10 @@ public final class GameOps {
             JsonArray keys = new JsonArray();
             s.getTag().getAllKeys().forEach(keys::add);
             r.add("nbt_keys", keys);
+            // SNBT全体 (mode/Tinkers素材等の中身確認用 — 大きいtagは切詰)
+            String snbt = s.getTag().toString();
+            if (snbt.length() > 800) snbt = snbt.substring(0, 800) + "...";
+            r.addProperty("nbt", snbt);
         }
         return r;
     }

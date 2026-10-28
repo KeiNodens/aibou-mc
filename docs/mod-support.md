@@ -175,3 +175,31 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
   寄せておけばmodの内部ロジックに介入せず済む。
 - ツール「モード」のようなNBT状態依存の挙動は id では識別できない。
   `item.info`でNBTキー・energy等の要約を返す土台は実装済。
+
+## キーバインド型mod機能の監査 (2026-10-28 追記)
+
+`key`/`scroll` opの実装・実機検証で判明したmodキー系の到達性まとめ。
+
+| 経路 | 届くもの | 届かないもの |
+|------|----------|--------------|
+| `key{mapping,down/press}` (KeyboardHandler#keyPress注入) | 通常のKeyMapping全般: consumeClick待ちmod・isDown待ちmod・WASD/ジャンプ等KeyboardInput系・スクリーンのkeyPressed (EscでGUI閉じ等)・Curios G(実機でCuriosScreenV2開放) | `InputConstants.isKeyDown`で生GLFW状態を見るmod・独自GLFWコールバックのmod (Mekanism) |
+| `key{...,real:true}` (JNA keybd_event → glfwFocusWindow) | 上記全部 + 独自GLFWコールバック系 (Mekanism keybind全般) | ウィンドウ最小化中などOS入力自体が無効な状況 |
+
+判明したこと:
+- javawは`java.awt.headless=true`で起動されるためAWT Robotは使えない。
+  代替としてMC同梱JNA経由でWin32 `keybd_event`/`mouse_event`を直接呼ぶ。
+- `AppActivate`等の外部フォーカス操作はWindows foreground-lockで失敗しうる。
+  `real:true`はmod内で`glfwFocusWindow`してから送信するので確実。
+- `key.mekanism.mode`は`MekKeyBinding`独自実装 — `isModeItem(allowRadial=false)`
+  のため**radial対象アイテム(disassembler等)ではpressでは何も起きない**。
+  radialは`down:true`ホールドで`GuiRadialSelector`が開き、`scroll`で選択、
+  `down:false`で確定する。実機: disassembler `mekData:{mode:0→1}`を確認。
+- `key.mekanism.key_hud`(H)はクライアントconfigを書き換える — 
+  実機で`enableHUD true→false`を確認 (Mekanism到達の検証に使える)。
+- EscapeなどKeyMappingに無いキーは`key{code:256,press:true}`で直接注入。
+  EscはPauseScreenを**トグル**する (開⇄閉) ので状態確認が要る。
+- `get_state`の`container.screen`で開いているScreenのクラス名が分かる
+  (メニューを持たない純Screenも検出可 — radial/GUIデバッグの勘所)。
+- `scroll`: 画面オープン時は`Screen#mouseScrolled`を直接呼ぶ
+  (`via:"screen"`, handled返却)。画面が無い時はOSホイール
+  (`via:"os_wheel"`, real指定時は常にこちら)。

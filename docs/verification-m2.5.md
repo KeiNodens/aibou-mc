@@ -649,3 +649,27 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
 - /give直後のget_state遅延: inventory反映がcontainer同期ベースなので
   `inventory_resync`後に確定する挙動を再確認 (hammer×2が初見で見えず、
   resync+container_readでmenu slot40/41に確認)。
+
+### キーバインド/スクロール ops (全実機検証済, 軽量パック上)
+- `key_list`: 234 mappings列挙 (modキー名/category/表示キー)。
+- `key{mapping,down}`注入パス (`KeyboardHandler#keyPress`経由):
+  `key.forward`ホールド→実座標移動、Curios G→`CuriosScreenV2`開放、
+  Esc(code:256)→PauseScreenトグルを確認。
+- `press:true`: consumeClick待ちmodへ届く (isDownは応答時点の瞬間値;
+  mod側tick検出のためPRESS後150msでRELEASEを遅延発行)。
+- `real:true`経路 (JNA `keybd_event` + 自動`glfwFocusWindow`):
+  AWT Robotはjavawのheadless環境で不可のためWin32 API直接呼出し。
+  Mekanism独自キー実装 (`MekKeyBinding`+GLFWコールバック) へ到達確認:
+  `key_hud`押下で`client.toml`の`enableHUD`がtrue→falseに反転。
+- **Mekanismモード切替の全フロー実証**: disassembler (radial対象) で
+  `key{key.mekanism.mode,down:true,real:true}`→`GuiRadialSelector`開放
+  →`scroll{delta:1}`(via:screen,handled:true)→`down:false`→
+  NBT `mekData:{mode:0→1}` に更新。radial型アイテムはpressでは
+  `isModeItem(allowRadial=false)`で弾かれるためホールド+スクロール必須。
+- `scroll`: 画面オープン時`Screen#mouseScrolled`直接呼出し
+  (`via:"screen"`+handled返却)、画面なし時はOSホイール
+  (`mouse_event` WHEEL, `via:"os_wheel"`)。
+- `get_state` `container.screen`追加: メニューを持たない純Screen
+  (radial/PauseScreen等) のクラス名を返す。GUIデバッグで有用。
+- 注意: EscはPauseScreenをトグルするので`screen`確認後に送信すること。
+  `real`の`is_down`応答は非同期送信前の瞬間値 (実押下は数十ms後に反映)。
