@@ -121,6 +121,7 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | XNet / Pipez / Modular Routers | 搬送制御 | config GUI。低優先 |
 | Waystones | ワープGUI | ボタン選択式 — container.button経路で対応可能と推定 |
 | FTB Quests | クエスト/進捗API | 実データ全ループ検証済: `quest.list`/`quest.inspect` (章・タスク進捗・報酬id/claimed)、GUI開放は`screen_click{sidebar:"ftbquests"}`でQuestScreen到達 (FTB sidebarは実マウスhover依存のため`SidebarButtonManager`反射経路で発火。キー未バインドでも可)、ItemTaskはインベントリ検出で自動完了、`quest_claim`でClaimAllRewards/個別ClaimReward送信→報酬配布確認。クエスト定義がパックに無い環境では synced:true・空リスト |
+| JEI | レシピビューア | `jei_search`で`IIngredientFilter.setFilterText`を直接呼出し — 検索欄はForge ScreenEvent経由でしか入力を受けないためAPI経路が確実。`screen_read.jei`でfilter_text/絞込み件数を観測。実機: "apple"→386件,"@ae2 certus"→11件 |
 | JourneyMap | map/waypoint | mod連携案 (autonomy.md) — waypoint共有が本体候補 |
 | Simple Voice Chat | 音声 | 将来枠 (autonomy.md) |
 
@@ -210,8 +211,12 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
   (FTB Quests GUI・mod設定画面・CuriosScreen・SignEditScreen等) のwidgetを
   列挙・text/index指定クリック・強制閉鎖できる。container系が届かないmod GUI
   の抜け道がほぼ塞がった。実機: Curiosボタン切替・看板「完了」押下確認。
-- `type_text`はEditBox汎用 — JEI/EMI検索・modのフィルタ欄・チャット入力に
-  使える (実機でChatScreen経由の送信まで確認)。
+- `type_text`はEditBox汎用 — modのフィルタ欄・チャット入力に使える
+  (実機でChatScreen経由の送信まで確認)。EditBox無し時は
+  `KeyboardHandler.charTyped`を`ObfuscationReflectionHelper`で反射呼出しし
+  Forge ScreenEvent.CharacterTypedも発火させる。ただしJEI検索欄は
+  ScreenEventリスナでも直接書き込まれずAPI経路(`jei_search`)が必要だった。
+  EM検索も同様の独自実装と推定。
 - `sign_write`は看板右クリック(権利付与)→パケット送信の2段。サーバーは
   `playerWhoMayEdit`一致を要求し更新で消費する。setblock看板は不可。
 - キーバインド仮バインド機構により**未割当のmodキーも押せる**

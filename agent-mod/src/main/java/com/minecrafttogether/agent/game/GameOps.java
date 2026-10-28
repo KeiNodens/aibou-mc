@@ -91,6 +91,7 @@ public final class GameOps {
             case "waypoint.list" -> waypointList();
             case "waypoint.del" -> waypointDel(params);
             case "item.info" -> itemInfo(params);
+            case "jei.search" -> jeiSearch(params);
             case "quest.list" -> questList();
             case "quest.inspect" -> questInspect(params);
             case "quest.claim" -> questClaim(params);
@@ -513,6 +514,36 @@ public final class GameOps {
                 r.addProperty("value", target.getValue());
                 return r;
             }
+            // EditBox無し: KeyboardHandler.charTyped(private)を反射注入。
+            // ForgeのScreenEvent.CharacterTyped経由なのでJEI/EMI検索欄等
+            // widgetツリー外の独自入力にも届く
+            boolean any = false;
+            String via = "keyboard_handler";
+            try {
+                // SRG名m_90889_=charTyped (本番はSRG名でデobfされる)
+                var m = net.minecraftforge.fml.util
+                    .ObfuscationReflectionHelper.findMethod(
+                        net.minecraft.client.KeyboardHandler.class,
+                        "m_90889_", long.class, int.class, int.class);
+                m.setAccessible(true);
+                long win = mc.getWindow().getWindow();
+                for (int i = 0; i < text.length(); i++)
+                    m.invoke(mc.keyboardHandler, win,
+                        (int) text.charAt(i), 0);
+                any = true;
+            } catch (Throwable t) {
+                // 反射失敗時はscreen直接呼出しにフォールバック
+                via = "screen_fallback:" + t.getClass().getSimpleName();
+                for (int i = 0; i < text.length(); i++) {
+                    if (mc.screen.charTyped(text.charAt(i), 0)) any = true;
+                }
+            }
+            JsonObject r = new JsonObject();
+            r.addProperty("target", "screen_chartyped");
+            r.addProperty("text", text);
+            r.addProperty("handled", any);
+            r.addProperty("via", via);
+            return r;
         }
         throw new ApiError("UNSUPPORTED",
             "no text input target (menu: "
@@ -546,6 +577,8 @@ public final class GameOps {
         var s = mc.screen;
         JsonObject r = new JsonObject();
         r.addProperty("screen", s.getClass().getName());
+        r.addProperty("width", mc.getWindow().getGuiScaledWidth());
+        r.addProperty("height", mc.getWindow().getGuiScaledHeight());
         if (s.getTitle() != null)
             r.addProperty("title", s.getTitle().getString());
         JsonArray widgets = new JsonArray();
@@ -578,7 +611,68 @@ public final class GameOps {
         // FTB Library sidebar: widgetツリーに乗らない独自ボタン群を反射で列挙
         JsonArray sb = sidebarButtons();
         if (sb != null) r.add("sidebar", sb);
+        // JEI検索フィールドの現在値+絞込み件数 (widgetツリー外なので別経路)
+        JsonObject jei = jeiSearchState();
+        if (jei != null) r.add("jei", jei);
         return r;
+    }
+
+    /**
+     * JEIの検索フィールド状態をIIngredientFilter経由で読む
+     * (検索欄は独自描画でwidgetツリーに乗らない)。JEI不在時null。
+     */
+    private static JsonObject jeiSearchState() {
+        try {
+            Class<?> internal = Class.forName("mezz.jei.common.Internal");
+            Object rt = internal.getMethod("getJeiRuntime").invoke(null);
+            if (rt == null) return null;
+            Object filter = rt.getClass().getMethod("getIngredientFilter")
+                .invoke(rt);
+            JsonObject o = new JsonObject();
+            o.addProperty("filter_text", String.valueOf(
+                filter.getClass().getMethod("getFilterText").invoke(filter)));
+            @SuppressWarnings("unchecked")
+            var items = (java.util.List<Object>) filter.getClass()
+                .getMethod("getFilteredItemStacks").invoke(filter);
+            o.addProperty("filtered_count", items.size());
+            return o;
+        } catch (Throwable t) {
+            return null;
+        }
+    }
+
+    /**
+     * jei.search: IIngredientFilter.setFilterTextで直接検索。
+     * JEI検索欄はForge ScreenEvent経由でしか入力を受け付けないため
+     * プログラム経路が確実。text=null/空でクリア。
+     */
+    private static JsonObject jeiSearch(JsonObject params) throws ApiError {
+        try {
+            Class<?> internal = Class.forName("mezz.jei.common.Internal");
+            Object rt = internal.getMethod("getJeiRuntime").invoke(null);
+            if (rt == null)
+                throw new ApiError("UNSUPPORTED", "jei runtime not ready");
+            Object filter = rt.getClass().getMethod("getIngredientFilter")
+                .invoke(rt);
+            String text = params.has("text")
+                ? params.get("text").getAsString() : "";
+            filter.getClass().getMethod("setFilterText", String.class)
+                .invoke(filter, text);
+            JsonObject r = new JsonObject();
+            r.addProperty("set", true);
+            r.addProperty("filter_text", String.valueOf(filter.getClass()
+                .getMethod("getFilterText").invoke(filter)));
+            @SuppressWarnings("unchecked")
+            var items = (java.util.List<Object>) filter.getClass()
+                .getMethod("getFilteredItemStacks").invoke(filter);
+            r.addProperty("filtered_count", items.size());
+            return r;
+        } catch (ApiError e) {
+            throw e;
+        } catch (Throwable t) {
+            throw new ApiError("UNSUPPORTED",
+                "jei unavailable: " + t.getMessage());
+        }
     }
 
     /**

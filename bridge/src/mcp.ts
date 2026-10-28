@@ -474,6 +474,27 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'jei_search',
+    {
+      description:
+        'Set the JEI ingredient-search filter text directly via JEI API ' +
+        '(IIngredientFilter.setFilterText). The JEI search box only accepts ' +
+        'input through Forge screen events, so this is the reliable path. ' +
+        'Empty text clears the filter. Returns filtered item count.',
+      inputSchema: {
+        text: z.string().optional().describe('search text; empty clears'),
+      },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('jei.search', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'quest_claim',
     {
       description:

@@ -728,3 +728,20 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
   個別クレームは`reward_id`指定でClaimRewardMessageを送信。
 - ※再接続直後のquest_inspectがcompleted:falseを示すのはクライアント側
   team data同期ラグ — 数秒待てば正しい値になる。
+
+### 死亡→リスポーン・JEI検索 (実機検証済)
+- `respawn`: `run_command kill`で死亡→`DeathScreen`を`container.screen`で
+  検出→`respawn`送信→HP20で復帰確認。
+- `jei_search` (新op): `IIngredientFilter.setFilterText`を反射経路で直接呼出し。
+  JEI検索欄は独自描画+Forge ScreenEventリスナ経由でしか入力を受け付けない
+  (`key.jei.focusSearch`+charTyped注入ではfilter_textが変わらず未確認) ため、
+  JEI APIのプログラム経路が確実。
+  - 実機: `jei_search{text:"apple"}`→filter_text="apple"、絞込み後386件
+    (`@ae2 certus`→11件)。JEIオーバーレイ上も検索語が反映される。
+  - 注意: 絞込みは非同期 — set直後の`filtered_count`は前回結果。数秒待つか
+    同クエリを再送して最新値を得る。
+- `screen_read`に`width`/`height`(GUIスケール済み座標)と`jei`セクション
+  (filter_text/filtered_count)を追加 — 座標clickの計算と検索状態の観測用。
+- `type_text`のEditBox不在時フォールバック: `KeyboardHandler.charTyped`
+  (private・SRG`m_90889_`)を`ObfuscationReflectionHelper`で反射呼出し→
+  Forge ScreenEvent.CharacterTypedも発火 (`via:"keyboard_handler"`)。
