@@ -194,9 +194,10 @@ botが指示待ちではなく「そこに生きている」感じを出すた�
 | entity interact | 実装済 — 餌やり・乳搾りを牛で検証。取引は merchant menu + container.trade で部分実装 |
 | hold-use (弓/盾/トライデント) | 実装済 — `hold_ticks`、弓の実射 (矢消費) で検証 |
 | GUI ボタン操作 | 実装済 — `container.button`、stonecutter で検証 |
-| AE2 MEネットワーク連携 (8.1) | **実装済** — `container.repo` (IClientRepo→GridInventoryEntry 全量読み出し) + `container.repo_action` (`MEInteractionPacket` で serial 指定取出し) + 通常quick_move での入庫を通電ネットワークで実機検証。オートクラフト依頼は未対応 |
+| AE2 MEネットワーク連携 (8.1) | **実装済** — `container.repo` (IClientRepo→GridInventoryEntry 全量読み出し) + `container.repo_action` (`MEInteractionPacket` で serial 指定取出し) + 通常quick_move での入庫を通電ネットワークで実機検証。オートクラフト依頼も `AUTO_CRAFT`→`CONFIRM_AUTO_CRAFT`→`GUI_ACTION startJob` の3段 packet 経路を実装・menu遷移で実証 (実ジョブ成立はパターン網が前提) |
 | 素材ツリー計算 (8.1) | **実装済** — `craft_plan` スキル: recipe_lookup 再帰展開で不足素材・手順・機械必須品を返す。在庫充足/バニラ優先/同namespace加点のスコア選択 |
-| JourneyMap / FTB Quests / spark / Litematica / Voice Chat (8.5) | 未実装 |
+| JourneyMap (8.5) | **実装済** — `JourneyMapBridge` (全リフレクション soft-dep) で `waypoint.set`/`waypoint.del` を JM の agentmod グループへミラー。botマップに地点表示・プレイヤーとの地点共有の土台 |
+| FTB Quests / spark / Litematica / Voice Chat (8.5) | 未実装 (本パック未搭載: ftb-quests/spark/litematica/voicechat 無し。導入時に再評価) |
 
 ## 8.1 最優先級
 

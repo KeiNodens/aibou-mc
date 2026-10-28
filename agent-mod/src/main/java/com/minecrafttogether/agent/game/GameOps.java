@@ -77,6 +77,7 @@ public final class GameOps {
             case "container.repo" -> containerRepo();
             case "container.repo_action" -> containerRepoAction(params);
             case "container.close" -> containerClose();
+            case "inventory.resync" -> inventoryResync();
             case "recipe.lookup" -> recipeLookup(params);
             case "craft" -> craft(params);
             case "emote" -> emote(params);
@@ -726,16 +727,40 @@ public final class GameOps {
             @SuppressWarnings("unchecked")
             Class<Enum<?>> actCls = (Class<Enum<?>>)
                 Class.forName("appeng.helpers.InventoryAction").asSubclass(Enum.class);
-            Object action = Enum.valueOf((Class) actCls,
-                params.get("action").getAsString());
+            String actName = params.get("action").getAsString();
             Object pkt;
-            if (params.has("serial")) {
+            if (actName.equals("CONFIRM_AUTO_CRAFT")) {
+                // オートクラフト数量確定: AUTO_CRAFTで開いたCraftAmountMenuへの応答
+                int amount = params.has("amount")
+                    ? params.get("amount").getAsInt() : 1;
+                boolean craftMissing = params.has("craft_missing")
+                    && params.get("craft_missing").getAsBoolean();
+                boolean autoStart = !params.has("auto_start")
+                    || params.get("auto_start").getAsBoolean();
+                Class<?> cap = Class.forName(
+                    "appeng.core.sync.packets.ConfirmAutoCraftPacket");
+                pkt = cap.getConstructor(int.class, boolean.class, boolean.class)
+                    .newInstance(amount, craftMissing, autoStart);
+            } else if (actName.equals("GUI_ACTION")) {
+                // craftconfirm等のmenuアクション (startJob/replan/back/cycleCpu)
+                String name = params.get("name").getAsString();
+                Class<?> gsp = Class.forName(
+                    "appeng.core.sync.packets.GuiDataSyncPacket");
+                pkt = gsp.getConstructor(int.class,
+                        java.util.function.Consumer.class)
+                    .newInstance(p.containerMenu.containerId,
+                        (java.util.function.Consumer<
+                            net.minecraft.network.FriendlyByteBuf>)
+                        buf -> { buf.writeUtf(name); buf.writeUtf("null"); });
+            } else if (params.has("serial")) {
+                Object action = Enum.valueOf((Class) actCls, actName);
                 long serial = params.get("serial").getAsLong();
                 Class<?> pktCls = Class.forName(
                     "appeng.core.sync.packets.MEInteractionPacket");
                 pkt = pktCls.getConstructor(int.class, long.class, actCls)
                     .newInstance(p.containerMenu.containerId, serial, action);
             } else {
+                Object action = Enum.valueOf((Class) actCls, actName);
                 int slot = params.get("slot").getAsInt();
                 Class<?> pktCls = Class.forName(
                     "appeng.core.sync.packets.InventoryActionPacket");
@@ -757,6 +782,25 @@ public final class GameOps {
         } catch (ReflectiveOperationException e) {
             throw new ApiError("NOT_SUPPORTED", "no AE2 action API: " + e.getMessage());
         }
+    }
+
+    private static JsonObject inventoryResync() throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer p = requirePlayer();
+        AbstractContainerMenu menu = p.containerMenu;
+        // stateIdを不整合(-1)にしたクリックを送り、vanillaの復旧経路で
+        // サーバー側 sendAllDataToRemote → コンテナ内容の全再送を引き出す。
+        // slotNum=末尾外なので clicked() は何もせず、持ち物も動かない。
+        net.minecraft.network.protocol.game.ServerboundContainerClickPacket pkt =
+            new net.minecraft.network.protocol.game.ServerboundContainerClickPacket(
+                menu.containerId, -1, menu.slots.size(), 0,
+                ClickType.PICKUP, ItemStack.EMPTY,
+                new it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<ItemStack>());
+        mc.getConnection().send(pkt);
+        JsonObject r = new JsonObject();
+        r.addProperty("sent", true);
+        r.addProperty("container_id", menu.containerId);
+        return r;
     }
 
     private static JsonObject containerClose() throws ApiError {
@@ -1147,6 +1191,16 @@ public final class GameOps {
         r.addProperty("x", x);
         r.addProperty("y", y);
         r.addProperty("z", z);
+        // JourneyMapがあれば同名waypointをミラー登録
+        if (JourneyMapBridge.isAvailable()) {
+            try {
+                JourneyMapBridge.set(name, new BlockPos(x, y, z),
+                    p.level().dimension());
+                r.addProperty("journeymap", true);
+            } catch (ReflectiveOperationException | NoClassDefFoundError e) {
+                r.addProperty("journeymap_error", e.getMessage());
+            }
+        }
         return r;
     }
 
@@ -1171,6 +1225,13 @@ public final class GameOps {
         if (!Waypoints.del(name)) throw new ApiError("NOT_FOUND", "unknown waypoint: " + name);
         JsonObject r = new JsonObject();
         r.addProperty("deleted", name);
+        if (JourneyMapBridge.isAvailable()) {
+            try {
+                r.addProperty("journeymap", JourneyMapBridge.del(name));
+            } catch (ReflectiveOperationException | NoClassDefFoundError e) {
+                r.addProperty("journeymap_error", e.getMessage());
+            }
+        }
         return r;
     }
 

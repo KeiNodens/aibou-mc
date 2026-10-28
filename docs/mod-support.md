@@ -23,7 +23,7 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | use_item hold (弓・盾・トライデント) | 対応済 | `hold_ticks` で保持→release |
 | entity interact | 対応済 | 餌やり・懐き・お座り・乳搾り・毛刈り・リード・騎乗・取引開始を全検証。reachガード付き (OUT_OF_RANGE) |
 | 取引 (村人) | 対応済 | merchant menu + container.trade で完全取引確認 (edamame 96個・進捗達成) |
-| AE2 MEターミナル在庫読取 | 部分対応 | `container_repo` でMEStorageScreenのrepo全量読取確認。入庫/引き出しはAE2独自packet要 |
+| AE2 MEターミナル在庫操作 | 対応済 | `container_repo` でネットワーク在庫全量読取 (serial/id/amount/requestable/craftable)、入庫はquick_move、引出しは`container_repo_action` (MEInteractionPacket・serial指定) で実機検証。オートクラフトは`AUTO_CRAFT`+`CONFIRM_AUTO_CRAFT`を実装済 (実機検証は要パターン網) |
 | GUIボタン (石切台・織機・エンチャ・ビーコン) | 対応済 | container.button |
 | GUIボタン (石切台・織機・エンチャ・ビーコン) | 対応済 | container.button |
 | Jade連携 `look_info` | 対応済 | 機械の電力・進捗・内容物を汎用読取。Jade無しでもid+基本情報にfallback |
@@ -59,7 +59,7 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | energizedpower | auto_crafter / advanced_auto_crafter | [~] | probeでcobbleがslot41に着地 (crafting grid領域)。機械処理系とは別物 |
 | ae2 | charger / inscriber | [d] | 定義あり。投入item限定でprobe未通過 |
 | ae2 | vibration_chamber | [d] | |
-| ae2 | MEターミナル/チェスト | [x] | `container_repo`でネットワーク在庫を読取 (実機検証)。入出庫は独自packetで未対応 |
+| ae2 | MEターミナル/チェスト | [x] | `container_repo`読取 + quick_move入庫 + `container_repo_action` serial引出しを実機検証。オートクラフトは `AUTO_CRAFT`→`CONFIRM_AUTO_CRAFT` (ConfirmAutoCraftPacket) を実装済・パターン付き網での実機検証は未 |
 | ad_astra | compressor / etrionic_blast_furnace | [d] | probe実証input=1 |
 | forestry | carpenter / squeezer / centrifuge / fabricator / fermenter / moistener / bottler / still / smelter | [d] | 定義あり。多くは流体+電力が前提で運用ハードル高 |
 | immersiveengineering | alloy_smelter / bottling_machine / sawmill | [d] | 単体機は定義あり。**crusher/arc_furnace等のマルチブロックは対象外** |
@@ -99,7 +99,7 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | sob (Stuff On Breadsticks?) | Farmer's Delight 1.3.4との非互換 (FD 1.2.x向け) |
 | JustEnoughResources + jerintegration | worldgen走査で未登録biome参照で落ちる |
 | nolijium | クライアントQoL mod (botでは不要。本番は任意) |
-| solapplepie | **食事完了時にbotがkickされるmod側bug** (offline playerにfood capabilityが付かない)。恒久対策はbot側除外要検討 — 接続可否は要確認 |
+| solapplepie | ~~食事完了時にbotがkickされるmod側bug~~ → **agent-mod側で恒久対処済** (`SolApplePieGuardMixin`がcapability未装着時の`FoodListMessage`を安全に捨てる)。パック維持・多様性バフ継続利用可 |
 
 ## パック外の有名mod (未導入だが将来対応の解析)
 
@@ -124,14 +124,25 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | JourneyMap | map/waypoint | mod連携案 (autonomy.md) — waypoint共有が本体候補 |
 | Simple Voice Chat | 音声 | 将来枠 (autonomy.md) |
 
-## 機械対応の追加方法
+## 機械対応の追加方法 (反復可能なprobe手順)
 
-1. 対象ブロックを置いて `use_item` で開く
-2. `container.read` で `menu_id` と slot構造 (`container_idx`/`slot_class`) を確認
-3. `machines/<menu_id>.json` に input/output/fuel/virtual を記述
-   (slot_classに `virtual`/`output`/`fuel`/`upgrade`/`augment` があれば手がかりになる)
-4. `process_in_machine` スキルが自動で定義を読む
-5. 定義が無い機械でも heuristic で input=先頭実slot, output=残り実slot で動く (精度は低め)
+既存の半自動パイプライン:
 
-probe実証のやり方: 適切な投入物をplayer invから `container.click quick_move` で送り、
-着地したslot番号がinput。着地しない = quick_moveルーティング無し = direct挿入要。
+1. `tools/discover-machines.sh` — `MACHINES` リストに対象 `modid:block` を追加して実行。
+   各ブロックを setblock→`use_item`で開く→`container.read`→closeし、
+   `machines/discovery/<modid>_<name>.json` にmenu_id/slot構造/`slot_class`を保存
+2. `tools/probe-machines.sh` — discovery結果を読み、cobbleを `container.click quick_move`
+   で送り、着地したslot番号=実inputを `machines/probe/<modid>_<name>.json` に記録。
+   着地しない = quick_moveルーティング無し → `insert:"direct"` 前提
+3. `tools/gen-machine-defs.py` — probe結果から `machines/<menu_id>.json` 定義を生成
+   (`verified_input:true` はprobe着地済みのみ)
+4. 手動で input/output/fuel/virtual を整えたら `process_in_machine` で実加工検証
+
+`slot_class` に `virtual`/`output`/`fuel`/`upgrade`/`augment` があれば手がかりになる。
+定義が無い機械でも heuristic (input=先頭実slot, output=残り実slot) で動くが精度は低め。
+
+### 未導入mod (Powah等) の検証方針
+
+パック外modは**導入時に上記パイプラインをそのまま通す**のが手順。
+Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加は容易と見込む
+(外部表の対応方針欄参照)。RS/PneumaticCraft等の特殊系は個別実装が要る可能性が高い。

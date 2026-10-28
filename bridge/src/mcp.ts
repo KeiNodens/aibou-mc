@@ -261,17 +261,29 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
     {
       description:
         'Perform an AE2 InventoryAction on the open terminal: extract a network item ' +
-        'by serial (from container_repo; action SHIFT_CLICK=all, SPLIT_OR_PLACE_SINGLE=one) ' +
-        'or deposit an inventory slot into the network (action SHIFT_CLICK + slot).',
+        'by serial (from container_repo; action SHIFT_CLICK=all, SPLIT_OR_PLACE_SINGLE=one), ' +
+        'deposit an inventory slot into the network (action SHIFT_CLICK + slot), ' +
+        'or request autocraft: action AUTO_CRAFT + serial opens the amount menu, ' +
+        'CONFIRM_AUTO_CRAFT + amount opens the plan screen, then ' +
+        'GUI_ACTION + name=startJob starts the job (also replan/back/cycleCpu).',
       inputSchema: {
         action: z.enum([
           'SHIFT_CLICK', 'SPLIT_OR_PLACE_SINGLE', 'PICKUP_OR_SET_DOWN',
           'PICKUP_SINGLE', 'MOVE_REGION', 'CRAFT_ITEM', 'CRAFT_STACK', 'CRAFT_ALL',
+          'AUTO_CRAFT', 'CONFIRM_AUTO_CRAFT', 'GUI_ACTION',
         ]),
+        name: z.string().optional()
+          .describe('GUI action name for GUI_ACTION (startJob/replan/back/cycleCpu)'),
         serial: z.number().int().optional()
-          .describe('repo entry serial (extract from network)'),
+          .describe('repo entry serial (extract/autocraft from network)'),
         slot: z.number().int().optional()
           .describe('menu slot index (deposit to network)'),
+        amount: z.number().int().optional()
+          .describe('craft amount for CONFIRM_AUTO_CRAFT'),
+        craft_missing: z.boolean().optional()
+          .describe('craft missing intermediates for CONFIRM_AUTO_CRAFT'),
+        auto_start: z.boolean().optional()
+          .describe('skip plan review and start job for CONFIRM_AUTO_CRAFT (default true)'),
       },
     },
     async (p) => {
@@ -294,6 +306,24 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
     async () => {
       try {
         return json(await mod.call('respawn', {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'inventory_resync',
+    {
+      description:
+        'Force the server to resend the full container contents (vanilla desync-recovery ' +
+        'path). Use when client inventory looks stale after /give or server-side item ' +
+        'changes. Wait ~1 tick, then re-read state.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('inventory.resync', {}));
       } catch (e) {
         return err(e);
       }

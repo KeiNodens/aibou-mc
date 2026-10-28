@@ -163,8 +163,11 @@ full-pack validation, crafting + meaning-level container/GUI ops
 (`container.read/click/button/trade`, `machines/*.json` — 113 machine defs,
 see `docs/mod-support.md`), entity interactions (feed/tame/shear/leash/mount/
 trade), `use_item` incl. charge-and-release (`hold_ticks`), Jade-powered
-`look_info`, AE2-style repo dump (`container_repo`), craft planning
-(`craft_plan` skill) and named waypoints (`waypoint` skill). Not done:
+`look_info`, AE2 ME-network ops (`container_repo` read +
+`container_repo_action` withdraw/autocraft + quick_move deposit), death-screen
+`respawn`, inventory desync recovery (`inventory_resync`), craft planning
+(`craft_plan` skill) and named waypoints (`waypoint` skill, mirrored into
+JourneyMap when installed). Not done:
 positive-path `give`/`come_here` tests, Muse host connection, long-duration
 soak.
 
@@ -179,7 +182,16 @@ smarter when they're present.
   (compile-only dep: drop `jade-11.13.3.jar` into `agent-mod/libs/`)
 - **AE2 / Applied Energistics-family terminals** — open any ME-style
   terminal screen and `container_repo` dumps the whole network inventory
-  (stored amounts + craftable flags) without touching slots.
+  (serial/id/amount/requestable/craftable). `container_repo_action` extracts
+  entries by serial via AE2's native `MEInteractionPacket`, and normal
+  `container_click` quick_move deposits player-inventory items into the
+  network — verified end-to-end on a powered test grid. Autocraft requests
+  work through the same op: `AUTO_CRAFT` (amount screen) →
+  `CONFIRM_AUTO_CRAFT` (plan screen) → `GUI_ACTION` `startJob`.
+- **JourneyMap** — when installed on the bot client, `waypoint_save` /
+  `waypoint_delete` mirror named waypoints into JourneyMap's `agentmod`
+  group, so they show up as beacons on the bot's map (journeymap-api v2,
+  reflection-based soft dep).
 
 ## License
 

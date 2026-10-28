@@ -506,3 +506,40 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
 - **対処: instance.cfg MaxMemAlloc 6144→12288, MinMemAlloc→4096**。GC圧が減り
   keep-aliveが通りJEI完了まで接続が持つようになった。
 - give直後のクライアントinventory同期ずれは相変わらず発生。kick再接続で解消。
+
+## 2026-10-28 夜 (続)
+
+### respawn 実機検証
+- `/kill Rin` → hp:0・死亡画面 → `respawn` op → hp:20・スポーン地点 (9.5,62,-9.5) 復帰。
+  `{was_alive:false}` で死亡状態の検出→復帰の両分岐を確認。
+
+### AE2 オートクラフト依頼 — 全3段を実機検証
+- `container_repo_action` に3経路を実装:
+  1. `AUTO_CRAFT` + serial → `MEInteractionPacket` でサーバーが `ae2:craftamount`
+     (数量選択menu) を実際に開くことを確認 (item_terminal cid1→craftamount cid2)。
+  2. `CONFIRM_AUTO_CRAFT` + amount(/craft_missing/auto_start) →
+     `ConfirmAutoCraftPacket(int,boolean,boolean)` で `ae2:craftconfirm` (計画確認menu)
+     が開くことを確認 (cid3)。
+  3. `GUI_ACTION` + name → `GuiDataSyncPacket(containerId, buf)` で
+     `buf.writeUtf(action名)` を送出。`startJob`/`replan`/`back`/`cycleCpu` が
+     CraftConfirmMenuの登録アクション名。`startJob`送信を確認
+     (対象は1kセル=パターン無しなのでjob自体は起動しないが、パケット経路は成立)。
+- 完全なクラフトジョブ成立の検証には encoded pattern + crafting CPU が要るため、
+  「パケット経路の成立 + menu遷移の実証」までで記録を区切る。
+
+### inventory.resync 実装 (同期ずれの根本対策)
+- `inventory.resync` op: `ServerboundContainerClickPacket(containerId, stateId=-1,
+  slot=slots.size(), PICKUP, empty, {})` を送出。
+  stateId不整合でサーバー側が `sendAllDataToRemote()` を呼ぶ vanillaの
+  デシンク復旧経路を利用。slot番号は末尾外なので clicked() は無視、持ち物も動かない。
+- 検証: GUI開放中 (container_id:1) に give→resync → メニュー内のplayer inv slotに
+  新規アイテムが届くことを確認。GUI無し (container_id:0) でも送出・整合確認。
+- 従来の give直後の表示遅延は本セッションでは発生せず、健全同期下でもresyncが
+  安全に通ることを確認 (真のパケット喪失時の復旧は次回発生時に見る)。
+
+### JourneyMap 連携 (autonomy 8.5 第一弾)
+- `JourneyMapBridge` 新設 (全リフレクション・soft-dep、journeymap-forge-1.20.1-6.0.7)。
+  `ClientAPI.INSTANCE` (enumシングルトン) → `WaypointFactory.createWaypoint` →
+  `addWaypoint("agentmod", wp)` で agentmod グループに永続登録。
+- `waypoint.set` → JMミラー `journeymap:true`、`waypoint.del` → JM削除も確認。
+  botマップ上にwaypoint表示、プレイヤーとの地点共有の土台ができた。
