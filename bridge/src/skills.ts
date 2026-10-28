@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { z, ZodRawShape } from 'zod';
 import { State } from './state.js';
 import { ModClient } from './modclient.js';
+import { Journal } from './journal.js';
 
 /**
  * 技能層 (design §2.1-2): skills/ 配下の .mjs を動的importし、
@@ -28,6 +29,13 @@ export interface SkillCtx {
   waitTask(taskId: string, timeoutMs?: number): Promise<Record<string, unknown> | null>;
   signal: AbortSignal;
   throwIfCancelled(): void;
+  // 作業ジャーナル: 世代非依存のwork id単位で進捗を永続化する。
+  // 再開時は「実ゲーム状態を観測→照合」してから続行すること (盲目の再実行禁止)。
+  journal: {
+    work: string;
+    checkpoint(step: string, data?: Record<string, unknown>): void;
+    note(text: string, data?: Record<string, unknown>): void;
+  };
 }
 
 type Running = { name: string; controller: AbortController; done: Promise<void> };
@@ -40,6 +48,7 @@ export class Skills {
     private state: State,
     private mod: ModClient,
     private dir: string,
+    private journal?: Journal,
   ) {}
 
   async load() {
@@ -114,11 +123,15 @@ export class Skills {
     if (this.current) throw new Error(`BUSY: skill '${this.current.name}' is running`);
 
     const controller = new AbortController();
-    const ctx = this.makeCtx(controller);
+    // 世代非依存のwork id: 再起動を跨いで進捗を追跡できる
+    const work = this.journal?.newWorkId();
+    this.journal?.append('work.start', { work, skill: name, args });
+    const ctx = this.makeCtx(controller, work);
     const done = (async () => {
       try {
         const result = await m.run(ctx, args);
         this.state.push('skill.done', { skill: name, ok: true, result });
+        this.journal?.append('work.end', { work, skill: name, ok: true, result });
       } catch (e) {
         const cancelled = controller.signal.aborted;
         this.state.push('skill.done', {
@@ -127,12 +140,16 @@ export class Skills {
           cancelled,
           error: e instanceof Error ? e.message : String(e),
         });
+        this.journal?.append('work.end', {
+          work, skill: name, ok: false, cancelled,
+          error: e instanceof Error ? e.message : String(e),
+        });
       } finally {
         this.current = null;
       }
     })();
     this.current = { name, controller, done };
-    return { started: true, skill: name };
+    return { started: true, skill: name, work };
   }
 
   cancel(): { cancelled: string | null } {
@@ -142,7 +159,7 @@ export class Skills {
     return { cancelled: cur.name };
   }
 
-  private makeCtx(controller: AbortController): SkillCtx {
+  private makeCtx(controller: AbortController, work?: string): SkillCtx {
     const { signal } = controller;
     const throwIfCancelled = () => {
       if (signal.aborted) throw new Error('CANCELLED');
@@ -162,6 +179,7 @@ export class Skills {
 
     const mod = this.mod;
     const state = this.state;
+    const journal = this.journal;
     return {
       signal,
       throwIfCancelled,
@@ -169,6 +187,13 @@ export class Skills {
       call: (method, params) => mod.call(method, params ?? {}),
       state: () => mod.call('obs.state'),
       say: (text) => mod.call('chat.send', { text }),
+      journal: {
+        work: work ?? 'none',
+        checkpoint: (step, data) =>
+          journal?.append('checkpoint', { work, step, ...(data ?? {}) }),
+        note: (text, data) =>
+          journal?.append('note', { work, text, ...(data ?? {}) }),
+      },
       async waitTask(taskId, timeoutMs = 120_000) {
         const deadline = Date.now() + timeoutMs;
         let since = state.latestSeq();

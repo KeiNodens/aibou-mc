@@ -120,7 +120,7 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | Integrated Dynamics | ロジック系 | GUI複雑。対象外寄り |
 | XNet / Pipez / Modular Routers | 搬送制御 | config GUI。低優先 |
 | Waystones | ワープGUI | ボタン選択式 — container.button経路で対応可能と推定 |
-| FTB Quests | クエスト画面 | 画面操作系で slot ops の適用範囲外。autonomy.md §8.5 参照 |
+| FTB Quests | クエスト/進捗API | `quest.list`/`quest.inspect` で章・タスク・報酬・started/completed を取得 (ClientQuestFile経由・リフレクションsoft-dep)。クエスト定義がパックに無い環境では synced:true・空リスト |
 | JourneyMap | map/waypoint | mod連携案 (autonomy.md) — waypoint共有が本体候補 |
 | Simple Voice Chat | 音声 | 将来枠 (autonomy.md) |
 

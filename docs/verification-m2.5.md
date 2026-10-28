@@ -543,3 +543,63 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
   `addWaypoint("agentmod", wp)` で agentmod グループに永続登録。
 - `waypoint.set` → JMミラー `journeymap:true`、`waypoint.del` → JM削除も確認。
   botマップ上にwaypoint表示、プレイヤーとの地点共有の土台ができた。
+
+## 2026-10-28 深夜 (外部提案の取り込み)
+
+### FTB Quests 導入 + quest.* API
+- `ftb-quests-forge-2001.4.22` + `ftb-teams-forge-2001.3.2` を
+  server/bot/ユーザー側の3箇所に導入 (FTB公式Maven、依存は既存modで充足)。
+- サーバーログで `ftbquests:*` レシーバ登録を確認 (submit_task, claim_reward 等)。
+- `QuestBridge` 新設 (全リフレクション): `ClientQuestFile.INSTANCE` +
+  `selfTeamData` から `forAllQuests` → 章/タイトル/started/completed。
+- `quest.list` / `quest.inspect` を dispatch・capabilities・bridge登録。
+  実機: `quest_list` → `{"synced":true,"quests":[]}`。
+  `ClientQuestFile.INSTANCE` へのサーバー同期と経路成立を確認
+  (クエスト定義はパック未同梱のため空は期待値 — config/ftbquests に
+  クエストSNBTを配置すれば一覧・進捗が出る)。
+
+### ReflexGuard (LLM非依存の反射層) — 実機検証済
+- `ReflexGuard` 新設、ClientEvents.onClientTick で通常タスクtickより先に評価。
+- 被弾検知 → 実行中タスクをINTERRUPTED + `reflex`イベント発火
+  + Baritoneで離脱 (8m敵接近も同様に中断、peacefulのため未検証)。
+- 実機: `tp`で6m落下×3回 → 3回とも`reflex{hurt,hp17-18}`発火 +
+  `reflex-t1/t2/t3`離脱タスクが`arrived:true`で完了 (+10〜12m逃走)。
+  サーバー難易度はpeacefulだったため敵接近分岐は未検証
+  (summonしたモブは即消滅した)。
+
+### container.click の操作後検証 — 実機検証済
+- レスポンスに `container_id`/`state_id`/操作後slot内容を付加。
+  実機: furnace結果slot pickup →
+  `{"clicked":2,"container_id":1,"state_id":1,"after":{"slot":2,"id":null,"count":0}}`。
+  不整合時は `inventory.resync` で `sendAllDataToRemote()` を引き出して復旧。
+
+### Bridge作業ジャーナル — 実機検証済
+- `bridge/src/journal.ts` 新設: JSONL永続化 (`bridge/data/journal.jsonl`)。
+  work_id は WS世代に非依存の連番。kind: work.start / work.end /
+  checkpoint / evt(task.done・skill.done・reflexを自動収集)。
+- skill実行は自動で work.start + work.end(全result) を記録、
+  `work_journal`(読み出し)/`work_checkpoint`(手動記録)のMCPツール追加。
+- 実機: `work_checkpoint`→`w-1`割当・永続化・読み戻し、
+  craft_plan実行で`w-2`にgoal/args/resultが自動記録されたことを確認。
+- 設計意図: 再起動後は「操作の再実行」ではなく「観測→照合→再開」で復旧
+  (Codex Companionの NpcTaskPersistence 参照)。
+
+### schematic 取り込み (.litematic/.schem)
+- `bridge/src/schematic.ts` 新設: `prismarine-nbt` で
+  `.litematic` (regions→blocks/palette/size) と `.schem` を解析。
+- `schematic_inspect` (寸法・ブロック種類数・主成分) /
+  `schematic_plan` (配置手順リスト化) のMCPツール追加。
+  実ファイルでの検証は今後 (Litematica出力のテスト用図面が必要)。
+
+### craft_plan の機械工程統合 + 循環/選択バグ修正 — 実機検証済
+- 非クラフトRecipeTypeも再帰展開し、`machines/*.json` 定義と突合して
+  machine/menu_id/input_slots を step に付記 (`needs_machine` も返す)。
+- 修正1: `visiting`セットで bread→wheat→hay_block→wheat 型の循環を遮断
+  (実機: missingが wheat243→wheat9 に正常化)。
+- 修正2: レシピ材料を同一itemに集約 (hay_block 9slot分岐の9x9爆発を解消)。
+- 修正3: 機械レシピもcrafting同様にスコア選択 (`mrs[0]`固定で
+  create:framed_glass→glass の回遊を選ぶ問題を解消)。
+- 修正4: `minecraft:`成果物は「全材料にバニラ選択肢がある」レシピのみ採用
+  (mysticalagriculture:essence→sand 等のmodded疑似クラフトを排除)。
+- 実機: `craft_plan glass 3` → `missing:{sand:4}`,
+  steps=[sandstone→millstone→smelting] の機械工程付き計画を確認。

@@ -5,6 +5,7 @@ import { ModClient } from './modclient.js';
 import { createMcpServer } from './mcp.js';
 import { startRunner } from './runner.js';
 import { Skills } from './skills.js';
+import { Journal } from './journal.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -19,7 +20,10 @@ const SKILLS_DIR =
 const state = new State();
 const mod = new ModClient(MOD_URL, state);
 mod.start();
-const skills = new Skills(state, mod, SKILLS_DIR);
+// 作業ジャーナル (世代非依存ID + checkpoint永続化)。data/journal.jsonl
+const journal = new Journal(path.resolve(process.cwd(), 'data'));
+journal.attach(state);
+const skills = new Skills(state, mod, SKILLS_DIR, journal);
 await skills.load();
 skills.watch();
 
@@ -51,7 +55,7 @@ app.post('/inject', requireAuth, (req, res) => {
 app.all('/mcp', requireAuth, async (req, res) => {
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   transport.onerror = (e) => console.log('[mcp transport]', e);
-  const server = createMcpServer(state, mod, skills);
+  const server = createMcpServer(state, mod, skills, journal);
   res.on('close', () => {
     transport.close().catch(() => {});
     server.close().catch(() => {});

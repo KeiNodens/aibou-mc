@@ -13,6 +13,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.20.2",
     "express": "^4.21.2",
+    "prismarine-nbt": "^2.7.0",
     "ws": "^8.18.0"
   },
   "devDependencies": {

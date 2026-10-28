@@ -181,8 +181,9 @@ public class ClientEvents {
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
-        TaskManager.get().tickAll();
         Minecraft mc = Minecraft.getInstance();
+        ReflexGuard.tick(mc);
+        TaskManager.get().tickAll();
         ambient(mc);
         if (!AgentConfig.autoConnect()) return;
         boolean atEntry = mc.screen instanceof TitleScreen || mc.screen instanceof DisconnectedScreen;

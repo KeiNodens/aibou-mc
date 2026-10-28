@@ -4,6 +4,8 @@ import { z } from 'zod';
 import { State } from './state.js';
 import { ModClient } from './modclient.js';
 import { Skills } from './skills.js';
+import { inspectSchematic, planSchematic } from './schematic.js';
+import { Journal } from './journal.js';
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
@@ -14,7 +16,7 @@ const err = (e: unknown) => ({
 
 // M2.5向けツール群。mod側の実装があるmethodはWS経由で呼び、
 // 未実装のものはmock-modがUNSUPPORTEDを返す。
-export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
+export function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal) {
   const server = new McpServer({ name: 'minecraft', version: '0.0.1' });
 
   server.registerTool(
@@ -324,6 +326,143 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
     async () => {
       try {
         return json(await mod.call('inventory.resync', {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'schematic_inspect',
+    {
+      description:
+        'Read a building blueprint file (.litematic or .schem) and return its ' +
+        'size, block count and material totals. No Litematica mod needed — ' +
+        'the NBT is parsed directly by the bridge.',
+      inputSchema: {
+        path: z.string().describe('absolute path to the schematic file'),
+      },
+    },
+    async ({ path }) => {
+      try {
+        return json(await inspectSchematic(path));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'schematic_plan',
+    {
+      description:
+        'Return the ordered block list (bottom-up) for a .litematic/.schem ' +
+        'file — the placement sequence for actually building it. Use ' +
+        'max_layers to preview a subset.',
+      inputSchema: {
+        path: z.string().describe('absolute path to the schematic file'),
+        max_layers: z.number().int().optional()
+          .describe('limit to first N layers (y<max_layers)'),
+      },
+    },
+    async ({ path, max_layers }) => {
+      try {
+        const r = await planSchematic(path, { max_layers });
+        return json({ size: r.size, total: r.total, blocks: r.blocks.slice(0, 2000),
+          truncated: r.total > 2000 });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'work_journal',
+    {
+      description:
+        'Read the persistent work journal (data/journal.jsonl) — generation- ' +
+        'independent work ids, checkpoints, task/reflex events. To resume ' +
+        'interrupted work, observe the real game state first and reconcile ' +
+        'against the last checkpoint; never blindly replay clicks.',
+      inputSchema: {
+        limit: z.number().int().optional().describe('entries to return (default 50)'),
+        work_id: z.string().optional().describe('filter to one work id'),
+        open_only: z.boolean().optional()
+          .describe('return only works started but not ended'),
+      },
+    },
+    async ({ limit, work_id, open_only }) => {
+      try {
+        if (!journal) return json({ entries: [], note: 'journal disabled' });
+        if (open_only) return json({ open: journal.openWorks() });
+        return json({ entries: journal.tail(limit ?? 50, work_id) });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'work_checkpoint',
+    {
+      description:
+        'Manually write a checkpoint entry into the work journal (e.g. for ' +
+        'multi-turn work driven by the MCP host rather than a skill). ' +
+        'Omit work_id to allocate a new work id for a new goal.',
+      inputSchema: {
+        work_id: z.string().optional().describe('existing work id, or omit for new'),
+        goal: z.string().optional().describe('goal text when starting a new work'),
+        step: z.string().describe('checkpoint label, e.g. "materials_inserted"'),
+        note: z.string().optional(),
+      },
+    },
+    async ({ work_id, goal, step, note }) => {
+      try {
+        if (!journal) return json({ ok: false, note: 'journal disabled' });
+        let work = work_id;
+        if (!work) {
+          work = journal.newWorkId();
+          journal.append('work.start', { work, skill: 'manual', goal });
+        }
+        journal.append('checkpoint', { work, step, ...(note ? { note } : {}) });
+        return json({ ok: true, work });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'quest_list',
+    {
+      description:
+        'List FTB Quests chapters/quests with progress state (requires the ' +
+        'ftbquests mod on client+server and synced quest data). Empty when ' +
+        'the pack defines no quests.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('quest.list', {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'quest_inspect',
+    {
+      description:
+        'Inspect one quest by name or id: tasks, rewards, started/completed ' +
+        'state. Get names from quest_list.',
+      inputSchema: {
+        name: z.string().describe('quest title or numeric id'),
+      },
+    },
+    async ({ name }) => {
+      try {
+        return json(await mod.call('quest.inspect', { name }));
       } catch (e) {
         return err(e);
       }

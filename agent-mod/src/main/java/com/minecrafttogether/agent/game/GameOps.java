@@ -88,6 +88,8 @@ public final class GameOps {
             case "waypoint.get" -> waypointGet(params);
             case "waypoint.list" -> waypointList();
             case "waypoint.del" -> waypointDel(params);
+            case "quest.list" -> questList();
+            case "quest.inspect" -> questInspect(params);
             case "move.set" -> moveSet(params);
             case "move.stop" -> moveStop();
             case "look_at" -> lookAt(params);
@@ -614,6 +616,17 @@ public final class GameOps {
         JsonObject r = new JsonObject();
         r.addProperty("clicked", slot);
         r.addProperty("action", action);
+        r.addProperty("container_id", menu.containerId);
+        r.addProperty("state_id", menu.getStateId());
+        // 操作後のclicked slot状態を同梱 (呼び出し側の照合用。ズレる場合は
+        // inventory.resync → container.read で確定値を取り直す)
+        ItemStack after = menu.slots.get(slot).getItem();
+        JsonObject a = new JsonObject();
+        a.addProperty("slot", slot);
+        a.addProperty("id", after.isEmpty() ? null
+            : BuiltInRegistries.ITEM.getKey(after.getItem()).toString());
+        a.addProperty("count", after.getCount());
+        r.add("after", a);
         return r;
     }
 
@@ -1233,6 +1246,28 @@ public final class GameOps {
             }
         }
         return r;
+    }
+
+    private static JsonObject questList() throws ApiError {
+        if (!QuestBridge.isAvailable())
+            throw new ApiError("UNSUPPORTED", "ftbquests not loaded");
+        try {
+            return QuestBridge.list();
+        } catch (ReflectiveOperationException | IllegalStateException e) {
+            throw new ApiError("UNSUPPORTED", "quest data unavailable: " + e.getMessage());
+        }
+    }
+
+    private static JsonObject questInspect(JsonObject params) throws ApiError {
+        if (!QuestBridge.isAvailable())
+            throw new ApiError("UNSUPPORTED", "ftbquests not loaded");
+        try {
+            return QuestBridge.inspect(params.get("name").getAsString());
+        } catch (ReflectiveOperationException e) {
+            throw new ApiError("UNSUPPORTED", "quest data unavailable: " + e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            throw new ApiError("NOT_FOUND", e.getMessage());
+        }
     }
 
     private static LocalPlayer requirePlayer() throws ApiError {

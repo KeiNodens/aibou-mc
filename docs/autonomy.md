@@ -195,9 +195,14 @@ botが指示待ちではなく「そこに生きている」感じを出すた�
 | hold-use (弓/盾/トライデント) | 実装済 — `hold_ticks`、弓の実射 (矢消費) で検証 |
 | GUI ボタン操作 | 実装済 — `container.button`、stonecutter で検証 |
 | AE2 MEネットワーク連携 (8.1) | **実装済** — `container.repo` (IClientRepo→GridInventoryEntry 全量読み出し) + `container.repo_action` (`MEInteractionPacket` で serial 指定取出し) + 通常quick_move での入庫を通電ネットワークで実機検証。オートクラフト依頼も `AUTO_CRAFT`→`CONFIRM_AUTO_CRAFT`→`GUI_ACTION startJob` の3段 packet 経路を実装・menu遷移で実証 (実ジョブ成立はパターン網が前提) |
-| 素材ツリー計算 (8.1) | **実装済** — `craft_plan` スキル: recipe_lookup 再帰展開で不足素材・手順・機械必須品を返す。在庫充足/バニラ優先/同namespace加点のスコア選択 |
+| 素材ツリー計算 (8.1) | **実装済** — `craft_plan` スキル: recipe_lookup 再帰展開で不足素材・手順・機械必須品を返す。機械工程も `machines/*.json` 紐付けで `process` ステップ化。循環検知・素材集約・バニラ経路優先で modded 回遊レシピの爆発を抑止済み |
+| 反射層 (Elly方式) | **実装済** — `ReflexGuard` が毎tick被弾・敵接近(8m)を検知し実行中タスクをINTERRUPTED中断 + `reflex`イベント発火 + Baritone離脱。落下被弾で実機検証 (peaceful鯖のため敵接近分岐は未検証) |
+| 作業ジャーナル | **実装済** — `bridge/src/journal.ts` が JSONL (`bridge/data/journal.jsonl`) に世代非依存work_idで永続化。skill実行の自動記録+`work_journal`/`work_checkpoint`ツール。「再実行でなく観測→照合→再開」の復旧方針 |
+| GUI操作検証 (Marionette方式) | **実装済** — `container.click` が `state_id`+操作後slot内容を返却し予測/確定のズレを検知可能に。不整合時は `inventory_resync` で vanilla復旧経路を引き出す |
+| schematic 取り込み | **実装済(解析側)** — `bridge/src/schematic.ts` が prismarine-nbt で .litematic/.schem を解析。`schematic_inspect`/`schematic_plan` ツール。実ファイル検証は今後 |
 | JourneyMap (8.5) | **実装済** — `JourneyMapBridge` (全リフレクション soft-dep) で `waypoint.set`/`waypoint.del` を JM の agentmod グループへミラー。botマップに地点表示・プレイヤーとの地点共有の土台 |
-| FTB Quests / spark / Litematica / Voice Chat (8.5) | 未実装 (本パック未搭載: ftb-quests/spark/litematica/voicechat 無し。導入時に再評価) |
+| FTB Quests (8.5) | **API実装済** — ftb-quests/ftb-teams をserver/bot/ユーザー側に導入。`QuestBridge` (全リフレクション) が ClientQuestFile の章・タスク・報酬・started/completed を取得、`quest.list`/`quest.inspect` で公開。クエスト定義はパック未同梱のため synced:true・空リストを確認済み |
+| spark / Litematica / Voice Chat (8.5) | 未実装 (本パック未搭載: spark/litematica/voicechat 無し。導入時に再評価) |
 
 ## 8.1 最優先級
 

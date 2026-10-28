@@ -166,8 +166,12 @@ trade), `use_item` incl. charge-and-release (`hold_ticks`), Jade-powered
 `look_info`, AE2 ME-network ops (`container_repo` read +
 `container_repo_action` withdraw/autocraft + quick_move deposit), death-screen
 `respawn`, inventory desync recovery (`inventory_resync`), craft planning
-(`craft_plan` skill) and named waypoints (`waypoint` skill, mirrored into
-JourneyMap when installed). Not done:
+(`craft_plan` skill incl. machine-processing steps), named waypoints
+(`waypoint` skill, mirrored into JourneyMap when installed), reflex layer
+(damage/proximity interrupts + Baritone retreat), persistent work journal
+(`work_journal`/`work_checkpoint` — generation-independent), schematic
+ingestion (`schematic_inspect`/`schematic_plan` for .litematic/.schem), and
+FTB Quests progress ops (`quest_list`/`quest_inspect`). Not done:
 positive-path `give`/`come_here` tests, Muse host connection, long-duration
 soak.
 
@@ -192,6 +196,10 @@ smarter when they're present.
   `waypoint_delete` mirror named waypoints into JourneyMap's `agentmod`
   group, so they show up as beacons on the bot's map (journeymap-api v2,
   reflection-based soft dep).
+- **FTB Quests** — when installed on client+server, `quest_list` /
+  `quest_inspect` read chapters, tasks, rewards and started/completed state
+  from `ClientQuestFile` (reflection-based soft dep; empty until the pack
+  ships quest definitions).
 
 ## License
 
