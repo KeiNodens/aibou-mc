@@ -25,7 +25,6 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | 取引 (村人) | 対応済 | merchant menu + container.trade で完全取引確認 (edamame 96個・進捗達成) |
 | AE2 MEターミナル在庫操作 | 対応済 | `container_repo` でネットワーク在庫全量読取 (serial/id/amount/requestable/craftable)、入庫はquick_move、引出しは`container_repo_action` (MEInteractionPacket・serial指定) で実機検証。オートクラフトは`AUTO_CRAFT`+`CONFIRM_AUTO_CRAFT`を実装済 (実機検証は要パターン網) |
 | GUIボタン (石切台・織機・エンチャ・ビーコン) | 対応済 | container.button |
-| GUIボタン (石切台・織機・エンチャ・ビーコン) | 対応済 | container.button |
 | Jade連携 `look_info` | 対応済 | 機械の電力・進捗・内容物を汎用読取。Jade無しでもid+基本情報にfallback |
 | BlockEntity NBT `block_state` | 対応済 | getUpdateTag相当。機械診断用 |
 

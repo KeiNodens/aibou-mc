@@ -181,17 +181,17 @@ botが指示待ちではなく「そこに生きている」感じを出すた�
 
 「一緒に遊ぶ」以外の、道具としての機能要望。プレイヤーの実パック (262mod) の構成に寄せて優先度を付けた。
 
-## 8.0 実装状況サマリ (2026-06-14 更新)
+## 8.0 実装状況サマリ (2026-10-29 更新)
 
 下表のうち実装・検証済みのもの。詳細は `docs/mod-support.md` のマトリクス参照。
 
 | 案 | 状態 |
 |---|---|
 | `look_target` (7.2) / `look_info` (8.4) | **実装済** — look_at + Jade プロバイダ経由。enrichment_chamber で「濃縮室 (上)」「EMC: 2,844」「1 濃縮錫」の取得を実機検証。Jade 無しでは registry ID + 基本 state にフォールバック (JadeBridge は soft-dep、compileOnly) |
-| `machine_status` (8.1) | **相当機能を実装** — `look_info` (Jade 表示データ) + `block_state` (BlockEntity の updateTag NBT) の2経路で機械の電力・進捗・内容物を取得可能。block_state は未実機検証 |
+| `machine_status` (8.1) | **相当機能を実装** — `look_info` (Jade 表示データ) + `block_state` (BlockEntity の updateTag NBT) の2経路で機械の電力・進捗・内容物を取得可能。block_state も実機検証済 (enrichment_chamber の properties + be_nbt 取得) |
 | `recipe_query` (8.1) | **実装済** — 全 RecipeType 列挙 (mod機械レシピ含む)、タグ→候補アイテム展開済 |
-| 機械の入出力操作 (8.2 Mekanism 等) | **実装済** — `machines/*.json` 定義 (113件) + `process_in_machine` スキル。Mekanism 濃縮室で電力供給含め実加工検証。thermal/enderio/ad_astra/industrialforegoing 等は probe で input 実証済み (詳細は mod-support.md) |
-| entity interact | 実装済 — 餌やり・乳搾りを牛で検証。取引は merchant menu + container.trade で部分実装 |
+| 機械の入出力操作 (8.2 Mekanism 等) | **実装済** — `machines/*.json` 定義 (112件) + `process_in_machine` スキル。Mekanism 濃縮室で電力供給含め実加工検証。thermal/enderio/ad_astra/industrialforegoing 等は probe で input 実証済み (詳細は mod-support.md) |
+| entity interact | 実装済 — 餌やり・懐き・お座り・乳搾り・毛刈り・リード・騎乗を実機検証。取引も merchant menu + `container.trade` の完全経路で成立 (進捗達成) |
 | hold-use (弓/盾/トライデント) | 実装済 — `hold_ticks`、弓の実射 (矢消費) で検証 |
 | GUI ボタン操作 | 実装済 — `container.button`、stonecutter で検証 |
 | AE2 MEネットワーク連携 (8.1) | **実装済** — `container.repo` (IClientRepo→GridInventoryEntry 全量読み出し) + `container.repo_action` (`MEInteractionPacket` で serial 指定取出し) + 通常quick_move での入庫を通電ネットワークで実機検証。オートクラフト依頼も `AUTO_CRAFT`→`CONFIRM_AUTO_CRAFT`→`GUI_ACTION startJob` の3段 packet 経路を実装・menu遷移で実証 (実ジョブ成立はパターン網が前提) |
@@ -203,6 +203,8 @@ botが指示待ちではなく「そこに生きている」感じを出すた�
 | JourneyMap (8.5) | **実装済** — `JourneyMapBridge` (全リフレクション soft-dep) で `waypoint.set`/`waypoint.del` を JM の agentmod グループへミラー。botマップに地点表示・プレイヤーとの地点共有の土台 |
 | FTB Quests (8.5) | **API実装済** — ftb-quests/ftb-teams をserver/bot/ユーザー側に導入。`QuestBridge` (全リフレクション) が ClientQuestFile の章・タスク・報酬・started/completed を取得、`quest.list`/`quest.inspect` で公開。クエスト定義はパック未同梱のため synced:true・空リストを確認済み |
 | spark / Litematica / Voice Chat (8.5) | 未実装 (本パック未搭載: spark/litematica/voicechat 無し。導入時に再評価) |
+
+表外の追加実装: §7.3「名前を呼ばれたら振り向く」は `agentmod.autolook` (発言者を自動で向く) として実装済。2026-10-29 追加分として `key`/`scroll`/`screen_read`/`screen_click`/`screen_close`/`type_text`/`sign_write`/`jei_search`/`quest_claim` の各opが入り、mod GUIへの到達経路がほぼ埋まった (詳細は `docs/mod-support.md` 残gap一覧)。
 
 ## 8.1 最優先級
 
@@ -240,7 +242,7 @@ botが指示待ちではなく「そこに生きている」感じを出すた�
 
 ## 8.4 Jade 連携の着想 (2026-10-28, ユーザー発案)
 
-> **[実装済 2026-06-14]** `look_info` として実装・実機検証済み。`JadeBridge.java` (soft-dep) + `LookInfoTask.java`。Jade の `ObjectDataCenter`/`BlockAccessor` 経由でプロバイダデータを収集し、ツールチップ行とサーバーデータを JSON で返す。Jade 非搭載時は registry ID + BlockState にフォールバック。
+> **[実装済 2026-10-28]** `look_info` として実装・実機検証済み。`JadeBridge.java` (soft-dep) + `LookInfoTask.java`。Jade の `ObjectDataCenter`/`BlockAccessor` 経由でプロバイダデータを収集し、ツールチップ行とサーバーデータを JSON で返す。Jade 非搭載時は registry ID + BlockState にフォールバック。
 
 「見たものの情報」を出す mod は Jade (WAILA/Hwyla 系の後継)。agent-mod が Jade の API/プロバイダ結果を拾って MCP 側へ投げられると、8.1 の `machine_status` と 7.2 の `look_target` が一気に現実的になる。
 

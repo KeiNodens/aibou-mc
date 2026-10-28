@@ -31,7 +31,8 @@ botは**独立したMinecraftクライアント**(第2アカウント/インス�
 
 - **チャット駆動の相棒** — ゲーム内チャットで話しかけると、返答し行動する
 - **技能層 (skills)** — `follow_player`, `gather`, `come_here`, `give`,
-  `stop_all`。各技能は `skills/` 内のホットリロード対応JSファイル1つで、
+  `craft`, `craft_plan`, `process_in_machine`, `waypoint`, `stop_all`。
+  各技能は `skills/` 内のホットリロード対応JSファイル1つで、
   MCPツールとして公開される
 - **2層API** — LLM向けの高レベル技能と、逃げ道としての低レベル原始操作
   (`move`, `dig`, `look_at`, `equip`, `toss`, Baritone `goto`/`mine`/`follow`)
@@ -51,6 +52,7 @@ botは**独立したMinecraftクライアント**(第2アカウント/インス�
 | `bridge/` | Node/TypeScriptのMCPサーバー + WSクライアント + スキルローダー + チャットrunner |
 | `skills/` | 1技能=1JSモジュール: `{name, description, params, run(ctx, args)}` |
 | `tools/mock-mod/` | ゲーム側のモックWS実装。Minecraftなしでbridgeをテストできる |
+| `machines/` | 機械GUIのslot定義 (`<menu_id>.json`)。`process_in_machine` / `craft_plan` が参照 |
 | `docs/` | 設計・仕様・検証ログ・mod互換メモ (日本語) |
 
 ## クイックスタート
@@ -64,8 +66,9 @@ Baritone (`baritone-api-forge`) とagent-mod。
 cd agent-mod && ./gradlew build
 cp build/libs/agentmod-*-all.jar <bot instance>/.minecraft/mods/
 
-# 2. 専用サーバーを起動 (modセットはクライアントと同一 — docs/mod-compat.md 参照)
-cd server && ./run.bat        # Linuxでは run.sh
+# 2. 自分のForge 1.20.1サーバーのフォルダで専用サーバーを起動
+#    (server/はこのリポジトリに含まれない。modセットはクライアントと同一 — docs/mod-compat.md 参照)
+cd <your-forge-server> && ./run.bat        # Linuxでは run.sh
 
 # 3. bridgeを起動
 cd bridge && npm install && npm run build
@@ -162,9 +165,36 @@ export default {
 — いくつかのmodは除外や修正が必要でした)。
 
 完了: 環境構築、modスケルトン、原始操作、Baritone、技能層、相棒MVP、
-フルパック検証。未完了: クラフト/コンテナ/GUI操作 (意味レベルのslot操作
-として設計済み、`docs/design.md` 参照)、`give`/`come_here` のpositive経路
-テスト、Museホスト接続、長時間soak。
+フルパック検証、クラフト+意味レベルのコンテナ/GUI操作
+(`container.read/click/button/trade`、`machines/*.json` — 機械定義112件、
+`docs/mod-support.md` 参照)、entity interaction (餌やり/懐き/毛刈り/
+リード/騎乗/取引)、`use_item` (チャージ解放の`hold_ticks`含む)、
+Jade連携の`look_info`、AE2 MEネットワーク操作 (`container_repo`読取 +
+`container_repo_action`引出/オートクラフト + quick_move入庫)、死亡画面の
+`respawn`、インベントリ不整合復旧 (`inventory_resync`)、クラフト計画
+(`craft_plan`スキル、機械工程ステップ含む)、名前付きwaypoint
+(`waypoint`スキル、JourneyMap導入時はミラー)、反射層 (被弾/接近での
+タスク中断 + Baritone離脱)、永続作業ジャーナル
+(`work_journal`/`work_checkpoint`、世代非依存)、schematic取り込み
+(`schematic_inspect`/`schematic_plan`、.litematic/.schem)、FTB Quests
+進行op (`quest_list`/`quest_inspect`)、armor/offhand装備
+(`equip{item,slot_name}`)、sneak修飾use (`use_item{sneak}`)、アイテム
+状態検査 (`item_info` — エネルギー/耐久/エンチャ/NBT)、`get_state`の
+NBTバリアント可視化 (`inventory_detail[].attrs` — `nbt_keys` +
+`energy_stored`)、digの最適ツール自動選択 + 明示的`tool_slot`指定、
+Curios装備 (`container_open_curios` + `curios_id` slotラベル)、
+通常dig経路でのAoE採掘検証、キーボード/スクロール入力op
+(`key`/`key_list`/`scroll` — KeyMapping注入に加え、独自キー実装を持つ
+mod向けの実OS入力経路。例: Mekanism radialをhold+scrollで操作。未バインド
+のmodキーはF13-F24へ仮割当 — FTB Ultimineのvein-mine実証)、純Screen操作
+(`screen_read`/`screen_click`/`screen_close` — widget列挙、text/index
+クリック、`{x,y}`座標指定、FTB sidebarボタン)、汎用テキスト入力
+(`type_text` — 任意のEditBox + `charTyped`反射フォールバック)、
+`sign_write`、`jei_search` (`IIngredientFilter`の直接API経路)、
+`quest_claim` (FTB Quests報酬クレームをe2e検証)。
+未完了: `give`/`come_here`のpositive経路テスト、Muse接続 (接続手順は
+`docs/muse-connection.md` に準備済みだが未接続。§7-8 の希望リストは
+ゲーム外のMuseから取り込み済み)、長時間soak。
 
 ## ライセンス
 

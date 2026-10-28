@@ -1,6 +1,6 @@
 # Muse (クラウド常駐エージェント) 接続手順
 
-Codexの代わりにMetaのMuseをbot操作エージェントとして使うための接続メモ。M4検証後に準備だけ済ませた状態。
+Codexの代わりにMetaのMuseをbot操作エージェントとして使うための接続メモ。Bearerトークン認証 + cloudflaredトンネルの手順は準備済みだが実接続は未実施 (現ホストはCodex)。ホストLLMの希望リスト (docs/autonomy.md §7-8) はゲーム外のMuseから取り込み済み。
 
 ## 前提
 
@@ -76,7 +76,7 @@ Minecraftを一緒にプレイするためのMCPサーバーへ接続するカ�
 - **Codexとの併用**: runnerを有効にするとCodexとMuseの両方が応答する。切り替えは`RUNNER`環境変数で
 - **Tailscale経路の可能性**: MuseのVMがtailnetに参加でき、bridge側マシンもtailnet参加済みなら、公開なしで`http://<bridge-host>.<tailnet>.ts.net:25589/mcp`に届く代替経路になる (要疎通確認)
 - **トークンの扱い**: 依頼文に平文で貼るため、遊び終わったら再発行する。リポジトリにはコミットしない
-- **use_item未実装**: 現状ツール一覧はM4時点のもの (原始14+task3+baritone4+skill5+reload)。その後 `emote` `screenshot` `find_item` `waypoint_*` を追加済み (計32ツール)
+- **ツール数**: 記載当時はM4時点 (原始14+task3+baritone4+skill5+reload) だったが、その後大幅に拡張。現行は mod直通64 + スキル10 = 74ツール。最新一覧の正本は `bridge/src/mcp.ts` とmod側 `AgentWsCapabilities.all()`
 - **人格**: Muse側のエージェント名を「ホストLLM」としbot名`Rin`と一致させる前提のため、ロールプレイ指示は不要。Muse自身がゲーム内のRinとして振る舞う形で依頼文を書いている
 - **相棒感の追加機能 (実装済み・要クライアント再起動で有効化)**: 発言者を自動で向く `agentmod.autolook`、`emote`/`screenshot`/`waypoint.*` ツール、能動イベント (damage/death/昼夜/天候/近傍プレイヤー/pickup)。jar差し替え済みのためbotクライアントの再起動が必要
 - **自発行動の依頼**: Muse側に「定期的にget_chat/wait_eventを確認し、暇なら探索や提案をする」指示を入れると放置中も動く。能動イベントが増えたので、被弾や日没への反応も書ける

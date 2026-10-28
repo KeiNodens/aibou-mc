@@ -29,7 +29,8 @@ mining, and reports back in chat.
 ## Features
 
 - **Chat-driven companion** — talk in game chat; it answers and acts
-- **Skills layer** — `follow_player`, `gather`, `come_here`, `give`, `stop_all`,
+- **Skills layer** — `follow_player`, `gather`, `come_here`, `give`, `craft`,
+  `craft_plan`, `process_in_machine`, `waypoint`, `stop_all` —
   each a single hot-reloadable JS file in `skills/` exposed as an MCP tool
 - **Two-layer API** — high-level skills for the LLM, low-level primitives
   (`move`, `dig`, `look_at`, `equip`, `toss`, Baritone `goto`/`mine`/`follow`)
@@ -50,6 +51,7 @@ mining, and reports back in chat.
 | `bridge/` | Node/TypeScript MCP server + WS client + skill loader + chat runner |
 | `skills/` | One JS module per skill: `{name, description, params, run(ctx, args)}` |
 | `tools/mock-mod/` | Mock game-side WS impl — test the bridge with no Minecraft |
+| `machines/` | Machine GUI slot definitions (`<menu_id>.json`) read by `process_in_machine` / `craft_plan` |
 | `docs/` | Design, spec, verification log, mod-compat notes (mostly Japanese) |
 
 ## Quickstart
@@ -63,8 +65,9 @@ Minecraft instance for the bot (Prism Launcher recommended), Baritone
 cd agent-mod && ./gradlew build
 cp build/libs/agentmod-*-all.jar <bot instance>/.minecraft/mods/
 
-# 2. Run the dedicated server (same mod set as clients — see docs/mod-compat.md)
-cd server && ./run.bat        # or run.sh on Linux
+# 2. Run the dedicated server in your own Forge 1.20.1 server directory
+#    (not part of this repo; same mod set as clients — see docs/mod-compat.md)
+cd <your-forge-server> && ./run.bat        # or run.sh on Linux
 
 # 3. Run the bridge
 cd bridge && npm install && npm run build
@@ -160,7 +163,7 @@ for the mod compatibility notes — several mods needed removal/patching).
 
 Done: environment, mod skeleton, primitives, Baritone, skills, companion MVP,
 full-pack validation, crafting + meaning-level container/GUI ops
-(`container.read/click/button/trade`, `machines/*.json` — 113 machine defs,
+(`container.read/click/button/trade`, `machines/*.json` — 112 machine defs,
 see `docs/mod-support.md`), entity interactions (feed/tame/shear/leash/mount/
 trade), `use_item` incl. charge-and-release (`hold_ticks`), Jade-powered
 `look_info`, AE2 ME-network ops (`container_repo` read +
@@ -177,10 +180,21 @@ inspection (`item_info` — energy/durability/enchants/NBT), NBT-variant
 visibility in `get_state` (`inventory_detail[].attrs` — `nbt_keys` +
 `energy_stored`), dig auto-tool-selection plus explicit `tool_slot` override,
 Curios accessory equipping (`container_open_curios` + `curios_id` slot
-labels — backpack/jetpack/charm slots reachable via semantic clicks), and
-verified AoE mining through the normal dig path. Not done:
-positive-path `give`/`come_here` tests, Muse host connection, long-duration
-soak.
+labels — backpack/jetpack/charm slots reachable via semantic clicks),
+verified AoE mining through the normal dig path, keyboard/scroll input ops
+(`key`/`key_list`/`scroll` — injected KeyMapping presses plus a real
+OS-input path for mods that bypass keymappings, e.g. Mekanism's radial menu
+driven by hold+scroll; unbound mod keys get temporary F13–F24 bindings —
+FTB Ultimine vein-mining verified), pure-screen ops
+(`screen_read`/`screen_click`/`screen_close` — widget enumeration,
+text/index clicks, raw `{x,y}` coords, FTB sidebar buttons), generic text
+input (`type_text` for any EditBox plus `charTyped` reflection fallback),
+`sign_write`, `jei_search` (direct `IIngredientFilter` API path), and
+`quest_claim` (FTB Quests reward claiming verified end-to-end).
+Not done: positive-path `give`/`come_here` tests, Muse host connection
+(procedure documented in `docs/muse-connection.md` — not yet connected;
+the §7–8 wishlist in `docs/autonomy.md` was provided by Muse outside the
+game), long-duration soak.
 
 ## Optional integrations
 

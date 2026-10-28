@@ -3,9 +3,11 @@
 ## Layout
 
 Monorepo: `agent-mod` (Forge 1.20.1 client mod, Java), `bridge` (Node/TS MCP
-server), `skills` (hot-reloaded JS skills), `tools/mock-mod` (WS stub),
-`docs` (design/spec/verification — Japanese). `server/`, `packs/`, `research/`
-are local runtime artifacts, gitignored.
+server), `skills` (hot-reloaded JS skills), `machines` (machine GUI slot
+defs `<menu_id>.json`, read by skills), `tools` (`tools/mock-mod` WS stub +
+machine discovery/probe/gen-defs scripts), `docs` (design/spec/verification
+— Japanese). `server/`, `packs/`, `research/`, `tmp/` are local runtime
+artifacts, gitignored.
 
 ## Build & run
 
@@ -63,4 +65,6 @@ Key live checks: `get_state` (in-world?), `bot_status` (WS connected?),
 
 `agent-mod/libs/` jarはgitignore（再配布不可）。`build.gradle`の`blank:xxx`依存は
 自前でjarを`agent-mod/libs/`に置くこと:
+- `baritone-api-forge-1.10.3.jar` — 移動・採掘・追従
 - `jade-11.13.3.jar` — Jade連携 (soft-dep、無くても動作するがコンパイルには必要)
+- `solapplepie-1.20.1-2.3.0.jar` — Sol Apple Pie切断対策Mixin用 (soft-dep同上)

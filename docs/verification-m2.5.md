@@ -395,12 +395,12 @@ path不達の巡回はBaritone側が終了しないため、タスクが無限ru
 Forge/ MCバージョンは両インスタンスとも 47.4.28 / 1.20.1 で鯖と一致を確認済み。
 
 
-## Phase 3: mod解析拡張 + 新原始操作 (6/14 実機検証)
+## Phase 3: mod解析拡張 + 新原始操作 (10/28 実機検証)
 
 ### 機械GUI自動発掘ループ
 - 2段階自動発掘を実施: (1) `use_item`でGUI開放→`container.read`でmenu構造取得 (111台調査)
 - (2) quick_moveプローブで実際にアイテムを投入しinput slotを実証的特定 (120台)
-- 生成定義: `machines/*.json` に 107+6(外部mod定義) = 113個
+- 生成定義: `machines/*.json` に 107+6(外部mod定義) = 113個 (※後日確認: コミット済み定義は112件。当時のカウントが1件多かった)
 - mekanism系全機械 (enrichment実機検証済含む)、thermal全family (in0)、
   enderio (in1)、ad_astra (in1)、industrialforegoing (titanium container)、
   energizedpower (direct挿入系)、ae2、forestry、rftools、botania/ars/tcon (GUI不可を特定)
@@ -426,7 +426,7 @@ Forge/ MCバージョンは両インスタンスとも 47.4.28 / 1.20.1 で鯖�
 mod別対応マトリクス: 対応済/定義あり/部分/未対応/非互換 + パック外有名modの解析方針を記録。
 - `block_state` 追加検証 (後日): enrichment_chamberで properties(active/facing) + be_nbt(componentConfig側面設定/owner) の取得を確認。machine_status の補完経路として有効
 
-## Phase 3b: entity操作全系統 + 連携機能 (6/14 深夜検証)
+## Phase 3b: entity操作全系統 + 連携機能 (10/28 深夜検証)
 
 ### container.trade 完全経路 — 成立
 - 農民のmerchant menuで index0選択→cost slot0にエメラルド投入→

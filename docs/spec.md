@@ -61,7 +61,7 @@ mod環境のMinecraft Java版 1.20.1 (Forge 47.4.28) のワールドを、LLM駆
 | FR-13 | Prism Launcher CLI経由でbotインスタンスを起動でき、切断時は自動再接続する | 高 |
 | FR-14 | 危険操作 (大規模掘削・TNT・溶岩等) に確認フックを設けられる (config制御) | 中 |
 | FR-15 | MCP経由で bot_status / cancel_current を呼べる | 中 |
-| FR-16 | ゲーム内発話→ホスト推論→ゲーム内返信の起動経路が成立する。MVP検証ホストはCodex (bridgeのrunner経由で起動)。Muse連携は後続 | 必須 |
+| FR-16 | ゲーム内発話→ホスト推論→ゲーム内返信の起動経路が成立する。MVP検証ホストはCodex (bridgeのrunner経由で起動)。Muse連携は後続 (接続手順案は docs/muse-connection.md に準備済み、未接続) | 必須 |
 
 ## 6. 非機能要件
 

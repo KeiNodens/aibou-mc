@@ -75,9 +75,9 @@ MCPサーバーとして振る舞い、ホストLLM (MCPクライアント) に�
 2. **技能層**: `skills/` ディレクトリのJSモジュール。1技能=1ファイルで `export default { name, description, params, run(ctx, args) }` 形式。ctxはmod RPC・観測・チャット送信を束ねたオブジェクト。ファイル監視でホットリロードし、実行中技能はcancel tokenで中断できる。
 3. **観測テキスト化**: modの生観測をLLMが扱いやすい要約に整形する (DEPSのdescriptor相当)。インベントリは「item名×個数」のみ、周囲は「ブロック種別×個数」と「entity種別×個数+最近傍」に圧縮し、plan関係の情報を優先する。
 4. **失敗検知**: 技能実行にタイムアウトと停滞検知 (一定時間ブロック/entity/位置が変化しない) を持たせ、失敗時は「現在状態の要約 + 直前操作 + エラー/停滞理由」を構造化してLLMに返す。再計画はLLM側の仕事とする (DEPS方式の分担)。
-5. **安全フック**: `dangerous` フラグ付き操作 (範囲掘削・TNT/溶岩使用等) は `confirm: true` 引数を要求し、未指定なら確認要求を返す。
-6. **起動連携**: 設定でPrism Launcher CLI (`prismlauncher --launch <instance>`) を呼び、botインスタンスの起動→WS接続確立を一連で行える。
-7. **チャット起動経路 (runner)**: ゲーム内発話をホストの推論開始に繋ぐ経路。ホスト側のイベント連携、`wait_event` 長ポーリングツール、bridge内runnerによる外部起動の3候補から、実ホストでの検証で選ぶ。MVPはbridge内runnerを本線とし、新規chatイベントの到達で `codex exec` を起動して会話ログと状態要約、指示プロンプトを渡す構成を先に検証する。Codexはone-shot実行のため、対話の継続性はログ全体の引き渡しで補う。Museへの接続は方式が判明次第、runnerの起動先を差し替える形で後続対応とする。
+5. **安全フック**: `dangerous` フラグ付き操作 (範囲掘削・TNT/溶岩使用等) は `confirm: true` 引数を要求し、未指定なら確認要求を返す。 (未実装 — spec FR-14 の残件)
+6. **起動連携**: 設定でPrism Launcher CLI (`prismlauncher --launch <instance>`) を呼び、botインスタンスの起動→WS接続確立を一連で行える。 (未実装 — 現状は手動で `prismlauncher --launch bot`)
+7. **チャット起動経路 (runner)**: ゲーム内発話をホストの推論開始に繋ぐ経路。ホスト側のイベント連携、`wait_event` 長ポーリングツール、bridge内runnerによる外部起動の3候補から、実ホストでの検証で選ぶ。MVPはbridge内runnerを本線とし、新規chatイベントの到達で `codex exec` を起動して会話ログと状態要約、指示プロンプトを渡す構成を先に検証する。Codexはone-shot実行のため、対話の継続性はログ全体の引き渡しで補う。Museへの接続はstreamable HTTP + Bearer認証 + トンネル公開の手順案を docs/muse-connection.md に準備済み (未接続)。
 
 ### 2.3 プロトコル (mod ⇄ bridge)
 
@@ -85,7 +85,7 @@ WebSocket上のJSON-RPC風。bridgeがクライアント、modがサーバー。
 
 ```jsonc
 // 要求
-{"type":"req","id":12,"method":"move.goto","params":{"x":100,"y":64,"z":-30}}
+{"type":"req","id":12,"method":"baritone.goto","params":{"x":100,"y":64,"z":-30}}
 // 応答 (成功)
 {"type":"res","id":12,"ok":true,"result":{"pathfinding":true}}
 // 応答 (失敗)
@@ -118,6 +118,8 @@ skills/配下のJSモジュールが技能そのもの。MVPは手書き技能�
 
 ## 3. MCPツール一覧
 
+> ※以下は設計時点の一覧であり、実装後の追加・改名を反映していない。現行の正本は `bridge/src/mcp.ts` の登録ツール (mod直通64個 + スキル10個) と、mod側の `AgentWsCapabilities.all()` / `GameOps.dispatch`。mod GUI・機械への実到達状況は `docs/mod-support.md`、実機検証は `docs/verification-m2.5.md` を参照。
+
 ### 3.1 高レベル技能ツール (bridge・技能層)
 
 | ツール | 動作 | 主要引数 |
@@ -143,7 +145,7 @@ skills/配下のJSモジュールが技能そのもの。MVPは手書き技能�
 
 `get_state` (位置/体力/空腹/次元/バイオーム/時刻) `get_chat` (差分) `wait_event` (長ポーリング、timeout秒でchat/damage/task.done等の差分を返す) `find_blocks` `find_entities` `get_inventory` (要約 or 詳細) `task_status` `task_result` `task_cancel` `bot_status` `cancel_current` `reload_skills`
 
-イベント語彙: `chat` `task.done` `skill.done` `damage` `death` `time` (昼夜遷移) `weather` `player.nearby` (appear/vanish) `pickup` (インベントリ増加)。mod側で能動イベントを検知しevtとして流す。プレイヤー発言時にbotが話者を自動で向く (agentmod.autolook)。
+イベント語彙: `chat` `task.done` `skill.done` `damage` `death` `time` (昼夜遷移) `weather` `player.nearby` (appear/vanish) `pickup` (インベントリ増加) `reflex` (反射層の被弾/敵接近によるタスク中断)。mod側で能動イベントを検知しevtとして流す。プレイヤー発言時にbotが話者を自動で向く (agentmod.autolook)。
 
 ## 4. 観測データ形式
 
@@ -256,6 +258,8 @@ mod数に対して技能数が線形に増えないよう、手順・機械定�
 | M5 | prodパック統合検証: botが262mod環境で起動・ログイン・相棒動作 | **G2**: 実用に耐える安定性がないなら退路へ |
 | M6 | 安定化・ドキュメント整備・OSS公開準備 | - |
 
+実施状況 (2026-10-29): M0〜M5 に加え、M6.5相当の実装 (コンテナslot操作・クラフト・機械GUI定義・entity操作・AE2・JourneyMap/FTB Quests連携・キー/画面/テキスト入力操作) まで `docs/verification-m2.5.md` に実機検証済み。
+
 ## 9. リスクと対応
 
 | リスク | 影響 | 対応 |
@@ -276,12 +280,13 @@ mod数に対して技能数が線形に増えないよう、手順・機械定�
 minecrafttogether/
 ├─ agent-mod/        # Forge 1.20.1 mod (Java 17 / ForgeGradle)
 ├─ bridge/           # MCPサーバー (Node/TypeScript)
-├─ skills/           # 技能ライブラリ (JSモジュール + index.json)
+├─ skills/           # 技能ライブラリ (JSモジュール、ホットリロード)
+├─ machines/         # 機械GUI slot定義JSON (process_in_machine/craft_planが参照)
 ├─ packs/
 │  ├─ dev/           # devパック定義 (mod一覧・config)
 │  └─ prod/          # prod仕分け結果 (server-mods.txt / client-only.txt)
 ├─ server/           # 専用サーバー構築・起動スクリプト (実体はgitignore)
-├─ tools/            # mod分類・パック同期・起動補助スクリプト
+├─ tools/            # mock-mod (WSスタブ)・機械GUI発掘パイプライン (discover/probe/gen-machine-defs)・トンネル補助
 ├─ docs/
 │  ├─ spec.md  design.md  decisions.md
 ├─ research/         # 調査資料 (既存)

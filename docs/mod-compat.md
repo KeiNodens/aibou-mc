@@ -36,7 +36,7 @@ noted.
 
 | Mod | Behavior | Impact / workaround |
 |---|---|---|
-| `solapplepie` (Sol Sweet Potato) | `FoodTracker.onFoodEaten` throws `FoodListNotFoundException` ("Player must have food capability attached, but none was found") → server kicks the bot with `Internal server error` **every time it finishes eating**. The eat itself succeeds (hunger restored) and auto-rejoin recovers. | The capability apparently isn't attached for the bot player (offline-mode account). Remove `solapplepie` server-side or accept kick+rejoin. |
+| `solapplepie` (Sol Sweet Potato) | `FoodTracker.onFoodEaten` throws `FoodListNotFoundException` ("Player must have food capability attached, but none was found") → server kicks the bot with `Internal server error` **every time it finishes eating**. The eat itself succeeds (hunger restored) and auto-rejoin recovers. | ~~Remove `solapplepie` server-side or accept kick+rejoin.~~ **Fixed in agent-mod** — `SolApplePieGuardMixin` marks the packet handled and swallows it when the capability isn't attached, so the mod stays in the pack (diversity buff intact). Requires the `solapplepie` jar in `agent-mod/libs/` at compile time. |
 | `fastsuite` | Replaces `ServerPlaceRecipe` with a parallelized async implementation — recipe-book placement takes several ticks instead of 1 | Any packet-based crafting must wait ~20 ticks for the grid to fill. (`agent-mod` `CraftTask.PLACE_WAIT`) |
 | `modernfix` | "Enhanced recipe sync" — lazy client recipe sync | Client recipe manager may only contain unlocked recipes early on; `recipe give <bot> *` resolves. |
 
