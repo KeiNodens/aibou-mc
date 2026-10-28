@@ -1,0 +1,12 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.minecrafttogether.agent.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "mixins": [
+    "SolApplePieGuardMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 0
+  }
+}

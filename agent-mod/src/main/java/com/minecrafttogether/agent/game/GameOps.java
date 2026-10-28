@@ -75,10 +75,12 @@ public final class GameOps {
             case "container.button" -> containerButton(params);
             case "container.trade" -> containerTrade(params);
             case "container.repo" -> containerRepo();
+            case "container.repo_action" -> containerRepoAction(params);
             case "container.close" -> containerClose();
             case "recipe.lookup" -> recipeLookup(params);
             case "craft" -> craft(params);
             case "emote" -> emote(params);
+            case "respawn" -> respawn();
             case "screenshot" -> screenshot();
             case "find_item" -> findItem(params);
             case "waypoint.set" -> waypointSet(params);
@@ -649,18 +651,22 @@ public final class GameOps {
      */
     private static JsonObject containerRepo() throws ApiError {
         Minecraft mc = Minecraft.getInstance();
-        requirePlayer();
+        LocalPlayer p = requirePlayer();
         net.minecraft.client.gui.screens.Screen screen = mc.screen;
         if (screen == null)
             throw new ApiError("NO_MENU", "no screen open");
         try {
             Class<?> repoIf = Class.forName("appeng.menu.me.common.IClientRepo");
+            // repoフィールドは親クラス (MEStorageScreen等) 宣言の場合があるため階層を遡る
             Object repo = null;
-            for (java.lang.reflect.Field f : screen.getClass().getDeclaredFields()) {
-                if (repoIf.isAssignableFrom(f.getType())) {
-                    f.setAccessible(true);
-                    repo = f.get(screen);
-                    break;
+            for (Class<?> c = screen.getClass(); c != null && repo == null;
+                    c = c.getSuperclass()) {
+                for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                    if (repoIf.isAssignableFrom(f.getType())) {
+                        f.setAccessible(true);
+                        repo = f.get(screen);
+                        break;
+                    }
                 }
             }
             if (repo == null)
@@ -674,6 +680,8 @@ public final class GameOps {
                 Object what = e.getClass().getMethod("getWhat").invoke(e);
                 Object keyId = what.getClass().getMethod("getId").invoke(what);
                 JsonObject je = new JsonObject();
+                je.addProperty("serial",
+                    ((Number) e.getClass().getMethod("getSerial").invoke(e)).longValue());
                 je.addProperty("id", String.valueOf(keyId));
                 je.addProperty("key_type", what.getClass().getSimpleName());
                 je.addProperty("amount",
@@ -688,11 +696,66 @@ public final class GameOps {
             r.addProperty("screen", screen.getClass().getSimpleName());
             r.addProperty("size", size);
             r.add("entries", entries);
+            // 診断: MEStorageMenu.hasPower (入出庫が通るかの目安)
+            try {
+                java.lang.reflect.Field hp = p.containerMenu.getClass()
+                    .getField("hasPower");
+                r.addProperty("has_power", hp.getBoolean(p.containerMenu));
+            } catch (Throwable ignored) {
+            }
             return r;
         } catch (ApiError ae) {
             throw ae;
         } catch (ReflectiveOperationException e) {
             throw new ApiError("NOT_SUPPORTED", "no AE2 repo API: " + e.getMessage());
+        }
+    }
+
+    /**
+     * AE2 repo上のアクション。
+     * serial指定: repo内アイテムの取り出し → MEInteractionPacket(containerId, serial, action)
+     *   (MEStorageScreenがrepoクリック時に実際に送るパケット。SHIFT_CLICK=全量取り出し)
+     * slot指定: AEBaseMenu.doAction 経由のスロット操作 → InventoryActionPacket(action, slot, id)
+     *   (FakeSlot/CraftingTermSlot/ConfigMenuInventory向け。通常のプレイヤーinv slotからの
+     *    入庫は vanilla quick_move = container_click quick_move が正規経路)
+     */
+    private static JsonObject containerRepoAction(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer p = requirePlayer();
+        try {
+            @SuppressWarnings("unchecked")
+            Class<Enum<?>> actCls = (Class<Enum<?>>)
+                Class.forName("appeng.helpers.InventoryAction").asSubclass(Enum.class);
+            Object action = Enum.valueOf((Class) actCls,
+                params.get("action").getAsString());
+            Object pkt;
+            if (params.has("serial")) {
+                long serial = params.get("serial").getAsLong();
+                Class<?> pktCls = Class.forName(
+                    "appeng.core.sync.packets.MEInteractionPacket");
+                pkt = pktCls.getConstructor(int.class, long.class, actCls)
+                    .newInstance(p.containerMenu.containerId, serial, action);
+            } else {
+                int slot = params.get("slot").getAsInt();
+                Class<?> pktCls = Class.forName(
+                    "appeng.core.sync.packets.InventoryActionPacket");
+                pkt = pktCls.getConstructor(actCls, int.class, long.class)
+                    .newInstance(action, slot, 0L);
+            }
+            // BasePacket → vanilla Packet に変換して送信
+            Class<?> dirCls = Class.forName("net.minecraftforge.network.NetworkDirection");
+            Object toServer = Enum.valueOf((Class) dirCls.asSubclass(Enum.class),
+                "PLAY_TO_SERVER");
+            Object vanillaPkt = pkt.getClass().getMethod("toPacket", dirCls)
+                .invoke(pkt, toServer);
+            mc.getConnection().send((net.minecraft.network.protocol.Packet<?>) vanillaPkt);
+            JsonObject r = new JsonObject();
+            r.addProperty("action", params.get("action").getAsString());
+            if (params.has("serial")) r.addProperty("serial", params.get("serial").getAsLong());
+            if (params.has("slot")) r.addProperty("slot", params.get("slot").getAsInt());
+            return r;
+        } catch (ReflectiveOperationException e) {
+            throw new ApiError("NOT_SUPPORTED", "no AE2 action API: " + e.getMessage());
         }
     }
 
@@ -980,6 +1043,22 @@ public final class GameOps {
             nearestJson.add(id, o);
         });
         r.add("nearest", nearestJson);
+        return r;
+    }
+
+    /**
+     * 死亡画面からのリスポーン要求 (vanillaのリスポーンボタン相当)。
+     * 生きている時に呼んでも害はない。
+     */
+    private static JsonObject respawn() throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) throw new ApiError("NOT_IN_GAME", "no player");
+        JsonObject r = new JsonObject();
+        r.addProperty("was_alive", mc.player.isAlive());
+        mc.getConnection().send(new net.minecraft.network.protocol.game
+            .ServerboundClientCommandPacket(
+                net.minecraft.network.protocol.game.ServerboundClientCommandPacket
+                    .Action.PERFORM_RESPAWN));
         return r;
     }
 

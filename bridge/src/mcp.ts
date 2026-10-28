@@ -257,6 +257,50 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
   );
 
   server.registerTool(
+    'container_repo_action',
+    {
+      description:
+        'Perform an AE2 InventoryAction on the open terminal: extract a network item ' +
+        'by serial (from container_repo; action SHIFT_CLICK=all, SPLIT_OR_PLACE_SINGLE=one) ' +
+        'or deposit an inventory slot into the network (action SHIFT_CLICK + slot).',
+      inputSchema: {
+        action: z.enum([
+          'SHIFT_CLICK', 'SPLIT_OR_PLACE_SINGLE', 'PICKUP_OR_SET_DOWN',
+          'PICKUP_SINGLE', 'MOVE_REGION', 'CRAFT_ITEM', 'CRAFT_STACK', 'CRAFT_ALL',
+        ]),
+        serial: z.number().int().optional()
+          .describe('repo entry serial (extract from network)'),
+        slot: z.number().int().optional()
+          .describe('menu slot index (deposit to network)'),
+      },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('container.repo_action', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'respawn',
+    {
+      description:
+        'Send a respawn request (vanilla respawn button). Use when the bot is dead ' +
+        '(health 0) to recover from the death screen.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('respawn', {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'container_close',
     {
       description: 'Close the currently open container menu.',

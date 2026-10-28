@@ -8,6 +8,7 @@ import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.slf4j.Logger;
+import org.spongepowered.asm.mixin.Mixins;
 
 /**
  * MinecraftTogether Agent (client-side only mod).
@@ -29,6 +30,9 @@ public class AgentMod {
             LOGGER.warn("agentmod is a client-only mod; skipping init on server side");
             return;
         }
+        // Forge 47.xはmods.tomlの[[mixins]]を読まないため明示登録。
+        // config自体はrequired:falseなのでsolapplepie無しでも安全
+        Mixins.addConfiguration("agentmod.mixins.json");
         MinecraftForge.EVENT_BUS.register(new ClientEvents());
         startWs();
     }

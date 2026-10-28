@@ -147,6 +147,8 @@ dependencies {
     // Baritone API (コンパイルのみ。実体はbotインスタンスのmodsに入っている)
     compileOnly fg.deobf("blank:baritone-api-forge:1.10.3")
     compileOnly fg.deobf("blank:jade:11.13.3")
+    // solapplepie kick bug guard (mixin) compileOnly dep
+    compileOnly fg.deobf("blank:solapplepie:1.20.1-2.3.0")
 
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
@@ -155,6 +157,16 @@ dependencies {
 
 // Java-WebSocketをjar-in-jarで同梱するためjarJarタスクを有効化する
 jarJar.enable()
+
+// デプロイされるjarJar側にもMixinConfigs属性を載せる
+// (MixinPlatformAgentDefaultがマニフェスト経由でconfigを読む。Forge 47.xは
+//  mods.tomlの[[mixins]]非対応・modコンストラクタのaddConfigurationは
+//  ターゲットクラスが早くロードされると間に合わないため)
+tasks.named('jarJar').configure {
+    manifest {
+        attributes 'MixinConfigs': 'agentmod.mixins.json'
+    }
+}
 
 // This block of code expands all declared replace properties in the specified resource targets.
 // A missing property will result in an error. Properties are expanded using ${} Groovy notation.
@@ -185,7 +197,8 @@ tasks.named('jar', Jar).configure {
                 'Implementation-Title'    : project.name,
                 'Implementation-Version'  : project.jar.archiveVersion,
                 'Implementation-Vendor'   : mod_authors,
-                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'MixinConfigs'            : 'agentmod.mixins.json'
         ])
     }
 

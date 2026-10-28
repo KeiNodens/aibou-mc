@@ -34,19 +34,57 @@ export default {
       return need - used;
     };
 
-    // レシピ候補から「材料が一番揃う」crafting系レシピを選ぶ
-    const pickRecipe = (recipes) => {
+    // 選択肢スコア: 在庫充足 > 在庫少量 > vanilla > その他mod
+    // (板材タグに japanese_apricot_bark 等が混じるのを避ける)
+    const optionScore = (o, need) => {
+      const have = inv.get(o) ?? 0;
+      let s = 0;
+      if (have >= need) s += 100;
+      else if (have > 0) s += 30;
+      if (o.startsWith('minecraft:')) s += 50;
+      // バニラ木材系など一般的な選択肢を優遇
+      if (/_(planks|log|ingot|dust|gem|nugget|block)$/.test(o)) s += 10;
+      return s;
+    };
+
+    // 材料ごとの最良選択肢を1つ返す
+    const chooseOption = (opts, need) => {
+      if (!opts?.length) return null;
+      let best = opts[0], bestS = optionScore(opts[0], need);
+      for (const o of opts.slice(1)) {
+        const s = optionScore(o, need);
+        if (s > bestS) { bestS = s; best = o; }
+      }
+      return best;
+    };
+
+    // レシピ候補から「材料が現実的に揃う」crafting系レシピを選ぶ。
+    // 材料の選択肢スコア合計 - 不足見積りペナルティ + 同namespace加点で比較し、
+    // 同点なら成果物countが大きい方を優先 (bulk recipeで素材が9倍要求される変形を避ける)
+    const pickRecipe = (recipes, itemId) => {
       const crafts = recipes.filter((r) => isCraftType(r.type));
       if (!crafts.length) return null;
-      let best = null, bestScore = -1;
+      const itemNs = itemId.split(':')[0];
+      let best = null, bestScore = -Infinity;
       for (const r of crafts) {
-        let score = 0;
+        let score = 0, shortage = 0;
+        const per = r.result?.count ?? 1;
         for (const ing of r.ingredients ?? []) {
           if (ing.empty) continue;
+          const need = ing.count ?? 1;
           const opts = ing.options ?? [];
-          if (opts.some((o) => (inv.get(o) ?? 0) >= (ing.count ?? 1))) score += 2;
-          else if (opts.some((o) => (inv.get(o) ?? 0) > 0)) score += 1;
+          let bestO = 0, bestHave = 0;
+          for (const o of opts) {
+            const s = optionScore(o, need);
+            if (s > bestO) { bestO = s; bestHave = inv.get(o) ?? 0; }
+          }
+          score += bestO;
+          shortage += Math.max(0, need - bestHave);
         }
+        score += Math.min(per * 5, 40); // 一度に多く作れるレシピを微優遇
+        score -= shortage * 8;          // 在庫不足が少ないレシピを優先
+        // 成果物と同namespaceのレシピは正規レシピの可能性が高い
+        if ((r.id ?? '').split(':')[0] === itemNs) score += 25;
         if (score > bestScore) { bestScore = score; best = r; }
       }
       return best;
@@ -69,7 +107,7 @@ export default {
       }
       const recipes = info.recipes ?? [];
       if (!recipes.length) { uncraftable.add(id); addMissing(id, need); return; }
-      const rec = pickRecipe(recipes);
+      const rec = pickRecipe(recipes, id);
       if (!rec) {
         // crafting系以外のレシピしかない = 機械加工が必要
         machineOnly.add(`${id} (${recipes[0].type})`);
@@ -79,17 +117,18 @@ export default {
       const per = rec.result?.count ?? 1;
       const runs = Math.ceil(need / per);
       // 深い順でなく先に素材を確保してからこの手順を積む (後置順)
+      const uses = [];
       for (const ing of rec.ingredients ?? []) {
         if (ing.empty) continue;
         const opts = ing.options ?? [];
-        // 在庫にある選択肢を優先、なければ先頭
-        const chosen = opts.find((o) => (inv.get(o) ?? 0) > 0) ?? opts[0];
+        const chosen = chooseOption(opts, ing.count ?? 1);
         if (!chosen) continue;
         const want = (ing.count ?? 1) * runs;
+        uses.push(`${chosen} x${want}`);
         const lack = take(chosen, want);
         if (lack > 0) await expand(chosen, lack, d + 1);
       }
-      steps.push({ make: id, count: runs * per, recipe: rec.id, type: rec.type });
+      steps.push({ make: id, count: runs * per, recipe: rec.id, type: rec.type, uses });
     };
 
     const lack0 = take(item, count);

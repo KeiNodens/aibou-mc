@@ -33,3 +33,14 @@ mandatory = false
 versionRange = "[11,)"
 ordering = "NONE"
 side = "CLIENT"
+
+# solapplepieのkick bugガードMixin用soft-dep (無い環境ではMixin自体が適用されない)
+[[dependencies.${mod_id}]]
+modId = "solapplepie"
+mandatory = false
+versionRange = "[0,)"
+ordering = "NONE"
+side = "CLIENT"
+
+[[mixins]]
+config = "agentmod.mixins.json"

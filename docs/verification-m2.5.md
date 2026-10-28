@@ -469,3 +469,40 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
 ### interact 補足
 - 騎乗は素手interactで success→実際に馬上に移動 (y+1.5)、sneak降りで元位置に戻るまで確認。
   server側 Passengers 検証は別entityを拾ったため不一致だったが実動はしていた。
+
+## 2026-10-28 AE2入出庫・solapplepie恒久対策・環境問題
+
+### solapplepie kick恒久対策 (実機確認済)
+- `SolApplePieGuardMixin` → `FoodListMessage$Handler` 冒頭で `SOLSweetPotatoAPI.foodCapability`
+  未装着なら `setPacketHandled(true)`+cancel (disconnectを潰す。能力欠落時の同期pktだけ捨てる)。
+- mixinはjar manifest `MixinConfigs` 属性で登録 (Forge 47.xはmods.toml `[[mixins]]`未対応)。
+- ログで `Mixing SolApplePieGuardMixin ... into FoodListMessage$Handler` 実適用を確認。
+  以降、食事・リスポーン時の同期でkickされなくなった (食事成功・死亡復帰とも継続)。
+
+### respawn 追加
+- `respawn` op: 死亡画面からリスポーン。dispatch/capabilities/bridgeで同期済み。
+
+### AE2 MEネットワーク: 読み・入庫・引出し 全成立
+- ネットワーク無電源が全失敗の根因だった。`gn:{p:0}`のpはグリッドIDではなく
+  **owningPlayerId** (GridNode.saveToNBT実装で確定)。グリッド存在はタグの有無で見る。
+- **罠**: `ae2:cable_bus` item はケーブル芯なし裸バス → パーツだけのバスは外接続不可で
+  ターミナルが孤立 (Jade「デバイスオフライン」)。`ae2:fluix_smart_cable`等の芯を
+  別途装着すると `gn:{p:0,e:25.0}` (e=grid電力) で通電。
+- 電源: creative_energy_cellはIAEPowerStorageをnode service登録する正規電源。
+  今回の検証は `ae2:vibration_chamber`+石炭で供給 (NBT burnTime減少・e値上昇を確認)。
+- `container.repo` 訂正: `MEStorageScreen.repo` フィールドは親クラス探索が必要
+  (ChestScreenはrepoを持たず別物)。修正後 serial/id/amount/requestable/craftable全取得。
+- **入庫**: 通常quick_moveが正規経路 (transferStackToMenu→canInteractWithGrid)。
+  wheat x28 が repo serial:2 として出現するのを確認。
+- **引出し**: `container.repo_action {serial:N, action}` →
+  `MEInteractionPacket(containerId, serial, InventoryAction)` を toPacket(PLAY_TO_SERVER)
+  で送信 (AE2がrepoクリック時に実際に使うパケット)。SHIFT_CLICKで全量取り出し、
+  repo消滅+player inv着弾を確認。
+
+### 環境問題 (bot instanceの設定変更)
+- post-joinで `tconstruct:jei_plugin` のJEI登録が7分超走りrender/nettyが凍結→
+  30s keep-alive timeoutで蹴られる繰り返し + 過負荷native crash (WER dump多発)。
+- JEI jar除外は「mismatched mod channel list」で握手拒否 (このpackは両側一致必須)。
+- **対処: instance.cfg MaxMemAlloc 6144→12288, MinMemAlloc→4096**。GC圧が減り
+  keep-aliveが通りJEI完了まで接続が持つようになった。
+- give直後のクライアントinventory同期ずれは相変わらず発生。kick再接続で解消。
