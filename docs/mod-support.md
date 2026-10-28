@@ -233,3 +233,39 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
 - 残gap: 独自マウス操作を要求するmod GUIは座標click+sidebarで概ね塞いだが、
   FTB LibraryのBaseScreen系 (QuestScreen等) はAbstractWidgetを持たず
   中身のwidget列挙は空になる (quest APIが代替)。
+
+## 残gap一覧 (2026-10-29 時点)
+
+現パックで到達不能なmod機能はほぼ無い状態。以下は未検証・未実装の残件:
+
+### 現パックでは検証不可 (mod本体が未導入)
+- **Tinkers' Constructツール**: 素`/give`だと素材NBT無しで性能ゼロの可能性。
+  現パックは`create_tinkers_compat`/`tinkersdelight`のみ。ATM9等で要検証。
+- **Soulbound系アイテム拘束**: death時挙動・`container_click`の`after`返却での
+  検知設計はあるが、対象modが無く実機未確認。
+- **Baritone内部のツール選択**: 無充電電動ツールを「掘れる」と誤認する件は
+  `dig`のtool_slot/自動採点で回避済みだが、baritone.mine経路では未対策。
+
+### 実装済みだが実機未検証
+- **AE2オートクラフト**: `AUTO_CRAFT`+`CONFIRM_AUTO_CRAFT`は実装済。
+  パターンをエンコーダで網に登録する実環境構築が必要。
+- **EMI検索**: JEIは`jei_search`でAPI経路確立済み。EMIは別実装のため
+  個別のprobe/set経路が必要な可能性 (JEIが共存する現パックではJEI優先で実用十分)。
+- **JEI検索欄へのcharTyped注入**: `KeyboardHandler.charTyped`反射で
+  ScreenEvent.CharacterTypedは発火するが、JEI側がfocus未確立で
+  filter_textに反映されず。`jei_search`のAPI経路が正解として確定。
+
+### 大型作業・将来枠
+- **machine定義JSON (Phase 2)**: `machines/*.json`へ機種別slot意味
+  (input/fuel/output/upgrade等) を定義し、`container_click`を意味名で解決する
+  仕組み。probeパイプライン (discover/probe script) は稼働中。
+- **ATM9/ATM10実環境検証**: FTB Quests・Tinkers・soulbound・大規模機械の
+  実データ検証。メモリ圧迫で一旦保留 — ATM9 No Frills検討済み。
+- **multiblock構築・搬送制御 (XNet等)・mod独自進行stage**: 個別対応要。
+
+### 仕様上の既知の癖
+- `quest_inspect`は再接続直後に`completed:false`を返すことがある
+  (クライアント側team data同期ラグ。数秒待つ)。
+- `jei_search`の`filtered_count`は非同期絞込みのため直後は前回値。
+  同クエリ再送または数秒待って再読。
+- EscキーはPauseScreenをトグルするため、`screen`状態確認後に送信すること。
