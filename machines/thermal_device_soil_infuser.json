@@ -1,0 +1,20 @@
+{
+  "menu_id": "thermal:device_soil_infuser",
+  "block": "thermal:device_soil_infuser",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    3
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3
+  ]
+}

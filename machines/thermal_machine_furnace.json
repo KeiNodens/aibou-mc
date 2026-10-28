@@ -1,0 +1,21 @@
+{
+  "menu_id": "thermal:machine_furnace",
+  "block": "thermal:machine_furnace",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ]
+}

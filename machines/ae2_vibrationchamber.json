@@ -1,0 +1,20 @@
+{
+  "menu_id": "ae2:vibrationchamber",
+  "block": "ae2:vibration_chamber",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    39
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    39
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "menu_id": "minecraft:loom",
+  "block": "minecraft:loom",
+  "input": [
+    0,
+    1,
+    2
+  ],
+  "output": [
+    3
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3
+  ]
+}

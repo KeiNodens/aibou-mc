@@ -1,0 +1,16 @@
+{
+  "menu_id": "cyclic:furnace",
+  "block": "cyclic:furnace",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "fuel": [
+    2
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "notes": "Cyclic機械は概ねin/out/fuel 3slot構成 (未導入mod)"
+}

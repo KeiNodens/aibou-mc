@@ -98,8 +98,11 @@ export default {
       return { done: false, reason: 'no_input_slots', menu: menu.menu_id };
     }
 
-    // player側slot群 = 最終slotが属するcontainer (menu定義上ほぼ末尾がplayer inv)
+    // player側slot群 = 最終slotが属するcontainer (menu定義上ほぼ末尾がplayer inv)。
+    // rftools等の単一container menuでは末尾36 slotがplayer inv (vanilla規格)。
     const playerSlots = () => {
+      const cidxs = new Set(menu.slots.map((s) => s.container_idx));
+      if (cidxs.size <= 1) return menu.slots.slice(-36);
       const last = menu.slots[menu.slots.length - 1];
       return menu.slots.filter((s) => s.container_idx === last.container_idx);
     };

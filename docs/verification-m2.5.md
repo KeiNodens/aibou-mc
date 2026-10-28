@@ -329,7 +329,7 @@ path不達の巡回はBaritone側が終了しないため、タスクが無限ru
 | 作業台・チェストを `use_item` で開く | `minecraft:crafting` (46slots) / `generic_9x3` (63slots) menu確認 |
 | `container_click` swap (inv↔hotbar) / quick_move (player→chest) | 両方成功、dioriteがchest slot0へ |
 | `container_click` 誤った `menu_id` | `STALE_STATE` で拒否 |
-| `craft_menu` 3x3 (furnace) | cobblestone 12→4消→4消費、furnace獲得 |
+| `craft_menu` 3x3 (furnace) | cobblestone 12個→4個消費、furnace獲得 |
 | `craft` skill 2x2 (stick x8) | planks 16→12、sticks獲得 |
 | `craft` skill 3x3 (chest) | NEED_TABLE→作業台発見→開く→craft→close 全自動 |
 | `craft_menu` bedrock / 3x3をinvで / 材料不足 | `NO_RECIPE` / `NEED_TABLE` / `RECIPE_REJECTED` |
@@ -375,3 +375,52 @@ path不達の巡回はBaritone側が終了しないため、タスクが無限ru
 - virtual slot (energy/upgrade等) への意図しない投入を防ぐためヒューリスティックでは `slot_class` に `virtual` を含むslotを除外
 - ヒューリスティックはクラス名依存 — Mekanismのように全slotが汎用クラスの機械では役割分解が弱い。確実性が必要な機械は `machines/*.json` に定義を足す運用
 - `menu_id` は `container.read` で実測するのが確実 (ブロックIDと一致しない場合あり)
+
+
+---
+
+# 追記: 本番インスタンス (1.20.1) の鯖接続調整
+
+§185の「本番からも外す必要あり」リストは実際より不足していた。鯖modsとの実diffを取った結果、必要な調整は以下の通り (接続の実機検証はこれから)。
+
+## 実施した調整 (`instances/1.20.1/minecraft/mods/`)
+
+- **無効化 (.disabled化) 7本**: ArsCurios, SlashNouveau (TConstruct非互換), Chunk-Pregenerator (レジストリ不一致), sob (FD 1.3.4非互換), JustEnoughResources, jerintegration, nolijium (鯖・bot両側で除外済)
+- **追加 3本**: CreateDragonsPlus, bobo_lib, delightlib (鯖・botにはあり本番に欠落 — §158の依存不足jarと同一)
+- **再有効化 1本**: farmersrespite (鯖側はrespiteful依存として有効。本番の .disabled のままだとレジストリ不一致)
+- **変更なしで残した本番独自mod 15本**: emi系5, journeymap, jmi, DistantHorizons, embeddium, oculus, appleskin, BetterAdvancements, BorderlessWindow, FPS-Monitor, FasterLadderClimbing — 全てクライアント限定modでバニラ鯖互換の設計。チャンネル不一致が出れば個別に無効化する方針
+
+調整後のprod↔server差分は「本番独自=クライアント限定modのみ」「鯖独自=なし」の状態。変更前のmods一覧は `instances/1.20.1/minecraft/mods-backup-*.txt` に保存済みで、元に戻す場合は .disabled を外し追加3本を削除すればよい。
+
+Forge/ MCバージョンは両インスタンスとも 47.4.28 / 1.20.1 で鯖と一致を確認済み。
+
+
+## Phase 3: mod解析拡張 + 新原始操作 (6/14 実機検証)
+
+### 機械GUI自動発掘ループ
+- 2段階自動発掘を実施: (1) `use_item`でGUI開放→`container.read`でmenu構造取得 (111台調査)
+- (2) quick_moveプローブで実際にアイテムを投入しinput slotを実証的特定 (120台)
+- 生成定義: `machines/*.json` に 107+6(外部mod定義) = 113個
+- mekanism系全機械 (enrichment実機検証済含む)、thermal全family (in0)、
+  enderio (in1)、ad_astra (in1)、industrialforegoing (titanium container)、
+  energizedpower (direct挿入系)、ae2、forestry、rftools、botania/ars/tcon (GUI不可を特定)
+- 検知できた「GUIが開けない機械」: botania brewery/enchanter、ars imbuement、
+  tconstruct seared_melter、evolvedmekanism solidification → mod-support.mdに記録
+
+### 新原始操作
+| op | 結果 |
+|---|---|
+| `look_info` | OK。Jade経由でenrichment_chamberの電力(EMC表示)/内容物を日本語ツールチップ取得 |
+| `interact` | OK。牛entity_idにwheat餌やり(pass)、バケツで乳搾り(milk_bucket取得) |
+| `container.button` | OK。stonecutterでbutton_id=1押下→stone_brick_slab生成 |
+| `container.trade` | 部分。村人merchant menu開放+index選択は動くが、offer成立の完全経路は未確認 |
+| `hold_ticks` | OK。弓を装備し25tick保持→release→**実際に矢消費(13→12)を確認**。実装はkeyUse実入力経路 |
+| `block_state` | 未検証 (blockEntityのupdateTag経由) |
+
+### solapplepie調査
+- configに無効化オプションなし。offline/bot playerにFoodList capabilityが付かないmod bug。
+- 対策候補: bot側除外 (接続可否要確認) or 食事を使わない運用 or mod本体patch。
+- 現状は食事成功→kick→自動再接続で復帰するので実害は限定的。
+
+### docs/mod-support.md 新設
+mod別対応マトリクス: 対応済/定義あり/部分/未対応/非互換 + パック外有名modの解析方針を記録。

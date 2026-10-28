@@ -1,0 +1,18 @@
+{
+  "menu_id": "minecraft:cartography_table",
+  "block": "minecraft:cartography_table",
+  "input": [
+    0,
+    1
+  ],
+  "output": [
+    2
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2
+  ]
+}

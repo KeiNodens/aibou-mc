@@ -1,0 +1,21 @@
+{
+  "menu_id": "minecraft:smithing",
+  "block": "minecraft:smithing_table",
+  "input": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "output": [
+    4
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3
+  ]
+}

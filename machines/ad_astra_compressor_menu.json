@@ -1,0 +1,23 @@
+{
+  "menu_id": "ad_astra:compressor_menu",
+  "block": "ad_astra:compressor",
+  "input": [
+    1
+  ],
+  "output": [
+    9,
+    10,
+    11,
+    12
+  ],
+  "fuel": [
+    13
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2
+  ]
+}

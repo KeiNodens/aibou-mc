@@ -1,0 +1,22 @@
+{
+  "menu_id": "energizedpower:advanced_crusher",
+  "block": "energizedpower:advanced_crusher",
+  "input": [
+    36
+  ],
+  "output": [
+    37,
+    38,
+    39,
+    40
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    36,
+    37,
+    38,
+    39,
+    40
+  ]
+}

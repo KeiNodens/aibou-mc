@@ -1,0 +1,20 @@
+{
+  "menu_id": "mekanism:metallurgic_infuser",
+  "block": "mekanism:metallurgic_infuser",
+  "input": [
+    3
+  ],
+  "output": [
+    4
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}

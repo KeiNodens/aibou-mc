@@ -1,0 +1,17 @@
+{
+  "menu_id": "minecraft:hopper",
+  "block": "minecraft:hopper",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

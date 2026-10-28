@@ -9,8 +9,10 @@ import com.minecrafttogether.agent.task.DigTask;
 import com.minecrafttogether.agent.task.EmoteTask;
 import com.minecrafttogether.agent.task.FollowTask;
 import com.minecrafttogether.agent.task.GotoTask;
+import com.minecrafttogether.agent.task.LookInfoTask;
 import com.minecrafttogether.agent.task.MineTask;
 import com.minecrafttogether.agent.task.TaskManager;
+import com.minecrafttogether.agent.task.UseHoldTask;
 import java.io.File;
 import java.util.Map;
 import java.util.TreeMap;
@@ -64,9 +66,14 @@ public final class GameOps {
             case "obs.entity" -> obsEntity(params);
             case "obs.scan" -> obsScan(params);
             case "obs.block" -> obsBlock(params);
+            case "obs.block_state" -> obsBlockState(params);
+            case "look_info" -> lookInfo(params);
+            case "interact" -> interact(params);
             case "use_item" -> useItem(params);
             case "container.read" -> containerRead();
             case "container.click" -> containerClick(params);
+            case "container.button" -> containerButton(params);
+            case "container.trade" -> containerTrade(params);
             case "container.close" -> containerClose();
             case "recipe.lookup" -> recipeLookup(params);
             case "craft" -> craft(params);
@@ -326,6 +333,15 @@ public final class GameOps {
             && params.get("hand").getAsString().equalsIgnoreCase("off")
             ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
         JsonObject r = new JsonObject();
+        // hold_ticks指定: 使用を保持してN tick後にrelease (弓・トライデント・盾等)
+        if (params.has("hold_ticks") && !params.has("x")) {
+            UseHoldTask t = new UseHoldTask(
+                TaskManager.get().newId("use"),
+                hand, params.get("hold_ticks").getAsInt());
+            TaskManager.get().register(t);
+            r.addProperty("task_id", t.id);
+            return r;
+        }
         if (params.has("x")) {
             BlockPos pos = new BlockPos(
                 params.get("x").getAsInt(),
@@ -401,6 +417,90 @@ public final class GameOps {
         r.addProperty("radius", radius);
         r.add("found", out);
         r.addProperty("count", out.size());
+        return r;
+    }
+
+    /**
+     * 指定座標のブロック詳細。blockstateプロパティと
+     * block entityの同期NBT (getUpdateTag) を返す。
+     * 機械の進捗・電力・流体等をJade無しでも調べられる診断用。
+     */
+    private static JsonObject obsBlockState(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        requirePlayer();
+        BlockPos pos = new BlockPos(
+            params.get("x").getAsInt(),
+            params.get("y").getAsInt(),
+            params.get("z").getAsInt());
+        var state = mc.level.getBlockState(pos);
+        ResourceLocation key = BuiltInRegistries.BLOCK.getKey(state.getBlock());
+        JsonObject r = new JsonObject();
+        r.addProperty("block", key != null ? key.toString() : "unknown");
+        r.addProperty("x", pos.getX());
+        r.addProperty("y", pos.getY());
+        r.addProperty("z", pos.getZ());
+        JsonObject props = new JsonObject();
+        state.getValues().forEach((prop, val) ->
+            props.addProperty(prop.getName(), val.toString()));
+        r.add("properties", props);
+        var be = mc.level.getBlockEntity(pos);
+        if (be != null) {
+            var tag = be.getUpdateTag();
+            if (tag != null) {
+                String snbt = tag.toString();
+                if (snbt.length() > 4000) snbt = snbt.substring(0, 4000) + "...";
+                r.addProperty("be_nbt", snbt);
+            }
+        }
+        return r;
+    }
+
+    /**
+     * Jade連携。対象を見てtooltipテキストを返すtask (design look_info)。
+     * x,y,z または entity_id を指定すると先に視線を向ける。
+     * 指定なしなら現在見ているものを読む。
+     */
+    private static JsonObject lookInfo(JsonObject params) throws ApiError {
+        LocalPlayer p = requirePlayer();
+        Vec3 target = null;
+        Integer entityId = null;
+        if (params.has("entity_id")) {
+            entityId = params.get("entity_id").getAsInt();
+        } else if (params.has("x")) {
+            target = new Vec3(
+                params.get("x").getAsDouble(),
+                params.get("y").getAsDouble(),
+                params.get("z").getAsDouble());
+        }
+        LookInfoTask t = new LookInfoTask(
+            TaskManager.get().newId("look"), target, entityId);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
+        return r;
+    }
+
+    /**
+     * エンティティへの右クリック。餌やり・調教・乳搾り・ハサミ・
+     * リード・名札・騎乗・村人との取引開始をカバーする汎用操作。
+     * 取引menuはサーバーが開くので、後続はcontainer.*で操作する。
+     */
+    private static JsonObject interact(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer p = requirePlayer();
+        Entity e = null;
+        if (params.has("entity_id")) {
+            e = mc.level != null ? mc.level.getEntity(params.get("entity_id").getAsInt()) : null;
+        }
+        if (e == null) throw new ApiError("NOT_FOUND", "no such entity");
+        InteractionHand hand = params.has("hand")
+            && params.get("hand").getAsString().equalsIgnoreCase("off")
+            ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
+        var res = mc.gameMode.interact(p, e, hand);
+        JsonObject r = new JsonObject();
+        r.addProperty("entity_id", e.getId());
+        r.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString());
+        r.addProperty("result", res.toString().toLowerCase());
         return r;
     }
 
@@ -504,6 +604,34 @@ public final class GameOps {
         JsonObject r = new JsonObject();
         r.addProperty("clicked", slot);
         r.addProperty("action", action);
+        return r;
+    }
+
+    /**
+     * menuのボタン押下 (エンチャント台の選択、石切台・織機のレシピ選択、
+     * ビーコン効果決定等)。button_idはmenu側の定義依存。
+     */
+    private static JsonObject containerButton(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer p = requirePlayer();
+        AbstractContainerMenu menu = p.containerMenu;
+        int buttonId = params.get("button_id").getAsInt();
+        mc.gameMode.handleInventoryButtonClick(menu.containerId, buttonId);
+        JsonObject r = new JsonObject();
+        r.addProperty("container_id", menu.containerId);
+        r.addProperty("button_id", buttonId);
+        return r;
+    }
+
+    /** 村人取引の候補選択。選択後はresult slotをcontainer.clickで取る */
+    private static JsonObject containerTrade(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        requirePlayer();
+        int index = params.get("index").getAsInt();
+        mc.getConnection().send(
+            new net.minecraft.network.protocol.game.ServerboundSelectTradePacket(index));
+        JsonObject r = new JsonObject();
+        r.addProperty("trade_index", index);
         return r;
     }
 

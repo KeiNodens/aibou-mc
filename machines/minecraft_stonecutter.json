@@ -1,0 +1,16 @@
+{
+  "menu_id": "minecraft:stonecutter",
+  "block": "minecraft:stonecutter",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1
+  ]
+}

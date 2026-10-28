@@ -1,0 +1,14 @@
+{
+  "menu_id": "minecraft:enchantment",
+  "block": "minecraft:enchanting_table",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1
+  ]
+}

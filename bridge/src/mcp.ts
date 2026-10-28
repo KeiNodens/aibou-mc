@@ -137,6 +137,12 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
         z: z.number().int().optional(),
         face: z.enum(['up', 'down', 'north', 'south', 'east', 'west']).optional(),
         hand: z.enum(['main', 'off']).optional(),
+        hold_ticks: z
+          .number()
+          .int()
+          .min(1)
+          .optional()
+          .describe('hold the use for N ticks then release (bow draw, trident, shield). returns task_id'),
       },
     },
     async (a) => {
@@ -192,6 +198,40 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
         };
         if (menu_id !== undefined) p.menu_id = menu_id;
         return json(await mod.call('container.click', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'container_button',
+    {
+      description:
+        'Press a GUI button in the open menu (enchanting table tier, stonecutter/loom ' +
+        'recipe index, beacon confirm, lectern page). button_id is menu-specific.',
+      inputSchema: { button_id: z.number().int().min(0) },
+    },
+    async ({ button_id }) => {
+      try {
+        return json(await mod.call('container.button', { button_id }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'container_trade',
+    {
+      description:
+        'Select a villager/wandering-trader trade offer by index, then take the ' +
+        'result slot with container_click.',
+      inputSchema: { index: z.number().int().min(0) },
+    },
+    async ({ index }) => {
+      try {
+        return json(await mod.call('container.trade', { index }));
       } catch (e) {
         return err(e);
       }
@@ -304,6 +344,90 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
     async () => {
       try {
         return json(await mod.call('move.stop'));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'block_state',
+    {
+      description:
+        'Read block-state properties and synced block-entity NBT at a position ' +
+        '(machine progress/energy/fluid diagnostics without Jade).',
+      inputSchema: {
+        x: z.number().int(),
+        y: z.number().int(),
+        z: z.number().int(),
+      },
+    },
+    async ({ x, y, z }) => {
+      try {
+        return json(await mod.call('obs.block_state', { x, y, z }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'look_info',
+    {
+      description:
+        'Aim at a target and return what Jade shows for it (name, mod, energy, ' +
+        'progress, contents). Give x,y,z or entity_id to look first; omit to read ' +
+        'the current view. Returns task_id.',
+      inputSchema: {
+        x: z.number().optional(),
+        y: z.number().optional(),
+        z: z.number().optional(),
+        entity_id: z.number().int().optional(),
+      },
+    },
+    async (a) => {
+      try {
+        return json(await mod.call('look_info', a));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'find_entity',
+    {
+      description:
+        'Find entities/players by player name or registry type (minecraft:cow). ' +
+        'Returns entity_id, position, distance — the id needed by interact/look_info.',
+      inputSchema: { name: z.string() },
+    },
+    async ({ name }) => {
+      try {
+        return json(await mod.call('obs.entity', { name }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'interact',
+    {
+      description:
+        'Right-click an entity (feed, tame, milk, shear, leash, name-tag, mount, ' +
+        'open villager trading). The merchant menu afterwards is handled via ' +
+        'container_* tools.',
+      inputSchema: {
+        entity_id: z.number().int(),
+        hand: z.enum(['main', 'off']).optional(),
+      },
+    },
+    async ({ entity_id, hand }) => {
+      try {
+        const p: Record<string, unknown> = { entity_id };
+        if (hand !== undefined) p.hand = hand;
+        return json(await mod.call('interact', p));
       } catch (e) {
         return err(e);
       }

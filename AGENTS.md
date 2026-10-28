@@ -58,3 +58,9 @@ Live environment (this workspace): Forge server `server/run.bat` (Windows —
 `docs/verification-m2.5.md` is the running field log — append results there.
 Key live checks: `get_state` (in-world?), `bot_status` (WS connected?),
 `scan_area`, `task_status`/`task_result`, `get_chat` (runner loops?).
+
+## Compile-only mod deps
+
+`agent-mod/libs/` jarはgitignore（再配布不可）。`build.gradle`の`blank:xxx`依存は
+自前でjarを`agent-mod/libs/`に置くこと:
+- `jade-11.13.3.jar` — Jade連携 (soft-dep、無くても動作するがコンパイルには必要)

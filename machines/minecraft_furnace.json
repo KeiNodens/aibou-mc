@@ -1,8 +1,20 @@
 {
   "menu_id": "minecraft:furnace",
-  "block": "minecraft:furnace",
-  "input": [0],
-  "fuel": [1],
-  "output": [2],
-  "notes": "vanilla furnace. input/fuel/output; slots 3+ are player inventory"
+  "block": "twilightforest:cinder_furnace",
+  "input": [
+    0
+  ],
+  "output": [
+    2
+  ],
+  "fuel": [
+    1
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2
+  ]
 }

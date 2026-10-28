@@ -1,0 +1,30 @@
+{
+  "menu_id": "minecraft:generic_3x3",
+  "block": "minecraft:dropper",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ]
+}

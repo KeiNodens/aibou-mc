@@ -1,0 +1,17 @@
+{
+  "menu_id": "rftoolspower:blazing_infuser",
+  "block": "rftoolspower:blazing_infuser",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1
+  ],
+  "notes": "単一container想定。要検証"
+}

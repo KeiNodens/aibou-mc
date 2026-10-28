@@ -1,0 +1,19 @@
+{
+  "menu_id": "mekanism:crusher",
+  "block": "mekanism:crusher",
+  "input": [
+    2
+  ],
+  "output": [
+    3
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "menu_id": "thermal:machine_brewer",
+  "block": "thermal:machine_brewer",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}

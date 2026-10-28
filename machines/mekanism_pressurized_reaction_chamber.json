@@ -1,0 +1,22 @@
+{
+  "menu_id": "mekanism:pressurized_reaction_chamber",
+  "block": "mekanism:pressurized_reaction_chamber",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

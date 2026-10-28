@@ -1,0 +1,16 @@
+{
+  "menu_id": "energizedpower:uncharger",
+  "block": "energizedpower:uncharger",
+  "input": [
+    36
+  ],
+  "output": [
+    37
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    36,
+    37
+  ]
+}

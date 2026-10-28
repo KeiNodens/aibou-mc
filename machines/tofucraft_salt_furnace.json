@@ -1,0 +1,22 @@
+{
+  "menu_id": "tofucraft:salt_furnace",
+  "block": "tofucraft:salt_furnace",
+  "input": [
+    0
+  ],
+  "output": [
+    2
+  ],
+  "fuel": [
+    1
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

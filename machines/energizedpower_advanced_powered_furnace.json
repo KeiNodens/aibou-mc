@@ -1,0 +1,32 @@
+{
+  "menu_id": "energizedpower:advanced_powered_furnace",
+  "block": "energizedpower:advanced_powered_furnace",
+  "input": [
+    36
+  ],
+  "output": [
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44,
+    45
+  ]
+}

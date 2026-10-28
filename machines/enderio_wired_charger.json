@@ -1,0 +1,17 @@
+{
+  "menu_id": "enderio:wired_charger",
+  "block": "enderio:wired_charger",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2
+  ]
+}

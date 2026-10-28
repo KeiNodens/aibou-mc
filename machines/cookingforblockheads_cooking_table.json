@@ -1,0 +1,9 @@
+{
+  "menu_id": "cookingforblockheads:cooking_table",
+  "block": "cookingforblockheads:cooking_table",
+  "input": [],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "notes": "キッチン系はrecipe選択型。container.button経路と併用 (未導入mod)"
+}

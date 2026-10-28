@@ -1,0 +1,20 @@
+{
+  "menu_id": "thermal:machine_refinery",
+  "block": "thermal:machine_refinery",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}

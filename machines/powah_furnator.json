@@ -1,0 +1,13 @@
+{
+  "menu_id": "powah:furnator",
+  "block": "powah:furnator_*",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "notes": "Powah Furnator系。導入時検証要 (未導入mod)"
+}

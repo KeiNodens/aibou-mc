@@ -1,0 +1,19 @@
+{
+  "menu_id": "forestry:fermenter",
+  "block": "forestry:fermenter",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    36,
+    37,
+    38,
+    39,
+    40
+  ]
+}

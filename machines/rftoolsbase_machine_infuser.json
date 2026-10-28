@@ -1,0 +1,17 @@
+{
+  "menu_id": "rftoolsbase:machine_infuser",
+  "block": "rftoolsbase:machine_infuser",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1
+  ],
+  "notes": "単一container(38slot)。末尾36=player inv"
+}

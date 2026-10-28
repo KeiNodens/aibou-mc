@@ -1,0 +1,9 @@
+{
+  "menu_id": "sophisticatedbackpacks:backpack",
+  "block": "sophisticatedbackpacks:backpack",
+  "input": [],
+  "output": [],
+  "insert": "quick_move",
+  "verified_input": false,
+  "notes": "汎用container扱い。upgrade slot有 (未導入mod)"
+}

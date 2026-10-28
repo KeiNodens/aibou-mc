@@ -1,0 +1,22 @@
+{
+  "menu_id": "mekanism:chemical_oxidizer",
+  "block": "mekanism:chemical_oxidizer",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

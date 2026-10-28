@@ -1,0 +1,13 @@
+{
+  "menu_id": "bloodmagic:altar",
+  "block": "bloodmagic:altar",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "notes": "Blood Altar: itemをLPで転換。in0 out1 (未導入mod)"
+}

@@ -1,0 +1,20 @@
+{
+  "menu_id": "mekanism:precision_sawmill",
+  "block": "mekanism:precision_sawmill",
+  "input": [
+    2
+  ],
+  "output": [
+    3
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}

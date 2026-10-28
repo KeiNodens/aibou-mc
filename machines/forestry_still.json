@@ -1,0 +1,18 @@
+{
+  "menu_id": "forestry:still",
+  "block": "forestry:still",
+  "input": [
+    36
+  ],
+  "output": [
+    37,
+    38
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    36,
+    37,
+    38
+  ]
+}

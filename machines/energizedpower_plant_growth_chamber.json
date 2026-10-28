@@ -1,0 +1,30 @@
+{
+  "menu_id": "energizedpower:plant_growth_chamber",
+  "block": "energizedpower:plant_growth_chamber",
+  "input": [
+    36
+  ],
+  "output": [
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    36,
+    37,
+    38,
+    39,
+    40,
+    41,
+    42,
+    43,
+    44
+  ]
+}

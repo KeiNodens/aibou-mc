@@ -1,0 +1,22 @@
+{
+  "menu_id": "thermal:machine_press",
+  "block": "thermal:machine_press",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "menu_id": "enderio:soul_binder",
+  "block": "enderio:soul_binder",
+  "input": [
+    0,
+    1
+  ],
+  "output": [
+    2
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

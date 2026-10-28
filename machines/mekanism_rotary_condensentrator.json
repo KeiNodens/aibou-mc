@@ -1,0 +1,26 @@
+{
+  "menu_id": "mekanism:rotary_condensentrator",
+  "block": "mekanism:rotary_condensentrator",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ]
+}

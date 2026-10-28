@@ -1,0 +1,16 @@
+{
+  "menu_id": "energizedpower:charger",
+  "block": "energizedpower:charger",
+  "input": [
+    36
+  ],
+  "output": [
+    37
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    36,
+    37
+  ]
+}

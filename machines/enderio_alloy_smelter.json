@@ -1,0 +1,19 @@
+{
+  "menu_id": "enderio:alloy_smelter",
+  "block": "enderio:alloy_smelter",
+  "input": [
+    1
+  ],
+  "output": [
+    3
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "menu_id": "mekanism:electric_pump",
+  "block": "mekanism:electric_pump",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    3,
+    4
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

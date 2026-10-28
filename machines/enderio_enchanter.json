@@ -1,0 +1,18 @@
+{
+  "menu_id": "enderio:enchanter",
+  "block": "enderio:enchanter",
+  "input": [
+    1
+  ],
+  "output": [
+    3
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3
+  ]
+}

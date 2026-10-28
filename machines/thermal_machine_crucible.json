@@ -1,0 +1,20 @@
+{
+  "menu_id": "thermal:machine_crucible",
+  "block": "thermal:machine_crucible",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5
+  ]
+}

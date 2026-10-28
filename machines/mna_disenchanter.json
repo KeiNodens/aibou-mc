@@ -1,0 +1,21 @@
+{
+  "menu_id": "mna:disenchanter",
+  "block": "mna:disenchanter",
+  "input": [
+    0,
+    1
+  ],
+  "output": [
+    2,
+    3,
+    4,
+    5,
+    6
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1
+  ]
+}

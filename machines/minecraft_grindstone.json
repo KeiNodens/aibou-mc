@@ -1,0 +1,18 @@
+{
+  "menu_id": "minecraft:grindstone",
+  "block": "minecraft:grindstone",
+  "input": [
+    0,
+    1
+  ],
+  "output": [
+    2
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "menu_id": "mekanism:isotopic_centrifuge",
+  "block": "mekanism:isotopic_centrifuge",
+  "input": [
+    2
+  ],
+  "output": [
+    3
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

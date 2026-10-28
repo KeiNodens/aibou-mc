@@ -1,0 +1,13 @@
+{
+  "menu_id": "enchantinginfuser:infusing",
+  "block": "enchantinginfuser:enchanting_infuser",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0
+  ]
+}

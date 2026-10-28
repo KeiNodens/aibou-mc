@@ -1,0 +1,21 @@
+{
+  "menu_id": "enderio:primitive_alloy_smelter",
+  "block": "enderio:primitive_alloy_smelter",
+  "input": [
+    0,
+    1,
+    2
+  ],
+  "output": [
+    3
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ]
+}

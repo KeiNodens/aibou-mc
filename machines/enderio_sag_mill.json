@@ -1,0 +1,22 @@
+{
+  "menu_id": "enderio:sag_mill",
+  "block": "enderio:sag_mill",
+  "input": [
+    1
+  ],
+  "output": [
+    3,
+    4
+  ],
+  "insert": "quick_move",
+  "verified_input": true,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6
+  ]
+}

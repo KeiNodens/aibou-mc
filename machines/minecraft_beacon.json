@@ -1,0 +1,13 @@
+{
+  "menu_id": "minecraft:beacon",
+  "block": "minecraft:beacon",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0
+  ]
+}

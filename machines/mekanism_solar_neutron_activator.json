@@ -1,0 +1,16 @@
+{
+  "menu_id": "mekanism:solar_neutron_activator",
+  "block": "mekanism:solar_neutron_activator",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1
+  ]
+}

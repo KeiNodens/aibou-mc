@@ -25,3 +25,11 @@ mandatory = true
 versionRange = "${minecraft_version_range}"
 ordering = "NONE"
 side = "CLIENT"
+
+# Jadeはあれば使うsoft dependency (look_infoのリッチ化)。未導入でも動く
+[[dependencies.${mod_id}]]
+modId = "jade"
+mandatory = false
+versionRange = "[11,)"
+ordering = "NONE"
+side = "CLIENT"

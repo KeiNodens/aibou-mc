@@ -1,0 +1,16 @@
+{
+  "menu_id": "ironfurnaces:furnace",
+  "block": "ironfurnaces:*_furnace",
+  "input": [
+    0
+  ],
+  "output": [
+    2
+  ],
+  "fuel": [
+    1
+  ],
+  "insert": "quick_move",
+  "verified_input": false,
+  "notes": "Iron Furnacesはvanilla furnace layout準拠の見込み (未導入mod)"
+}

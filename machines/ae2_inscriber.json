@@ -1,0 +1,24 @@
+{
+  "menu_id": "ae2:inscriber",
+  "block": "ae2:inscriber",
+  "input": [
+    0,
+    1,
+    2
+  ],
+  "output": [
+    3
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "machine_slots": [
+    0,
+    1,
+    2,
+    3,
+    40,
+    41,
+    42,
+    43
+  ]
+}
