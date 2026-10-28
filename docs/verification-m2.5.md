@@ -457,3 +457,15 @@ give直後のクライアントinventory同期ずれが繰り返し発生 — ki
 ### solapplepie結論
 side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack全体から外すかは要裁定。
 食事成功→kick→自動再接続で実害は限定的、のまま維持。
+
+### container.repo (AE2) 検証結果
+- MEチェスト/ケーブル上ターミナルで `ae2:item_terminal` menu + `MEStorageScreen` repo を検出、
+  `container.repo` が IClientRepo→GridInventoryEntry を正しく列挙 (空ネットワークでsize:0)。
+- MEネットワーク構築のゲーム内制約: drive が cable 直隣接でも `proxy:{p:-1}` のまま
+  (グリッド接続は cable の向き/channels の制約)。cell挿入は hopper 経由でも入らず、
+  MEチェストのGUIもcell装着前は開かない設計。
+- 入庫 (quick_move deposit) は AE2 独自 InventoryAction packet が必要で未成立 — 読み取り専用として確定。
+
+### interact 補足
+- 騎乗は素手interactで success→実際に馬上に移動 (y+1.5)、sneak降りで元位置に戻るまで確認。
+  server側 Passengers 検証は別entityを拾ったため不一致だったが実動はしていた。
