@@ -181,6 +181,23 @@ botが指示待ちではなく「そこに生きている」感じを出すた�
 
 「一緒に遊ぶ」以外の、道具としての機能要望。プレイヤーの実パック (262mod) の構成に寄せて優先度を付けた。
 
+## 8.0 実装状況サマリ (2026-06-14 更新)
+
+下表のうち実装・検証済みのもの。詳細は `docs/mod-support.md` のマトリクス参照。
+
+| 案 | 状態 |
+|---|---|
+| `look_target` (7.2) / `look_info` (8.4) | **実装済** — look_at + Jade プロバイダ経由。enrichment_chamber で「濃縮室 (上)」「EMC: 2,844」「1 濃縮錫」の取得を実機検証。Jade 無しでは registry ID + 基本 state にフォールバック (JadeBridge は soft-dep、compileOnly) |
+| `machine_status` (8.1) | **相当機能を実装** — `look_info` (Jade 表示データ) + `block_state` (BlockEntity の updateTag NBT) の2経路で機械の電力・進捗・内容物を取得可能。block_state は未実機検証 |
+| `recipe_query` (8.1) | **実装済** — 全 RecipeType 列挙 (mod機械レシピ含む)、タグ→候補アイテム展開済 |
+| 機械の入出力操作 (8.2 Mekanism 等) | **実装済** — `machines/*.json` 定義 (113件) + `process_in_machine` スキル。Mekanism 濃縮室で電力供給含め実加工検証。thermal/enderio/ad_astra/industrialforegoing 等は probe で input 実証済み (詳細は mod-support.md) |
+| entity interact | 実装済 — 餌やり・乳搾りを牛で検証。取引は merchant menu + container.trade で部分実装 |
+| hold-use (弓/盾/トライデント) | 実装済 — `hold_ticks`、弓の実射 (矢消費) で検証 |
+| GUI ボタン操作 | 実装済 — `container.button`、stonecutter で検証 |
+| AE2 MEネットワーク連携 (8.1) | 未実装 — ネットワーク在庫参照は container ops の適用範囲外、専用対応が要る |
+| 素材ツリー計算 (8.1) | 未実装 — recipe_query の上に乗るプランナ |
+| JourneyMap / FTB Quests / spark / Litematica / Voice Chat (8.5) | 未実装 |
+
 ## 8.1 最優先級
 
 | 案 | 内容 | 優先度 | 理由 |
@@ -217,6 +234,8 @@ botが指示待ちではなく「そこに生きている」感じを出すた�
 
 ## 8.4 Jade 連携の着想 (2026-10-28, ユーザー発案)
 
+> **[実装済 2026-06-14]** `look_info` として実装・実機検証済み。`JadeBridge.java` (soft-dep) + `LookInfoTask.java`。Jade の `ObjectDataCenter`/`BlockAccessor` 経由でプロバイダデータを収集し、ツールチップ行とサーバーデータを JSON で返す。Jade 非搭載時は registry ID + BlockState にフォールバック。
+
 「見たものの情報」を出す mod は Jade (WAILA/Hwyla 系の後継)。agent-mod が Jade の API/プロバイダ結果を拾って MCP 側へ投げられると、8.1 の `machine_status` と 7.2 の `look_target` が一気に現実的になる。
 
 - Jade のプロバイダは mod 側統合が多く (Mekanism の電力表示等)、per-mod の読み取り実装を自前で揃えるより、Jade が既に集めている表示データ (ツールチップ構成要素) を再利用する方が圧倒的に速い
@@ -231,7 +250,7 @@ botが指示待ちではなく「そこに生きている」感じを出すた�
 
 | mod | 借りるもの | 解錠される機能 | 優先度 |
 |---|---|---|---|
-| Jade | 見ている対象のプロバイダデータ (電力・流体・進捗等) | `look_info`、`machine_status` (8.4 参照) | ★★★ |
+| Jade | 見ている対象のプロバイダデータ (電力・流体・進捗等) | `look_info` **実装済** (8.4 参照) | ★★★ |
 | JEI (または EMI) | カテゴリ整理済みレシピデータ (mod機械レシピ含む)。プレイヤーのパックは JE Resources の config あり = JEI 入り | `recipe_query`、素材ツリー計算の土台 | ★★★ |
 | Applied Energistics 2 (API) | ME グリッド参照 (在庫・オートクラフト) | ME ネットワーク連携。在庫読みとクラフト依頼 | ★★★ |
 | JourneyMap | waypoint・探索済みマップ情報 (API あり) | プレイヤーと waypoint 共有、「あの村で待ち合わせ」 | ★★ |

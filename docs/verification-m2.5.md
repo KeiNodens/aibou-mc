@@ -424,3 +424,4 @@ Forge/ MCバージョンは両インスタンスとも 47.4.28 / 1.20.1 で鯖�
 
 ### docs/mod-support.md 新設
 mod別対応マトリクス: 対応済/定義あり/部分/未対応/非互換 + パック外有名modの解析方針を記録。
+- `block_state` 追加検証 (後日): enrichment_chamberで properties(active/facing) + be_nbt(componentConfig側面設定/owner) の取得を確認。machine_status の補完経路として有効
