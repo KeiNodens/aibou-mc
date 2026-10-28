@@ -24,6 +24,7 @@ public final class AgentWsCapabilities {
             "container.click",
             "container.button",
             "container.trade",
+            "container.repo",
             "container.close",
             "recipe.lookup",
             "craft",

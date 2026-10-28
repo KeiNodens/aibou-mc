@@ -425,3 +425,35 @@ Forge/ MCバージョンは両インスタンスとも 47.4.28 / 1.20.1 で鯖�
 ### docs/mod-support.md 新設
 mod別対応マトリクス: 対応済/定義あり/部分/未対応/非互換 + パック外有名modの解析方針を記録。
 - `block_state` 追加検証 (後日): enrichment_chamberで properties(active/facing) + be_nbt(componentConfig側面設定/owner) の取得を確認。machine_status の補完経路として有効
+
+## Phase 3b: entity操作全系統 + 連携機能 (6/14 深夜検証)
+
+### container.trade 完全経路 — 成立
+- 農民のmerchant menuで index0選択→cost slot0にエメラルド投入→
+  result slot2からquick_moveで `tofucraft:edamame_boild` 96個取得 (maxUsesまで自動反復)。
+- 進捗「良い取引だ！」達成 = サーバー確定。
+
+### interact 全系統 (距離ガード追加: OUT_OF_RANGE/reach3.0)
+| 操作 | 結果 |
+|---|---|
+| 狼・懐き | 骨x2でconsume→Owner NBTにRin UUID入り |
+| お座りトグル | 素手interactでSitting 0b→1b |
+| 毛刈り | shearsでsuccess→Sheared=1b・羊毛item entity確認 |
+| リード | leadでsuccess→Leash.UUID=Rin |
+| 騎乗 | 素手interact success→騎乗、sneakで降りる (y 64.4→63.5)。Passengers検証の方が追いつかず |
+| 取引開始 | villager interact→merchant menu開放 |
+
+失敗から分かった運用注意: 「consume」はクライアント側予測で、距離外でも返ることがある。
+interactにreach検査を追加したので、今後はOUT_OF_RANGEで明示失敗する。
+give直後のクライアントinventory同期ずれが繰り返し発生 — kick再接続で治るが頻度が高い。
+
+### 新機能
+- `container.repo` — AE2系ターミナル画面のrepo (ネットワーク仮想在庫) を
+  reflectionで全量dump (IClientRepo→GridInventoryEntry)。soft-dep、menu非依存。
+- `craft_plan` スキル — recipe.lookup再帰展開で不足素材+手順を計算。
+  pistonで実動 (mod鉱石の別modレシピも拾う)。
+- `waypoint` スキル — 名前付き地点の記憶/list/goto/remove。bridge/waypoints.json永続化。
+
+### solapplepie結論
+side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack全体から外すかは要裁定。
+食事成功→kick→自動再接続で実害は限定的、のまま維持。

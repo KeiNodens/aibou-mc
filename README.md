@@ -159,9 +159,27 @@ Milestones M0–M5 verified live on a **262-mod pack** (see
 for the mod compatibility notes — several mods needed removal/patching).
 
 Done: environment, mod skeleton, primitives, Baritone, skills, companion MVP,
-full-pack validation. Not done: crafting/container/GUI ops (planned as
-meaning-level slot ops, see `docs/design.md`), positive-path `give`/`come_here`
-tests, Muse host connection, long-duration soak.
+full-pack validation, crafting + meaning-level container/GUI ops
+(`container.read/click/button/trade`, `machines/*.json` — 113 machine defs,
+see `docs/mod-support.md`), entity interactions (feed/tame/shear/leash/mount/
+trade), `use_item` incl. charge-and-release (`hold_ticks`), Jade-powered
+`look_info`, AE2-style repo dump (`container_repo`), craft planning
+(`craft_plan` skill) and named waypoints (`waypoint` skill). Not done:
+positive-path `give`/`come_here` tests, Muse host connection, long-duration
+soak.
+
+## Optional integrations
+
+These mods are soft dependencies — aibou-mc works without them but gets
+smarter when they're present.
+
+- **Jade** — when installed on the bot client, `look_info` returns Jade's
+  rich tooltip data (machine energy, fluids, progress) instead of plain
+  registry IDs. The companion literally sees what you see.
+  (compile-only dep: drop `jade-11.13.3.jar` into `agent-mod/libs/`)
+- **AE2 / Applied Energistics-family terminals** — open any ME-style
+  terminal screen and `container_repo` dumps the whole network inventory
+  (stored amounts + craftable flags) without touching slots.
 
 ## License
 

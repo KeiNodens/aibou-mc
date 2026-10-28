@@ -239,6 +239,24 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills) {
   );
 
   server.registerTool(
+    'container_repo',
+    {
+      description:
+        'Dump the virtual inventory repo of an open AE2-style terminal screen ' +
+        '(ME terminal/crafting terminal). Returns stored amounts and craftable ' +
+        'flags for every network item — not regular slots.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('container.repo'));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'container_close',
     {
       description: 'Close the currently open container menu.',

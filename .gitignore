@@ -38,3 +38,4 @@ agent-mod/META-INF/
 # third-party tunnel binary — download cloudflared yourself
 tools/tunnel/
 agent-mod/libs/*.jar
+bridge/waypoints.json

@@ -74,6 +74,7 @@ public final class GameOps {
             case "container.click" -> containerClick(params);
             case "container.button" -> containerButton(params);
             case "container.trade" -> containerTrade(params);
+            case "container.repo" -> containerRepo();
             case "container.close" -> containerClose();
             case "recipe.lookup" -> recipeLookup(params);
             case "craft" -> craft(params);
@@ -493,6 +494,12 @@ public final class GameOps {
             e = mc.level != null ? mc.level.getEntity(params.get("entity_id").getAsInt()) : null;
         }
         if (e == null) throw new ApiError("NOT_FOUND", "no such entity");
+        // 届かない相手へのinteractをローカル成功で誤魔化さないよう距離検査
+        double reach = p.getEntityReach();
+        if (p.distanceTo(e) > reach + 1.0) {
+            throw new ApiError("OUT_OF_RANGE",
+                String.format("entity is %.1f blocks away (reach %.1f)", p.distanceTo(e), reach));
+        }
         InteractionHand hand = params.has("hand")
             && params.get("hand").getAsString().equalsIgnoreCase("off")
             ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
@@ -633,6 +640,60 @@ public final class GameOps {
         JsonObject r = new JsonObject();
         r.addProperty("trade_index", index);
         return r;
+    }
+
+    /**
+     * AE2等の仮想インベントリrepo (ターミナル画面) の読み出し。
+     * 画面にIClientRepo相当のフィールドがあれば中身を全列挙する。
+     * 通常のslotを持たないGUI (MEターミナル等) の在庫参照用。
+     */
+    private static JsonObject containerRepo() throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        requirePlayer();
+        net.minecraft.client.gui.screens.Screen screen = mc.screen;
+        if (screen == null)
+            throw new ApiError("NO_MENU", "no screen open");
+        try {
+            Class<?> repoIf = Class.forName("appeng.menu.me.common.IClientRepo");
+            Object repo = null;
+            for (java.lang.reflect.Field f : screen.getClass().getDeclaredFields()) {
+                if (repoIf.isAssignableFrom(f.getType())) {
+                    f.setAccessible(true);
+                    repo = f.get(screen);
+                    break;
+                }
+            }
+            if (repo == null)
+                throw new ApiError("NOT_SUPPORTED",
+                    "screen " + screen.getClass().getName() + " has no repo field");
+            int size = (Integer) repo.getClass().getMethod("size").invoke(repo);
+            java.lang.reflect.Method get = repo.getClass().getMethod("get", int.class);
+            JsonArray entries = new JsonArray();
+            for (int i = 0; i < size && i < 500; i++) {
+                Object e = get.invoke(repo, i);
+                Object what = e.getClass().getMethod("getWhat").invoke(e);
+                Object keyId = what.getClass().getMethod("getId").invoke(what);
+                JsonObject je = new JsonObject();
+                je.addProperty("id", String.valueOf(keyId));
+                je.addProperty("key_type", what.getClass().getSimpleName());
+                je.addProperty("amount",
+                    ((Number) e.getClass().getMethod("getStoredAmount").invoke(e)).longValue());
+                je.addProperty("requestable",
+                    ((Number) e.getClass().getMethod("getRequestableAmount").invoke(e)).longValue());
+                je.addProperty("craftable",
+                    (Boolean) e.getClass().getMethod("isCraftable").invoke(e));
+                entries.add(je);
+            }
+            JsonObject r = new JsonObject();
+            r.addProperty("screen", screen.getClass().getSimpleName());
+            r.addProperty("size", size);
+            r.add("entries", entries);
+            return r;
+        } catch (ApiError ae) {
+            throw ae;
+        } catch (ReflectiveOperationException e) {
+            throw new ApiError("NOT_SUPPORTED", "no AE2 repo API: " + e.getMessage());
+        }
     }
 
     private static JsonObject containerClose() throws ApiError {
