@@ -146,3 +146,32 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 パック外modは**導入時に上記パイプラインをそのまま通す**のが手順。
 Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加は容易と見込む
 (外部表の対応方針欄参照)。RS/PneumaticCraft等の特殊系は個別実装が要る可能性が高い。
+
+## mod追加アイテム起因のケース監査 (2026-10-28)
+
+「modアイテムがvanilla前提の動作を壊す」パターンの棚卸し。
+凡例: ✅対処済 / ⚠️既知GAP / ?要個別検証
+
+| # | ケース | 状態 | 詳細・対処 |
+|---|--------|------|-----------|
+| 1 | 充電式ツールが無充電で掘れない | ✅ | `DigTask`にホットバー最適ツール自動選択を追加。`isCorrectToolForDrops`を速度より優先するため無充電電動ツール (Mekanism disassembler等) は自然に除外。実機: 無充電disassemblerが石1個で60s timeout → 修正後certus pickaxeへ自動切替 |
+| 2 | `equip` がhotbar(0-8)のみ | ⚠️ | 防具スロット・オフハンド・Curios系スロットに装備不可。modのジェットパック/バックパック/指輪を装備する手段が無い (container経由でarmorスロットをclick操作すれば迂回可能) |
+| 3 | `use_item` にスニーク修飾なし | ⚠️ | sneak+右クリ/左クリでモード切替するツール (Mekanism configurator・disassemblerのモード、各種wrench) が切替えられない。`sneak`パラメータ追加で対応可能 |
+| 4 | NBTバリアント識別不可 | ⚠️ | 同idでも充電量・エンチャント・Tinkers素材が異なる。`find_item`/`countItems`はid一致のみでNBTを見ない |
+| 5 | `countItems` DROP_ALIASがvanillaのみ | ⚠️ | mod鉱石は `raw_X/shard/gem/crystal/fragment/dust` ヒューリスティックで推測。`ad_astra:moon_iron_ore`→`minecraft:raw_iron` のようなクロスnamespaceドロップは数えられない。fortune/silk touchは不考慮 |
+| 6 | AoE採掘ツール (3x3ハンマー等) | ? | 起点ブロックは掘れる。範囲拡張はサーバー側ツールロジック (mineBlock等) 依存 — 要個別検証 |
+| 7 | Tinkersツールの素give | ? | `tconstruct:pickaxe` は素材NBTが無いと性能ゼロ相当の可能性。素材指定NBT付きgiveで要検証 |
+| 8 | 捨てられない/動かせないアイテム | ? | soulbound・カーソルバインド系は`toss`/container操作がサーバー側で拒否され得る。`container_click`の`after`返却で検知可能 |
+| 9 | 食料capability系modの同期切断 | ✅ | Sol Apple Pieの`FoodListMessage`問題は`SolApplePieGuardMixin`で対処済。同パターン (他capability同期) の再発はログ監視対象 |
+| 10 | アイテムGUI (backpack/携帯端末等) | ✅ | `use_item`でmenu開放→`container.*`で操作 — 既存経路で対応可能 |
+| 11 | Baritone内部ツール選択 | ? | Baritoneは`getDestroySpeed`比較で選択。無充電でも高い速度を返す不正直なmod itemはミス選択の可能性 (要観察) |
+
+### 背景となる設計原則
+
+- `dig`/`use_item`は**通常入力経路**なのでmod側のサーバー処理 (mineBlock,
+  onItemUse等) は自然に発火する。問題になるのは「こちらがアイテムを選ぶ」
+  タイミング — 選定基準を`isCorrectToolForDrops`/`getDestroySpeed`実測値に
+  寄せておけばmodの内部ロジックに介入せず済む。
+- ツール「モード」のようなNBT状態依存の挙動は id では識別できない。
+  必要になれば`item_info`系opでNBT要約 (charge/energy/mode/damage) を
+  返す拡張が考えられる。

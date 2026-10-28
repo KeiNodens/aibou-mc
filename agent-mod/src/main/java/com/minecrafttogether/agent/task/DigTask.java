@@ -7,6 +7,9 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
+import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
@@ -51,6 +54,11 @@ public class DigTask extends AgentTask {
             JsonObject r = new JsonObject();
             r.addProperty("broken", true);
             r.addProperty("block", lastBlock != null ? lastBlock : "air");
+            ItemStack held = p.getInventory().getSelected();
+            if (!held.isEmpty()) {
+                r.addProperty("tool",
+                    BuiltInRegistries.ITEM.getKey(held.getItem()).toString());
+            }
             result = r;
             state = State.SUCCEEDED;
             return;
@@ -68,6 +76,7 @@ public class DigTask extends AgentTask {
         p.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, target);
 
         if (!started) {
+            equipBestTool(p, bs);
             gm.startDestroyBlock(pos, face);
             started = true;
         }
@@ -77,6 +86,35 @@ public class DigTask extends AgentTask {
             gm.stopDestroyBlock();
             fail("TIMEOUT", "dig took too long");
         }
+    }
+
+    /**
+     * 対象ブロックに対してホットバー最適ツールへ自動切替。
+     * isCorrectToolForDrops を満たすツールを大きく優先するため、
+     * 無充電の電動ツールや間違いtierのツールは自然に選ばれない。
+     */
+    private static void equipBestTool(LocalPlayer p, BlockState bs) {
+        Inventory inv = p.getInventory();
+        int sel = inv.selected;
+        float cur = score(inv.getItem(sel), bs);
+        int best = sel;
+        float bestScore = cur;
+        for (int i = 0; i < 9; i++) {
+            if (i == sel) continue;
+            float s = score(inv.getItem(i), bs);
+            if (s > bestScore) { bestScore = s; best = i; }
+        }
+        if (best != sel) {
+            inv.selected = best;
+            p.connection.send(new ServerboundSetCarriedItemPacket(best));
+        }
+    }
+
+    private static float score(ItemStack s, BlockState bs) {
+        if (s.isEmpty()) return 0f;
+        float v = s.getDestroySpeed(bs);
+        // 適正ツール(ドロップを得られるもの)を速度より圧倒的に優先
+        return s.isCorrectToolForDrops(bs) ? v + 100f : v;
     }
 
     @Override

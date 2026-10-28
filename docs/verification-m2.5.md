@@ -603,3 +603,15 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
   (mysticalagriculture:essence→sand 等のmodded疑似クラフトを排除)。
 - 実機: `craft_plan glass 3` → `missing:{sand:4}`,
   steps=[sandstone→millstone→smelting] の機械工程付き計画を確認。
+
+### mod追加ツールとdig (自動ツール選択) — 実機検証済
+- `ae2:certus_quartz_pickaxe` で stone→cobblestone 採掘成功 (modツール通常動作)。
+- `mekanism:atomic_disassembler` **無充電** は stone 1個で60s TIMEOUT
+  (`getDestroySpeed`≈0相当。充電式ツールはFE充電が前提)。
+- 対策: `DigTask`にホットバー最適ツール自動選択を追加 —
+  `getDestroySpeed`+`isCorrectToolForDrops`採点 (適正ツールを速度より優先)。
+- 実機: slot0=無充電disassembler・slot1=certus pickaxe・手持ちslot0で
+  `dig` → 自動でslot1に切替 `{"broken":true,"tool":"ae2:certus_quartz_pickaxe"}`。
+- 残gapは docs/mod-support.md「mod追加アイテム起因のケース監査」参照
+  (equip=hotbar限定・sneak修飾無し・NBT識別不可・countItemsの
+  クロスnamespace・AoE/Tinkers未検証等)。
