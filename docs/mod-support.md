@@ -157,10 +157,11 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
 | 1 | 充電式ツールが無充電で掘れない | ✅ | `DigTask`にホットバー最適ツール自動選択を追加。`isCorrectToolForDrops`を速度より優先するため無充電電動ツール (Mekanism disassembler等) は自然に除外。実機: 無充電disassemblerが石1個で60s timeout → 修正後certus pickaxeへ自動切替 |
 | 2 | `equip` がhotbar(0-8)のみ | ✅ | `equip{item, slot_name:"head|chest|legs|feet|offhand"}` でインベントリ内のitemをclick経路で装備。`slot_name`単独で現在装備の読み取り。実機: iron_helmet→head確認 (Curios系スロットは別APIなので別途) |
 | 3 | `use_item` にスニーク修飾なし | ✅ | `use_item{sneak:true}`/`hold_ticks`両対応。PRESS/RELEASE_SHIFT_KEYパケット+client-side setShiftKeyDown。実機: 通常use→チェストGUI開放 vs sneak+use→GUI回避を確認 |
-| 4 | NBTバリアント識別不可 | ✅部分 | `item.info` op新設: 耐久・Forge ENERGY/FLUID capability・エンチャ・NBTキー要約を返す。実機: 無充電disassemblerで`energy:{stored:0,max:400000}`を取得 (find_itemの絞り込み自体はid一致のまま) |
+| 4 | NBTバリアント識別不可 | ✅ | `item.info` op新設: 耐久・Forge ENERGY/FLUID capability・エンチャ・NBTキー要約を返す。加えて`get_state`の`inventory_detail[].attrs`に`nbt_keys`+`energy_stored`を追加し、state単体で同idバリアントを識別可能にした。実機: 無充電disassemblerで`energy:{stored:0,max:400000}`取得 |
 | 5 | `countItems` DROP_ALIASがvanillaのみ | ✅部分 | `_ore`ブロックのドロップ候補を全namespace走査で拾うよう拡張 (`ad_astra:moon_iron_ore`→`minecraft:raw_iron`系を捕捉)。fortune/silk touchは依然不考慮 |
-| 6 | AoE採掘ツール (3x3ハンマー等) | ? | 起点ブロックは掘れる。範囲拡張はサーバー側ツールロジック (mineBlock等) 依存 — 要個別検証 |
+| 6 | AoE採掘ツール (3x3ハンマー等) | ✅ | 通常入力経路でmod側の範囲破壊が発火することを実機確認: `energizedpower:diamond_hammer`で3x3 bricks壁の中央を`dig` → **9個中7個が破壊**。AoE範囲・mode指定はサーバー側ロジック依存なので`dig{tool_slot}`で使用ツールを明示できるよう拡張 (auto-scoreはAoE価値を見られない) |
 | 7 | Tinkersツールの素give | ? | `tconstruct:pickaxe` は素材NBTが無いと性能ゼロ相当の可能性。素材指定NBT付きgiveで要検証 |
+| 12 | Curiosスロットへ装備不可 | ✅ | `container_open_curios`追加: `CPacketOpenCurios`送信でサーバーに`curios:curios_container_v2`メニューを開かせ、以降は通常の`container_read`/`container_click`で操作。`container_read`は`CurioSlot`へ`curios_id` (back/jetpack/klein_star等) を付記。実機: `travelersbackpack:standard`を`back`スロットへclick装備→永続確認 (Mekanismはjetpack/scuba/free_runners等のcuriosスロットを多数登録) |
 | 8 | 捨てられない/動かせないアイテム | ? | soulbound・カーソルバインド系は`toss`/container操作がサーバー側で拒否され得る。`container_click`の`after`返却で検知可能 |
 | 9 | 食料capability系modの同期切断 | ✅ | Sol Apple Pieの`FoodListMessage`問題は`SolApplePieGuardMixin`で対処済。同パターン (他capability同期) の再発はログ監視対象 |
 | 10 | アイテムGUI (backpack/携帯端末等) | ✅ | `use_item`でmenu開放→`container.*`で操作 — 既存経路で対応可能 |

@@ -26,6 +26,7 @@ public final class AgentWsCapabilities {
             "container.trade",
             "container.repo",
             "container.repo_action",
+            "container.open_curios",
             "container.close",
             "inventory.resync",
             "recipe.lookup",

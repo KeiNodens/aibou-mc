@@ -628,3 +628,24 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
   日本語名「原子分解機」取得。mod道具の状態が見える化できた。
 - `countItems`クロスnamespace: `_ore`のドロップ候補 (raw_X/shard/gem等)
   を全namespace走査に拡張 (ad_astra:moon_iron_ore→minecraft:raw_iron型)。
+
+### 監査gap対応 第2弾 (全実機検証済, 軽量パック上)
+- `get_state` `inventory_detail[].attrs` 拡張: `nbt_keys` (同idバリアント
+  識別: disassembler mode, Tinkers tic_materials等) + `energy_stored`
+  (state単体で充電切れを判別)。実機: disassembler→`energy_stored:0`、
+  pickaxe→`nbt_keys:["Damage"]` 確認。
+- `container_open_curios` 新op: `CPacketOpenCurios`送信で
+  `curios:curios_container_v2` メニューを開放。`container_read`が
+  `CurioSlot`に`curios_id`を付記 (27スロット: back/jetpack/scuba_*/
+  free_runners/klein_star/necklace/ring等 — Mekanism登録分を含む)。
+  実機: `travelersbackpack:standard` (menu slot40) → `curios_id:"back"`
+  (slot61)へpickup/place → サーバー同期で装備・永続確認。
+  backpackのようなcurios専用装備を意味level clickで扱えるようになった。
+- `dig` に `tool_slot` 引数追加 (auto-scoreを迂回してホットバーslotを
+  強制)。AoEツールはauto-scoreが範囲価値を見られないため明示にした。
+- AoE採掘 実機検証: `energizedpower:diamond_hammer`で3x3 `bricks`壁の
+  中央を`dig{tool_slot:4}` → 9個中**7個が破壊** (残2)。通常入力経路で
+  mod側範囲破壊ロジックが発火することを確認。
+- /give直後のget_state遅延: inventory反映がcontainer同期ベースなので
+  `inventory_resync`後に確定する挙動を再確認 (hammer×2が初見で見えず、
+  resync+container_readでmenu slot40/41に確認)。

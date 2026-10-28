@@ -76,6 +76,7 @@ public final class GameOps {
             case "container.trade" -> containerTrade(params);
             case "container.repo" -> containerRepo();
             case "container.repo_action" -> containerRepoAction(params);
+            case "container.open_curios" -> containerOpenCurios();
             case "container.close" -> containerClose();
             case "inventory.resync" -> inventoryResync();
             case "recipe.lookup" -> recipeLookup(params);
@@ -174,7 +175,10 @@ public final class GameOps {
             try { face = Direction.byName(params.get("face").getAsString()); }
             catch (Exception ignored) {}
         }
-        DigTask t = new DigTask(TaskManager.get().newId("dig"), pos, face);
+        int toolSlot = params.has("tool_slot") ? params.get("tool_slot").getAsInt() : -1;
+        if (toolSlot >= 0 && (toolSlot > 8))
+            throw new ApiError("BAD_REQUEST", "tool_slot must be 0-8");
+        DigTask t = new DigTask(TaskManager.get().newId("dig"), pos, face, toolSlot);
         TaskManager.get().register(t);
         JsonObject r = new JsonObject();
         r.addProperty("task_id", t.id);
@@ -637,6 +641,13 @@ public final class GameOps {
             if (!cls.equals("Slot") && !cls.equals("ResultSlot")) {
                 o.addProperty("slot_class", cls);
             }
+            // CurioSlotはgetIdentifier()でスロット種別 (back/charm等) が取れる
+            if (cls.equals("CurioSlot") || cls.equals("CosmeticCurioSlot")) {
+                try {
+                    Object ident = s.getClass().getMethod("getIdentifier").invoke(s);
+                    o.addProperty("curios_id", String.valueOf(ident));
+                } catch (ReflectiveOperationException ignore) {}
+            }
             if (st.isEmpty()) {
                 o.addProperty("empty", true);
             } else {
@@ -908,6 +919,24 @@ public final class GameOps {
     }
 
     /**
+     * Curiosメニューをサーバーに開かせる (CPacketOpenCurios送信)。
+     * メニューが開いたら通常のcontainer.read/clickでcuriosスロットを操作できる。
+     */
+    private static JsonObject containerOpenCurios() throws ApiError {
+        if (!CuriosBridge.isAvailable())
+            throw new ApiError("UNSUPPORTED", "curios not loaded");
+        requirePlayer();
+        try {
+            CuriosBridge.requestOpen();
+        } catch (ReflectiveOperationException e) {
+            throw new ApiError("UNSUPPORTED", "curios open failed: " + e.getMessage());
+        }
+        JsonObject r = new JsonObject();
+        r.addProperty("requested", true);
+        return r;
+    }
+
+    /**
      * 成果物アイテムからレシピ解決。クライアント同期済みレシピマネージャを
      * 走査し {type, 材料, 投入数} を返す。機械系RecipeTypeも含む (FR-05)。
      */
@@ -1050,7 +1079,19 @@ public final class GameOps {
             JsonObject attrs = new JsonObject();
             if (s.isDamageableItem()) attrs.addProperty("damage", s.getDamageValue());
             if (s.isEnchanted()) attrs.addProperty("enchanted", true);
-            if (s.hasTag()) attrs.addProperty("has_nbt", true);
+            if (s.hasTag()) {
+                // 同idバリアントの識別用にNBTキー一覧を添付 (mode/material等)
+                JsonArray nkeys = new JsonArray();
+                s.getTag().getAllKeys().forEach(nkeys::add);
+                attrs.add("nbt_keys", nkeys);
+            }
+            // 充電式アイテムの残量をstate単体で判別できるようにする
+            try {
+                s.getCapability(
+                    net.minecraftforge.common.capabilities.ForgeCapabilities.ENERGY)
+                    .ifPresent(e -> attrs.addProperty("energy_stored",
+                        e.getEnergyStored()));
+            } catch (Exception ignore) {}
             slot.add("attrs", attrs);
             detail.add(slot);
         }

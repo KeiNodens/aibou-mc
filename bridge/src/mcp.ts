@@ -489,6 +489,24 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'container_open_curios',
+    {
+      description:
+        'Ask the server to open the Curios accessory-slots menu (Curios mod soft-dep). ' +
+        'After ~1 tick, use container_read/container_click on it like any menu — ' +
+        'equip a jetpack/charm/backpack item by clicking it into a curios slot.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('container.open_curios'));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'recipe_lookup',
     {
       description:
@@ -700,6 +718,9 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
         y: z.number().int(),
         z: z.number().int(),
         face: z.enum(['up', 'down', 'north', 'south', 'east', 'west']).optional(),
+        tool_slot: z.number().int().min(0).max(8).optional()
+          .describe('force this hotbar slot instead of auto-selecting the best tool ' +
+            '(for AoE/mode tools whose value auto-scoring cannot see)'),
       },
     },
     async (params) => {

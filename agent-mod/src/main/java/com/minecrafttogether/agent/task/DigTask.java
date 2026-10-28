@@ -21,14 +21,16 @@ import net.minecraft.world.phys.Vec3;
 public class DigTask extends AgentTask {
     private final BlockPos pos;
     private final Direction face;
+    private final int toolSlot; // -1=自動選択, 0-8=そのホットバーslotを強制
     private int startedTicks = 0;
     private boolean started = false;
     private String lastBlock;
 
-    public DigTask(String id, BlockPos pos, Direction face) {
+    public DigTask(String id, BlockPos pos, Direction face, int toolSlot) {
         super(id);
         this.pos = pos;
         this.face = face;
+        this.toolSlot = toolSlot;
     }
 
     @Override
@@ -76,7 +78,13 @@ public class DigTask extends AgentTask {
         p.lookAt(net.minecraft.commands.arguments.EntityAnchorArgument.Anchor.EYES, target);
 
         if (!started) {
-            equipBestTool(p, bs);
+            if (toolSlot >= 0) {
+                // 明示slot指定: AoE・モードツールなどauto-scoreでは評価できない用途向け
+                p.getInventory().selected = toolSlot;
+                p.connection.send(new ServerboundSetCarriedItemPacket(toolSlot));
+            } else {
+                equipBestTool(p, bs);
+            }
             gm.startDestroyBlock(pos, face);
             started = true;
         }

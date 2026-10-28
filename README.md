@@ -173,8 +173,12 @@ trade), `use_item` incl. charge-and-release (`hold_ticks`), Jade-powered
 ingestion (`schematic_inspect`/`schematic_plan` for .litematic/.schem), and
 FTB Quests progress ops (`quest_list`/`quest_inspect`), armor/offhand equip
 (`equip{item,slot_name}`), sneak-modified use (`use_item{sneak}`), item state
-inspection (`item_info` — energy/durability/enchants/NBT), and dig
-auto-tool-selection. Not done:
+inspection (`item_info` — energy/durability/enchants/NBT), NBT-variant
+visibility in `get_state` (`inventory_detail[].attrs` — `nbt_keys` +
+`energy_stored`), dig auto-tool-selection plus explicit `tool_slot` override,
+Curios accessory equipping (`container_open_curios` + `curios_id` slot
+labels — backpack/jetpack/charm slots reachable via semantic clicks), and
+verified AoE mining through the normal dig path. Not done:
 positive-path `give`/`come_here` tests, Muse host connection, long-duration
 soak.
 
@@ -203,6 +207,11 @@ smarter when they're present.
   `quest_inspect` read chapters, tasks, rewards and started/completed state
   from `ClientQuestFile` (reflection-based soft dep; empty until the pack
   ships quest definitions).
+- **Curios** — `container_open_curios` asks the server to open the Curios
+  accessory menu; `container_read` then labels each slot with its
+  `curios_id` (back / jetpack / charm / ring…), so `container_click`
+  equips a backpack or gadget the same way as any other menu.
+  (reflection-based soft dep)
 
 ## License
 
