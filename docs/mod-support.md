@@ -21,8 +21,10 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | クラフト (2x2/3x3) | 対応済 | レシピ帳packet。FastSuite等の非同期も吸収 |
 | use_item (右クリック) | 対応済 | 設置・GUI開放・食事・ドア等 |
 | use_item hold (弓・盾・トライデント) | 対応済 | `hold_ticks` で保持→release |
-| entity interact | 対応済 | 餌やり・乳搾り・取引開始等 |
-| 取引 (村人) | 部分対応 | merchant menu + container.trade。offer内容の可視化は未実装 |
+| entity interact | 対応済 | 餌やり・懐き・お座り・乳搾り・毛刈り・リード・騎乗・取引開始を全検証。reachガード付き (OUT_OF_RANGE) |
+| 取引 (村人) | 対応済 | merchant menu + container.trade で完全取引確認 (edamame 96個・進捗達成) |
+| AE2 MEターミナル在庫読取 | 部分対応 | `container_repo` でMEStorageScreenのrepo全量読取確認。入庫/引き出しはAE2独自packet要 |
+| GUIボタン (石切台・織機・エンチャ・ビーコン) | 対応済 | container.button |
 | GUIボタン (石切台・織機・エンチャ・ビーコン) | 対応済 | container.button |
 | Jade連携 `look_info` | 対応済 | 機械の電力・進捗・内容物を汎用読取。Jade無しでもid+基本情報にfallback |
 | BlockEntity NBT `block_state` | 対応済 | getUpdateTag相当。機械診断用 |
@@ -57,6 +59,7 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | energizedpower | auto_crafter / advanced_auto_crafter | [~] | probeでcobbleがslot41に着地 (crafting grid領域)。機械処理系とは別物 |
 | ae2 | charger / inscriber | [d] | 定義あり。投入item限定でprobe未通過 |
 | ae2 | vibration_chamber | [d] | |
+| ae2 | MEターミナル/チェスト | [x] | `container_repo`でネットワーク在庫を読取 (実機検証)。入出庫は独自packetで未対応 |
 | ad_astra | compressor / etrionic_blast_furnace | [d] | probe実証input=1 |
 | forestry | carpenter / squeezer / centrifuge / fabricator / fermenter / moistener / bottler / still / smelter | [d] | 定義あり。多くは流体+電力が前提で運用ハードル高 |
 | immersiveengineering | alloy_smelter / bottling_machine / sawmill | [d] | 単体機は定義あり。**crusher/arc_furnace等のマルチブロックは対象外** |
