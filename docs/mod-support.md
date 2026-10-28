@@ -203,3 +203,22 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
 - `scroll`: 画面オープン時は`Screen#mouseScrolled`を直接呼ぶ
   (`via:"screen"`, handled返却)。画面が無い時はOSホイール
   (`via:"os_wheel"`, real指定時は常にこちら)。
+
+## Screen操作・看板・未バインドキー (2026-10-28 追記2)
+
+- `screen_read`/`screen_click`/`screen_close`: メニューを持たない純Screen
+  (FTB Quests GUI・mod設定画面・CuriosScreen・SignEditScreen等) のwidgetを
+  列挙・text/index指定クリック・強制閉鎖できる。container系が届かないmod GUI
+  の抜け道がほぼ塞がった。実機: Curiosボタン切替・看板「完了」押下確認。
+- `type_text`はEditBox汎用 — JEI/EMI検索・modのフィルタ欄・チャット入力に
+  使える (実機でChatScreen経由の送信まで確認)。
+- `sign_write`は看板右クリック(権利付与)→パケット送信の2段。サーバーは
+  `playerWhoMayEdit`一致を要求し更新で消費する。setblock看板は不可。
+- キーバインド仮バインド機構により**未割当のmodキーも押せる**
+  (`key.ftbultimine`等)。F13-F24を一時割当→注入または実キーで発火→復元。
+  実機: FTB Ultimineのvein-mine発動 (3x3石炭鉱石一撃)。
+- `real:true`の対応VKはA-Z/0-9/主要記号/ファンクション/修飾/ナビキー。
+  scancode型・マウスボタン型のバインドは非対応 (UNSUPPORTED)。
+- 残gap: `mouse_handler`経由のボタン入力 (attack/use長押し) はuse_item等で
+  代替済だが、独自マウス操作を要求するmod GUIはscreen_click座標が必要。
+  現状widget中心クリックのみ (独自描画領域はindex指定の直接clickで対応)。

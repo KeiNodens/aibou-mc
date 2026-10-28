@@ -100,6 +100,9 @@ public final class GameOps {
             case "scroll" -> scroll(params);
             case "type" -> typeText(params);
             case "sign.write" -> signWrite(params);
+            case "screen.read" -> screenRead();
+            case "screen.click" -> screenClick(params);
+            case "screen.close" -> screenClose();
             case "look_at" -> lookAt(params);
             case "dig" -> dig(params);
             case "equip" -> equip(params);
@@ -209,18 +212,49 @@ public final class GameOps {
         boolean real = params.has("real") && params.get("real").getAsBoolean();
         if (real) {
             // Mekanism等の独自GLFWコールバックを持つmodはKeyboardHandler注入を
-            // 迂回されるため、OSレベルの本物のキー入力 (Robot) で届ける。
+            // 迂回されるため、OSレベルの本物のキー入力 (keybd_event) で届ける。
             // ゲームウィンドウにフォーカスがある前提 — 無いと別窓へ入力が飛ぶ
             var kk = km.getKey();
+            int code;
             if (kk == null
-                || kk == com.mojang.blaze3d.platform.InputConstants.UNKNOWN)
-                throw new ApiError("BAD_REQUEST",
-                    "unbound mapping cannot use real input: " + km.getName());
-            if (kk.getType()
-                != com.mojang.blaze3d.platform.InputConstants.Type.KEYSYM)
-                throw new ApiError("UNSUPPORTED",
-                    "non-keyboard binding (mouse/scancode): " + km.getName());
-            realKeyCode(kk.getValue(), params);
+                || kk == com.mojang.blaze3d.platform.InputConstants.UNKNOWN) {
+                // 未バインド: 空きF13+へ仮バインドして実キーを送る
+                code = pickFreeKeyCode(Minecraft.getInstance());
+                if (code < 0)
+                    throw new ApiError("BAD_REQUEST", "no free keysym left");
+                km.setKey(com.mojang.blaze3d.platform.InputConstants.Type
+                    .KEYSYM.getOrCreate(code));
+                if (params.has("press") && params.get("press").getAsBoolean()) {
+                    // tap: 非同期送信完了を待ってバインド復元
+                    CompletableFuture.delayedExecutor(400,
+                        java.util.concurrent.TimeUnit.MILLISECONDS)
+                        .execute(() -> Minecraft.getInstance().execute(
+                            () -> km.setKey(com.mojang.blaze3d.platform
+                                .InputConstants.UNKNOWN)));
+                } else {
+                    TEMP_BOUND.put(km, km.getKey());
+                }
+            } else {
+                if (kk.getType() != com.mojang.blaze3d.platform.InputConstants
+                    .Type.KEYSYM)
+                    throw new ApiError("UNSUPPORTED",
+                        "non-keyboard binding (mouse/scancode): "
+                            + km.getName());
+                code = kk.getValue();
+            }
+            // 仮バインド保持中のrelease: 実キーrelease後にバインド復元
+            boolean releaseTemp = !params.has("press")
+                && params.has("down") && !params.get("down").getAsBoolean()
+                && TEMP_BOUND.containsKey(km);
+            realKeyCode(code, params);
+            if (releaseTemp) {
+                TEMP_BOUND.remove(km);
+                CompletableFuture.delayedExecutor(150,
+                    java.util.concurrent.TimeUnit.MILLISECONDS)
+                    .execute(() -> Minecraft.getInstance().execute(
+                        () -> km.setKey(com.mojang.blaze3d.platform
+                            .InputConstants.UNKNOWN)));
+            }
             r.addProperty("real", true);
             r.addProperty("is_down", km.isDown());
             r.addProperty("key", km.getKey().getDisplayName().getString());
@@ -264,30 +298,24 @@ public final class GameOps {
         var mc = Minecraft.getInstance();
         long win = mc.getWindow().getWindow();
         var k = km.getKey();
+        // 仮バインド済みはRELEASEで必ず元に戻す (getKey()がUNKNOWNでなくなって
+        // いるので通常分岐の前に処理する)
+        if (action == GLFW_RELEASE && TEMP_BOUND.containsKey(km)) {
+            var prev = TEMP_BOUND.remove(km);
+            mc.keyboardHandler.keyPress(win, prev.getValue(), 0,
+                GLFW_RELEASE, 0);
+            km.setKey(com.mojang.blaze3d.platform.InputConstants.UNKNOWN);
+            return;
+        }
         if (k == null || k == com.mojang.blaze3d.platform
             .InputConstants.UNKNOWN) {
             if (action == GLFW_PRESS) {
-                // 空きkeysymを探して仮バインド (F13=308以降は実機に無いので安全)
-                int free = -1;
-                for (int c = 308; c < 340; c++) {
-                    int cc = c;
-                    if (java.util.Arrays.stream(mc.options.keyMappings)
-                        .noneMatch(m -> m.getKey() != null
-                            && m.getKey().getValue() == cc)) {
-                        free = c;
-                        break;
-                    }
-                }
+                int free = pickFreeKeyCode(mc);
                 if (free < 0) return;
                 km.setKey(com.mojang.blaze3d.platform.InputConstants.Type
                     .KEYSYM.getOrCreate(free));
                 TEMP_BOUND.put(km, km.getKey());
                 mc.keyboardHandler.keyPress(win, free, 0, action, 0);
-            } else if (TEMP_BOUND.containsKey(km)) {
-                var prev = TEMP_BOUND.remove(km);
-                mc.keyboardHandler.keyPress(win, prev.getValue(), 0,
-                    GLFW_RELEASE, 0);
-                km.setKey(com.mojang.blaze3d.platform.InputConstants.UNKNOWN);
             }
             return;
         }
@@ -328,6 +356,18 @@ public final class GameOps {
 
     private static final int GLFW_PRESS = 1;
     private static final int GLFW_RELEASE = 0;
+
+    /** F13(302)〜F24(313)の未使用keysymを探す (仮バインド用 — 実機キーが無いので安全) */
+    private static int pickFreeKeyCode(Minecraft mc) {
+        for (int c = 302; c <= 313; c++) {
+            int cc = c;
+            if (java.util.Arrays.stream(mc.options.keyMappings)
+                .noneMatch(m -> m.getKey() != null
+                    && m.getKey().getValue() == cc))
+                return c;
+        }
+        return -1;
+    }
 
     /** Win32 keybd_event/mouse_event をJNA経由で呼ぶ (javawはheadlessでRobot不可) */
     private interface User32 extends com.sun.jna.Library {
@@ -375,64 +415,66 @@ public final class GameOps {
         });
     }
 
-    /** GLFW keycode → java.awt.event.KeyEvent VK。未対応は-1 */
+    /** GLFW keycode → Win32 virtual-key (keybd_event用)。未対応は-1 */
     private static int glfwToAwt(int g) {
         if (g >= 65 && g <= 90) return g;              // A-Z
         if (g >= 48 && g <= 57) return g;              // 0-9
         return switch (g) {
-            case 32 -> java.awt.event.KeyEvent.VK_SPACE;
-            case 39 -> java.awt.event.KeyEvent.VK_QUOTE;
-            case 44 -> java.awt.event.KeyEvent.VK_COMMA;
-            case 45 -> java.awt.event.KeyEvent.VK_MINUS;
-            case 46 -> java.awt.event.KeyEvent.VK_PERIOD;
-            case 47 -> java.awt.event.KeyEvent.VK_SLASH;
-            case 59 -> java.awt.event.KeyEvent.VK_SEMICOLON;
-            case 61 -> java.awt.event.KeyEvent.VK_EQUALS;
-            case 91 -> java.awt.event.KeyEvent.VK_OPEN_BRACKET;
-            case 92 -> java.awt.event.KeyEvent.VK_BACK_SLASH;
-            case 93 -> java.awt.event.KeyEvent.VK_CLOSE_BRACKET;
-            case 96 -> java.awt.event.KeyEvent.VK_BACK_QUOTE;
-            case 256 -> java.awt.event.KeyEvent.VK_ESCAPE;
-            case 257 -> java.awt.event.KeyEvent.VK_ENTER;
-            case 258 -> java.awt.event.KeyEvent.VK_TAB;
-            case 259 -> java.awt.event.KeyEvent.VK_BACK_SPACE;
-            case 260 -> java.awt.event.KeyEvent.VK_INSERT;
-            case 261 -> java.awt.event.KeyEvent.VK_DELETE;
-            case 262 -> java.awt.event.KeyEvent.VK_RIGHT;
-            case 263 -> java.awt.event.KeyEvent.VK_LEFT;
-            case 264 -> java.awt.event.KeyEvent.VK_DOWN;
-            case 265 -> java.awt.event.KeyEvent.VK_UP;
-            case 266 -> java.awt.event.KeyEvent.VK_PAGE_UP;
-            case 267 -> java.awt.event.KeyEvent.VK_PAGE_DOWN;
-            case 268 -> java.awt.event.KeyEvent.VK_HOME;
-            case 269 -> java.awt.event.KeyEvent.VK_END;
-            case 280 -> java.awt.event.KeyEvent.VK_CAPS_LOCK;
-            case 282 -> java.awt.event.KeyEvent.VK_NUM_LOCK;
+            case 32 -> 32;                             // VK_SPACE
+            case 39 -> 222;                            // VK_OEM_7 (')
+            case 44 -> 188;                            // VK_OEM_COMMA
+            case 45 -> 189;                            // VK_OEM_MINUS
+            case 46 -> 190;                            // VK_OEM_PERIOD
+            case 47 -> 191;                            // VK_OEM_2 (/)
+            case 59 -> 186;                            // VK_OEM_1 (;)
+            case 61 -> 187;                            // VK_OEM_PLUS (=)
+            case 91 -> 219;                            // VK_OEM_4 ([)
+            case 92 -> 220;                            // VK_OEM_5 (\)
+            case 93 -> 221;                            // VK_OEM_6 (])
+            case 96 -> 192;                            // VK_OEM_3 (`)
+            case 256 -> 27;                            // VK_ESCAPE
+            case 257 -> 13;                            // VK_RETURN
+            case 258 -> 9;                             // VK_TAB
+            case 259 -> 8;                             // VK_BACK
+            case 260 -> 45;                            // VK_INSERT
+            case 261 -> 46;                            // VK_DELETE
+            case 262 -> 39;                            // VK_RIGHT
+            case 263 -> 37;                            // VK_LEFT
+            case 264 -> 40;                            // VK_DOWN
+            case 265 -> 38;                            // VK_UP
+            case 266 -> 33;                            // VK_PRIOR (PageUp)
+            case 267 -> 34;                            // VK_NEXT (PageDown)
+            case 268 -> 36;                            // VK_HOME
+            case 269 -> 35;                            // VK_END
+            case 280 -> 20;                            // VK_CAPITAL
+            case 282 -> 144;                           // VK_NUMLOCK
             case 290, 291, 292, 293, 294, 295, 296, 297, 298, 299, 300, 301 ->
-                java.awt.event.KeyEvent.VK_F1 + (g - 290);
+                112 + (g - 290);                       // VK_F1-F12 (0x70-0x7B)
+            // GLFW F13=302〜F24=313 → Win32 VK_F13=0x7C(124)〜VK_F24=0x87(135)
+            // (AWT VK_F13系は61440+の独自値でkeybd_eventのbyte範囲を溢れる)
+            case 302, 303, 304, 305, 306, 307, 308, 309, 310, 311, 312, 313 ->
+                124 + (g - 302);
             case 320, 321, 322, 323, 324, 325, 326, 327, 328, 329 ->
-                java.awt.event.KeyEvent.VK_NUMPAD0 + (g - 320);
-            case 330 -> java.awt.event.KeyEvent.VK_DECIMAL;
-            case 331 -> java.awt.event.KeyEvent.VK_DIVIDE;
-            case 332 -> java.awt.event.KeyEvent.VK_MULTIPLY;
-            case 333 -> java.awt.event.KeyEvent.VK_SUBTRACT;
-            case 334 -> java.awt.event.KeyEvent.VK_ADD;
-            case 336 -> java.awt.event.KeyEvent.VK_ENTER;
-            case 340 -> java.awt.event.KeyEvent.VK_SHIFT;
-            case 341 -> java.awt.event.KeyEvent.VK_CONTROL;
-            case 342 -> java.awt.event.KeyEvent.VK_ALT;
-            case 343 -> java.awt.event.KeyEvent.VK_WINDOWS;
-            case 344 -> java.awt.event.KeyEvent.VK_SHIFT;
-            case 345 -> java.awt.event.KeyEvent.VK_CONTROL;
-            case 346 -> java.awt.event.KeyEvent.VK_ALT;
-            case 348 -> java.awt.event.KeyEvent.VK_ALT_GRAPH;
+                96 + (g - 320);                        // VK_NUMPAD0-9
+            case 330 -> 110;                           // VK_DECIMAL
+            case 331 -> 111;                           // VK_DIVIDE
+            case 332 -> 106;                           // VK_MULTIPLY
+            case 333 -> 109;                           // VK_SUBTRACT
+            case 334 -> 107;                           // VK_ADD
+            case 336 -> 13;                            // VK_RETURN
+            case 340, 344 -> 16;                       // VK_SHIFT
+            case 341, 345 -> 17;                       // VK_CONTROL
+            case 342, 346 -> 18;                       // VK_MENU (Alt)
+            case 343 -> 91;                            // VK_LWIN
+            case 348 -> 165;                           // VK_RMENU (AltGr)
             default -> -1;
         };
     }
 
     /**
-     * テキスト入力GUIへの文字列送信。現在は金床のリネーム欄
-     * (AnvilMenu + ServerboundRenameItemPacket) に対応。
+     * テキスト入力。金床メニューはリネームパケット、それ以外は開いている
+     * Screen内のEditBoxを探してフォーカス+insertTextする
+     * (JEI/EMI検索・modフィルタ欄等の汎用経路)。
      */
     private static JsonObject typeText(JsonObject params) throws ApiError {
         LocalPlayer p = requirePlayer();
@@ -445,9 +487,151 @@ public final class GameOps {
             r.addProperty("text", text);
             return r;
         }
+        // 汎用EditBox: 画面内のEditBoxを列挙 (子孫コンテナまで潜る)
+        var mc = Minecraft.getInstance();
+        if (mc.screen != null) {
+            var boxes = new java.util.ArrayList<
+                net.minecraft.client.gui.components.EditBox>();
+            collectWidgets(mc.screen, net.minecraft.client.gui.components
+                .EditBox.class, boxes);
+            if (!boxes.isEmpty()) {
+                // index指定 or focused優先 or 先頭
+                net.minecraft.client.gui.components.EditBox target = null;
+                if (params.has("index"))
+                    target = boxes.get(params.get("index").getAsInt());
+                else {
+                    for (var b : boxes) if (b.isFocused()) { target = b; break; }
+                    if (target == null) target = boxes.get(0);
+                }
+                target.setFocused(true);
+                mc.screen.setFocused(target);
+                target.insertText(text);
+                JsonObject r = new JsonObject();
+                r.addProperty("target", "editbox");
+                r.addProperty("text", text);
+                r.addProperty("value", target.getValue());
+                return r;
+            }
+        }
         throw new ApiError("UNSUPPORTED",
-            "no supported text input open (menu: "
-                + p.containerMenu.getClass().getSimpleName() + ")");
+            "no text input target (menu: "
+                + p.containerMenu.getClass().getSimpleName()
+                + ", screen: " + (mc.screen == null ? "none"
+                    : mc.screen.getClass().getSimpleName()) + ")");
+    }
+
+    /** screen.read/screen.click/typeText共通のwidget再帰収集 */
+    private static <T extends net.minecraft.client.gui.components.events
+        .GuiEventListener> void collectWidgets(
+            net.minecraft.client.gui.components.events.ContainerEventHandler
+                root,
+            Class<T> cls, java.util.List<T> out) {
+        for (var c : root.children()) {
+            if (cls.isInstance(c)) out.add(cls.cast(c));
+            if (c instanceof net.minecraft.client.gui.components.events
+                .ContainerEventHandler ceh) collectWidgets(ceh, cls, out);
+        }
+    }
+
+    /**
+     * 開いているScreenのwidget一覧。button/EditBox/独自widgetを
+     * class名・テキスト・位置つきで返す — FTB Quests GUIやmod設定画面等
+     * menuを持たないScreenを操作する土台。
+     */
+    private static JsonObject screenRead() throws ApiError {
+        var mc = Minecraft.getInstance();
+        if (mc.screen == null)
+            throw new ApiError("NOT_FOUND", "no screen open");
+        var s = mc.screen;
+        JsonObject r = new JsonObject();
+        r.addProperty("screen", s.getClass().getName());
+        if (s.getTitle() != null)
+            r.addProperty("title", s.getTitle().getString());
+        JsonArray widgets = new JsonArray();
+        var flat = new java.util.ArrayList<
+            net.minecraft.client.gui.components.events.GuiEventListener>();
+        collectWidgets(s, net.minecraft.client.gui.components.events
+            .GuiEventListener.class, flat);
+        int i = 0;
+        for (var w : flat) {
+            JsonObject o = new JsonObject();
+            o.addProperty("index", i++);
+            o.addProperty("class", w.getClass().getName());
+            if (w instanceof net.minecraft.client.gui.components
+                .AbstractWidget aw) {
+                o.addProperty("x", aw.getX());
+                o.addProperty("y", aw.getY());
+                o.addProperty("w", aw.getWidth());
+                o.addProperty("h", aw.getHeight());
+                o.addProperty("active", aw.active);
+                o.addProperty("visible", aw.visible);
+                if (aw.getMessage() != null
+                    && !aw.getMessage().getString().isEmpty())
+                    o.addProperty("text", aw.getMessage().getString());
+            }
+            if (w instanceof net.minecraft.client.gui.components.EditBox eb)
+                o.addProperty("value", eb.getValue());
+            widgets.add(o);
+        }
+        r.add("widgets", widgets);
+        return r;
+    }
+
+    /**
+     * 開いているScreen内のwidgetをクリック。index (screen.readのindex) or
+     * text部分一致で対象を選び、中心座標でmouseClickedを打つ。
+     */
+    private static JsonObject screenClick(JsonObject params)
+        throws ApiError {
+        var mc = Minecraft.getInstance();
+        if (mc.screen == null)
+            throw new ApiError("NOT_FOUND", "no screen open");
+        var flat = new java.util.ArrayList<
+            net.minecraft.client.gui.components.events.GuiEventListener>();
+        collectWidgets(mc.screen, net.minecraft.client.gui.components.events
+            .GuiEventListener.class, flat);
+        net.minecraft.client.gui.components.events.GuiEventListener w = null;
+        if (params.has("index")) {
+            w = flat.get(params.get("index").getAsInt());
+        } else if (params.has("text")) {
+            String q = params.get("text").getAsString().toLowerCase();
+            for (var c : flat) {
+                if (c instanceof net.minecraft.client.gui.components
+                    .AbstractWidget aw && aw.getMessage() != null
+                    && aw.getMessage().getString().toLowerCase()
+                        .contains(q)) { w = c; break; }
+            }
+        } else {
+            throw new ApiError("BAD_REQUEST", "need index or text");
+        }
+        if (w == null)
+            throw new ApiError("NOT_FOUND", "no widget matches");
+        JsonObject r = new JsonObject();
+        r.addProperty("class", w.getClass().getName());
+        if (w instanceof net.minecraft.client.gui.components
+            .AbstractWidget aw) {
+            double cx = aw.getX() + aw.getWidth() / 2.0;
+            double cy = aw.getY() + aw.getHeight() / 2.0;
+            boolean ok = mc.screen.mouseClicked(cx, cy, 0);
+            r.addProperty("handled", ok);
+            r.addProperty("x", cx);
+            r.addProperty("y", cy);
+        } else {
+            // 非widget: mouseClicked(0,0,0)を委譲 (独自UIは内部座標変換する)
+            boolean ok = w.mouseClicked(0, 0, 0);
+            r.addProperty("handled", ok);
+        }
+        return r;
+    }
+
+    /** Screenを閉じる (shouldCloseOnEsc無視の強制close) */
+    private static JsonObject screenClose() {
+        var mc = Minecraft.getInstance();
+        JsonObject r = new JsonObject();
+        r.addProperty("was", mc.screen != null
+            ? mc.screen.getClass().getName() : null);
+        mc.setScreen(null);
+        return r;
     }
 
     /**

@@ -673,3 +673,29 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
   (radial/PauseScreen等) のクラス名を返す。GUIデバッグで有用。
 - 注意: EscはPauseScreenをトグルするので`screen`確認後に送信すること。
   `real`の`is_down`応答は非同期送信前の瞬間値 (実押下は数十ms後に反映)。
+
+### Screen/テキスト/未バインドキー ops (全実機検証済)
+- `screen_read`: 開いているScreenのwidget列挙 (CuriosScreenV2→
+  CuriosButton/RenderButton等、ChatScreen→EditBox検出)。
+- `screen_click`: index/text一致でwidget中心click — CuriosButtonで
+  InventoryScreen切替、SignEditScreen「完了」ボタンで閉鎖を確認。
+- `screen_close`: 強制setScreen(null)。
+- `type_text`拡張: 金床以外にScreen内EditBoxへ汎用insertText
+  (focused優先/index指定可)。実機: ChatScreenのEditBoxへ入力→
+  Enter→`<Rin> hello from type_text`がゲームチャットに送信確認。
+- `sign_write`実証: `use_item{x,y,z}`で看板右クリック→
+  `playerWhoMayEdit`権利付与→`ServerboundSignUpdatePacket`で
+  front_text=["Hello","from","Rin","2026"]書込確認。
+  ※看板編集権は「右クリックで付与→更新送信で消費」のワンショット。
+  setblock/他者設置の看板はnon-editableで拒否される (サーバーログ確認)。
+- **未バインドキーの仮バインド機構**: `key.ftbultimine`(key:'')に
+  F13-F24の空きkeysymを一時割当→keyPress注入→RELEASE時に復元。
+  実機: 仮バインド保持中にdig→FTB Ultimine発動で3x3 coal_ore全9個を
+  一撃採掘 (vein-mine)。
+- バグ修正: 仮バインドrelease復元漏れ / GLFW F13=302起点のずれ /
+  AWT VK_F13系(61440+, keybd_event範囲外)→Win32 VK(124-135)変換 /
+  real経路も未バインド対応 / Win32 VK値をOEM記号系含め全見直し。
+- `key.ftbquests.quests`はキー自体は届くがクエストデータ空のため
+  GUI未開放 (mod側の期待挙動。ATM9等の実データ環境で再確認要)。
+- Tinkers/soulbound系は現パックに本体modが無く検証対象外
+  (create_tinkers_compat/tinkersdelightのみ)。ATM9で要検証。

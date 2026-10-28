@@ -561,12 +561,72 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'screen_read',
+    {
+      description:
+        'List widgets of the currently open Screen (non-container GUIs ' +
+        'like FTB Quests, CuriosScreen, mod config screens). Returns ' +
+        'index/class/text/position per widget.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('screen.read', {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'screen_click',
+    {
+      description:
+        'Click a widget in the open Screen by index (from screen_read) ' +
+        'or text substring match. For buttons/labels in non-container GUIs.',
+      inputSchema: {
+        index: z.number().optional().describe('widget index from screen_read'),
+        text: z.string().optional()
+          .describe('substring match on widget text/label'),
+      },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('screen.click', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'screen_close',
+    {
+      description: 'Force-close the currently open Screen.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('screen.close', {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'type_text',
     {
       description:
-        'Type text into a supported text-input GUI. Currently: anvil rename ' +
-        'field while an anvil menu is open.',
-      inputSchema: { text: z.string() },
+        'Type text into a text input. Targets the anvil rename field ' +
+        'when an anvil menu is open, otherwise the first (or focused/' +
+        'indexed) EditBox in the open Screen — covers JEI/EMI search ' +
+        'boxes and mod filter fields.',
+      inputSchema: {
+        text: z.string(),
+        index: z.number().optional()
+          .describe('EditBox index when the screen has several'),
+      },
     },
     async (p) => {
       try {
