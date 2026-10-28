@@ -116,15 +116,57 @@ public final class QuestBridge {
         }
         o.add("tasks", tasks);
         JsonArray rewards = new JsonArray();
+        java.util.UUID selfUuid = net.minecraft.client.Minecraft
+            .getInstance().player != null
+                ? net.minecraft.client.Minecraft.getInstance()
+                    .player.getUUID() : null;
         for (Object rw : (Iterable<?>) target.getClass()
             .getMethod("getRewards").invoke(target)) {
             JsonObject ro = new JsonObject();
             ro.addProperty("type", rw.getClass().getSimpleName());
             ro.addProperty("title", titleOf(rw));
+            try {
+                ro.addProperty("id", idOf(rw));
+            } catch (Exception ignore) {}
+            if (td != null && selfUuid != null) {
+                try {
+                    ro.addProperty("claimed", (Boolean) td.getClass()
+                        .getMethod("isRewardClaimed", java.util.UUID.class,
+                            Class.forName(
+                                "dev.ftb.mods.ftbquests.quest.reward.Reward"))
+                        .invoke(td, selfUuid, rw));
+                } catch (Exception ignore) {}
+            }
             rewards.add(ro);
         }
         o.add("rewards", rewards);
         return o;
+    }
+
+    /**
+     * quest.claim: 報酬クレーム。rewardId指定→個別ClaimRewardMessage、
+     * 未指定→ClaimAllRewardsMessageをarchitectury経由で送信。
+     */
+    public static JsonObject claim(Long rewardId)
+            throws ReflectiveOperationException {
+        Object msg;
+        if (rewardId != null) {
+            Class<?> c = Class.forName(
+                "dev.ftb.mods.ftbquests.net.ClaimRewardMessage");
+            msg = c.getConstructor(long.class, boolean.class)
+                .newInstance(rewardId, true);
+        } else {
+            Class<?> c = Class.forName(
+                "dev.ftb.mods.ftbquests.net.ClaimAllRewardsMessage");
+            msg = c.getConstructor().newInstance();
+        }
+        Class<?> base = Class.forName(
+            "dev.architectury.networking.simple.BaseC2SMessage");
+        base.getMethod("sendToServer").invoke(msg);
+        JsonObject r = new JsonObject();
+        r.addProperty("sent", true);
+        if (rewardId != null) r.addProperty("reward_id", rewardId);
+        return r;
     }
 
     private static void addProgress(JsonObject o, Object td, long questId) {

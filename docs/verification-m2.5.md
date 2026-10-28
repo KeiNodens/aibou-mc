@@ -699,3 +699,32 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
   GUI未開放 (mod側の期待挙動。ATM9等の実データ環境で再確認要)。
 - Tinkers/soulbound系は現パックに本体modが無く検証対象外
   (create_tinkers_compat/tinkersdelightのみ)。ATM9で要検証。
+
+### FTB Quests 実データ検証 (全ループ実証済)
+- **最小クエスト定義**: `server/config/ftbquests/quests/chapters/tutorial.snbt`
+  に1章1クエスト (石集め: item task=丸石x8 → item reward=リンゴx2) を作成。
+  サーバー起動時`Loaded 1 chapters, 1 quests`で読込確認。
+  ※ロードパスは`config/ftbquests/quests/`で、`world/ftbquests/`は
+  プレイヤー進捗データ側。
+- `quest_list`/`quest_inspect`: 実データ返却 (タスク進捗0→8、
+  rewardの`id`+`claimed`フラグ追加済)。`claim`にはreward_id使用。
+- **GUI開放**: `key.ftbquests.quests`は未バインドのままだが、
+  **FTB Library sidebar経路で開放成功** — 
+  `screen_click{sidebar:"ftbquests"}`→`dev.ftb.mods.ftblibrary.ui.ScreenWrapper`
+  (QuestScreen) 開放。
+  - sidebar実装: `SidebarGroupGuiButton.onPress`は実マウスhover依存の
+    `mouseOver`を参照するため注入clickでは空振り → 
+    `SidebarButtonManager.INSTANCE`を反射で辿り`SidebarButton.onClicked`
+    を直接発火する`sidebar`パラメータを`screen_click`に追加。
+    `screen_read`は`sidebar[]`(id/group/x)を列挙。
+  - `screen_click`に`x,y`座標直接指定も追加 (`via:"coords"`) —
+    widgetツリー外の独自描画領域用。
+- **クエスト完了ループ**: `run_command give`で丸石8個付与→ItemTask自動検出
+  →`completed:true,progress:8` (ItemTaskはconsume_items=falseで
+  インベントリ検出式)。
+- **報酬クレーム**: `quest_claim{}`→ClaimAllRewardsMessage
+  (architectury BaseC2SMessage.sendToServerを反射呼出)→
+  サーバーが`minecraft:apple x2`をインベントリへ配布→`claimed:true`。
+  個別クレームは`reward_id`指定でClaimRewardMessageを送信。
+- ※再接続直後のquest_inspectがcompleted:falseを示すのはクライアント側
+  team data同期ラグ — 数秒待てば正しい値になる。

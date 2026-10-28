@@ -474,6 +474,27 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'quest_claim',
+    {
+      description:
+        'Claim FTB Quests rewards server-side. With reward_id claims that ' +
+        'reward (ids from quest_inspect); without it claims all pending ' +
+        'rewards (ClaimAllRewards).',
+      inputSchema: {
+        reward_id: z.number().optional()
+          .describe('reward id from quest_inspect rewards[].id'),
+      },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('quest.claim', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'container_close',
     {
       description: 'Close the currently open container menu.',
@@ -582,12 +603,17 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     'screen_click',
     {
       description:
-        'Click a widget in the open Screen by index (from screen_read) ' +
-        'or text substring match. For buttons/labels in non-container GUIs.',
+        'Click a widget in the open Screen by index (from screen_read), ' +
+        'text substring match, or raw x/y coordinates (for custom-drawn ' +
+        'clickable regions not in the widget tree, e.g. FTB sidebar icons).',
       inputSchema: {
         index: z.number().optional().describe('widget index from screen_read'),
         text: z.string().optional()
           .describe('substring match on widget text/label'),
+        x: z.number().optional().describe('raw screen x coordinate (with y)'),
+        y: z.number().optional().describe('raw screen y coordinate (with x)'),
+        sidebar: z.string().optional()
+          .describe('FTB Library sidebar button id substring (e.g. "ftbquests")'),
       },
     },
     async (p) => {

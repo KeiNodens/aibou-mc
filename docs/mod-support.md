@@ -120,7 +120,7 @@ aibou-mc (agent-mod + bridge) が各modコンテンツをどこまで操作で�
 | Integrated Dynamics | ロジック系 | GUI複雑。対象外寄り |
 | XNet / Pipez / Modular Routers | 搬送制御 | config GUI。低優先 |
 | Waystones | ワープGUI | ボタン選択式 — container.button経路で対応可能と推定 |
-| FTB Quests | クエスト/進捗API | `quest.list`/`quest.inspect` で章・タスク・報酬・started/completed を取得 (ClientQuestFile経由・リフレクションsoft-dep)。クエスト定義がパックに無い環境では synced:true・空リスト |
+| FTB Quests | クエスト/進捗API | 実データ全ループ検証済: `quest.list`/`quest.inspect` (章・タスク進捗・報酬id/claimed)、GUI開放は`screen_click{sidebar:"ftbquests"}`でQuestScreen到達 (FTB sidebarは実マウスhover依存のため`SidebarButtonManager`反射経路で発火。キー未バインドでも可)、ItemTaskはインベントリ検出で自動完了、`quest_claim`でClaimAllRewards/個別ClaimReward送信→報酬配布確認。クエスト定義がパックに無い環境では synced:true・空リスト |
 | JourneyMap | map/waypoint | mod連携案 (autonomy.md) — waypoint共有が本体候補 |
 | Simple Voice Chat | 音声 | 将来枠 (autonomy.md) |
 
@@ -219,6 +219,12 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
   実機: FTB Ultimineのvein-mine発動 (3x3石炭鉱石一撃)。
 - `real:true`の対応VKはA-Z/0-9/主要記号/ファンクション/修飾/ナビキー。
   scancode型・マウスボタン型のバインドは非対応 (UNSUPPORTED)。
-- 残gap: `mouse_handler`経由のボタン入力 (attack/use長押し) はuse_item等で
-  代替済だが、独自マウス操作を要求するmod GUIはscreen_click座標が必要。
-  現状widget中心クリックのみ (独自描画領域はindex指定の直接clickで対応)。
+- `screen_click`拡張 (2026-10-29): `{x,y}`座標直接指定 (widgetツリー外の
+  独自描画領域用、`via:"coords"`) と `{sidebar:"<id部分一致>"}`を追加。
+  FTB Library sidebarは`SidebarGroupGuiButton.onPress`が実マウスhover依存の
+  `mouseOver`を参照するため、注入clickでは発火できない —
+  `SidebarButtonManager`を反射で辿り`SidebarButton.onClicked`を直接呼ぶ。
+  `screen_read`は`sidebar[]`(id/group/x)を列挙する。
+- 残gap: 独自マウス操作を要求するmod GUIは座標click+sidebarで概ね塞いだが、
+  FTB LibraryのBaseScreen系 (QuestScreen等) はAbstractWidgetを持たず
+  中身のwidget列挙は空になる (quest APIが代替)。

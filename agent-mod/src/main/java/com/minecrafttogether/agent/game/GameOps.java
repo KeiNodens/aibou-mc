@@ -93,6 +93,7 @@ public final class GameOps {
             case "item.info" -> itemInfo(params);
             case "quest.list" -> questList();
             case "quest.inspect" -> questInspect(params);
+            case "quest.claim" -> questClaim(params);
             case "move.set" -> moveSet(params);
             case "move.stop" -> moveStop();
             case "key.list" -> keyList();
@@ -574,7 +575,48 @@ public final class GameOps {
             widgets.add(o);
         }
         r.add("widgets", widgets);
+        // FTB Library sidebar: widgetツリーに乗らない独自ボタン群を反射で列挙
+        JsonArray sb = sidebarButtons();
+        if (sb != null) r.add("sidebar", sb);
         return r;
+    }
+
+    /**
+     * FTB LibraryのSidebarButtonManagerからサイドバーボタン一覧を取得。
+     * mouseOver経由しか押せない独自ボタンなのでid+位置を返す。
+     * ftblibrary不在時はnull。
+     */
+    private static JsonArray sidebarButtons() {
+        try {
+            Class<?> mgr = Class.forName(
+                "dev.ftb.mods.ftblibrary.sidebar.SidebarButtonManager");
+            Object inst = mgr.getField("INSTANCE").get(null);
+            @SuppressWarnings("unchecked")
+            var groups = (java.util.List<Object>)
+                mgr.getMethod("getGroups").invoke(inst);
+            JsonArray out = new JsonArray();
+            for (Object g : groups) {
+                var gc = g.getClass();
+                String gid = String.valueOf(
+                    gc.getMethod("getId").invoke(g));
+                @SuppressWarnings("unchecked")
+                var buttons = (java.util.List<Object>)
+                    gc.getMethod("getButtons").invoke(g);
+                for (Object b : buttons) {
+                    var bc = b.getClass();
+                    JsonObject o = new JsonObject();
+                    o.addProperty("id", String.valueOf(
+                        bc.getMethod("getId").invoke(b)));
+                    o.addProperty("group", gid);
+                    o.addProperty("x",
+                        (int) bc.getMethod("getX").invoke(b));
+                    out.add(o);
+                }
+            }
+            return out;
+        } catch (Throwable t) {
+            return null;
+        }
     }
 
     /**
@@ -586,6 +628,57 @@ public final class GameOps {
         var mc = Minecraft.getInstance();
         if (mc.screen == null)
             throw new ApiError("NOT_FOUND", "no screen open");
+        // FTB Library sidebar: id部分一致でボタンを直接発火
+        // (通常クリックは実マウスhover依存のmouseOverを参照するため空振りする)
+        if (params.has("sidebar")) {
+            String q = params.get("sidebar").getAsString().toLowerCase();
+            try {
+                Class<?> mgr = Class.forName(
+                    "dev.ftb.mods.ftblibrary.sidebar.SidebarButtonManager");
+                Object inst = mgr.getField("INSTANCE").get(null);
+                @SuppressWarnings("unchecked")
+                var groups = (java.util.List<Object>)
+                    mgr.getMethod("getGroups").invoke(inst);
+                for (Object g : groups) {
+                    @SuppressWarnings("unchecked")
+                    var buttons = (java.util.List<Object>)
+                        g.getClass().getMethod("getButtons").invoke(g);
+                    for (Object b : buttons) {
+                        String id = String.valueOf(b.getClass()
+                            .getMethod("getId").invoke(b));
+                        if (id.toLowerCase().contains(q)) {
+                            JsonObject rs = new JsonObject();
+                            rs.addProperty("id", id);
+                            b.getClass().getMethod("onClicked",
+                                boolean.class).invoke(b,
+                                    net.minecraft.client.gui.screens
+                                        .Screen.hasShiftDown());
+                            rs.addProperty("clicked", true);
+                            return rs;
+                        }
+                    }
+                }
+                throw new ApiError("NOT_FOUND",
+                    "no sidebar button: " + q);
+            } catch (ApiError e) {
+                throw e;
+            } catch (Throwable t) {
+                throw new ApiError("UNSUPPORTED",
+                    "ftblibrary sidebar unavailable");
+            }
+        }
+        // 座標直接指定: widgetツリーに載らない独自描画領域 (FTB sidebar等) 用
+        if (params.has("x") && params.has("y")) {
+            double px = params.get("x").getAsDouble();
+            double py = params.get("y").getAsDouble();
+            boolean ok = mc.screen.mouseClicked(px, py, 0);
+            JsonObject r0 = new JsonObject();
+            r0.addProperty("handled", ok);
+            r0.addProperty("x", px);
+            r0.addProperty("y", py);
+            r0.addProperty("via", "coords");
+            return r0;
+        }
         var flat = new java.util.ArrayList<
             net.minecraft.client.gui.components.events.GuiEventListener>();
         collectWidgets(mc.screen, net.minecraft.client.gui.components.events
@@ -2009,6 +2102,19 @@ public final class GameOps {
             throw new ApiError("UNSUPPORTED", "quest data unavailable: " + e.getMessage());
         } catch (IllegalArgumentException | IllegalStateException e) {
             throw new ApiError("NOT_FOUND", e.getMessage());
+        }
+    }
+
+    private static JsonObject questClaim(JsonObject params) throws ApiError {
+        if (!QuestBridge.isAvailable())
+            throw new ApiError("UNSUPPORTED", "ftbquests not loaded");
+        try {
+            Long id = params.has("reward_id")
+                ? params.get("reward_id").getAsLong() : null;
+            return QuestBridge.claim(id);
+        } catch (ReflectiveOperationException e) {
+            throw new ApiError("UNSUPPORTED",
+                "quest claim unavailable: " + e.getMessage());
         }
     }
 

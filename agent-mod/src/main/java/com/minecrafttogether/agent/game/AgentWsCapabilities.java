@@ -42,6 +42,7 @@ public final class AgentWsCapabilities {
             "item.info",
             "quest.list",
             "quest.inspect",
+            "quest.claim",
             "move.set",
             "move.stop",
             "key.list",
