@@ -61,6 +61,12 @@ Live environment (this workspace): Forge server `server/run.bat` (Windows —
 Key live checks: `get_state` (in-world?), `bot_status` (WS connected?),
 `scan_area`, `task_status`/`task_result`, `get_chat` (runner loops?).
 
+## Publishing
+
+Remote `origin` → `KeiNodens/aibou-mc` (public). Before pushing, run the
+privacy checklist in `docs/publish-checklist.md` — commit author emails and
+player names have needed scrubbing in the past.
+
 ## Compile-only mod deps
 
 `agent-mod/libs/` jarはgitignore（再配布不可）。`build.gradle`の`blank:xxx`依存は
