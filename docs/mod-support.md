@@ -155,10 +155,10 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
 | # | ケース | 状態 | 詳細・対処 |
 |---|--------|------|-----------|
 | 1 | 充電式ツールが無充電で掘れない | ✅ | `DigTask`にホットバー最適ツール自動選択を追加。`isCorrectToolForDrops`を速度より優先するため無充電電動ツール (Mekanism disassembler等) は自然に除外。実機: 無充電disassemblerが石1個で60s timeout → 修正後certus pickaxeへ自動切替 |
-| 2 | `equip` がhotbar(0-8)のみ | ⚠️ | 防具スロット・オフハンド・Curios系スロットに装備不可。modのジェットパック/バックパック/指輪を装備する手段が無い (container経由でarmorスロットをclick操作すれば迂回可能) |
-| 3 | `use_item` にスニーク修飾なし | ⚠️ | sneak+右クリ/左クリでモード切替するツール (Mekanism configurator・disassemblerのモード、各種wrench) が切替えられない。`sneak`パラメータ追加で対応可能 |
-| 4 | NBTバリアント識別不可 | ⚠️ | 同idでも充電量・エンチャント・Tinkers素材が異なる。`find_item`/`countItems`はid一致のみでNBTを見ない |
-| 5 | `countItems` DROP_ALIASがvanillaのみ | ⚠️ | mod鉱石は `raw_X/shard/gem/crystal/fragment/dust` ヒューリスティックで推測。`ad_astra:moon_iron_ore`→`minecraft:raw_iron` のようなクロスnamespaceドロップは数えられない。fortune/silk touchは不考慮 |
+| 2 | `equip` がhotbar(0-8)のみ | ✅ | `equip{item, slot_name:"head|chest|legs|feet|offhand"}` でインベントリ内のitemをclick経路で装備。`slot_name`単独で現在装備の読み取り。実機: iron_helmet→head確認 (Curios系スロットは別APIなので別途) |
+| 3 | `use_item` にスニーク修飾なし | ✅ | `use_item{sneak:true}`/`hold_ticks`両対応。PRESS/RELEASE_SHIFT_KEYパケット+client-side setShiftKeyDown。実機: 通常use→チェストGUI開放 vs sneak+use→GUI回避を確認 |
+| 4 | NBTバリアント識別不可 | ✅部分 | `item.info` op新設: 耐久・Forge ENERGY/FLUID capability・エンチャ・NBTキー要約を返す。実機: 無充電disassemblerで`energy:{stored:0,max:400000}`を取得 (find_itemの絞り込み自体はid一致のまま) |
+| 5 | `countItems` DROP_ALIASがvanillaのみ | ✅部分 | `_ore`ブロックのドロップ候補を全namespace走査で拾うよう拡張 (`ad_astra:moon_iron_ore`→`minecraft:raw_iron`系を捕捉)。fortune/silk touchは依然不考慮 |
 | 6 | AoE採掘ツール (3x3ハンマー等) | ? | 起点ブロックは掘れる。範囲拡張はサーバー側ツールロジック (mineBlock等) 依存 — 要個別検証 |
 | 7 | Tinkersツールの素give | ? | `tconstruct:pickaxe` は素材NBTが無いと性能ゼロ相当の可能性。素材指定NBT付きgiveで要検証 |
 | 8 | 捨てられない/動かせないアイテム | ? | soulbound・カーソルバインド系は`toss`/container操作がサーバー側で拒否され得る。`container_click`の`after`返却で検知可能 |
@@ -173,5 +173,4 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
   タイミング — 選定基準を`isCorrectToolForDrops`/`getDestroySpeed`実測値に
   寄せておけばmodの内部ロジックに介入せず済む。
 - ツール「モード」のようなNBT状態依存の挙動は id では識別できない。
-  必要になれば`item_info`系opでNBT要約 (charge/energy/mode/damage) を
-  返す拡張が考えられる。
+  `item.info`でNBTキー・energy等の要約を返す土台は実装済。

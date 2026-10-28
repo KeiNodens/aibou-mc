@@ -171,7 +171,10 @@ trade), `use_item` incl. charge-and-release (`hold_ticks`), Jade-powered
 (damage/proximity interrupts + Baritone retreat), persistent work journal
 (`work_journal`/`work_checkpoint` — generation-independent), schematic
 ingestion (`schematic_inspect`/`schematic_plan` for .litematic/.schem), and
-FTB Quests progress ops (`quest_list`/`quest_inspect`). Not done:
+FTB Quests progress ops (`quest_list`/`quest_inspect`), armor/offhand equip
+(`equip{item,slot_name}`), sneak-modified use (`use_item{sneak}`), item state
+inspection (`item_info` — energy/durability/enchants/NBT), and dig
+auto-tool-selection. Not done:
 positive-path `give`/`come_here` tests, Muse host connection, long-duration
 soak.
 

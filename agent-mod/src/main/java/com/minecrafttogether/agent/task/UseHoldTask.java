@@ -13,13 +13,20 @@ import net.minecraft.world.InteractionHand;
 public class UseHoldTask extends AgentTask {
     private final InteractionHand hand;
     private final int holdTicks;
+    private final boolean sneak;
     private int t = 0;
     private boolean started = false;
 
     public UseHoldTask(String id, InteractionHand hand, int holdTicks) {
+        this(id, hand, holdTicks, false);
+    }
+
+    public UseHoldTask(String id, InteractionHand hand, int holdTicks,
+            boolean sneak) {
         super(id);
         this.hand = hand;
         this.holdTicks = Math.max(1, holdTicks);
+        this.sneak = sneak;
     }
 
     @Override
@@ -36,6 +43,8 @@ public class UseHoldTask extends AgentTask {
         if (!started) {
             // 使用キーを押下。main handで使えなければvanilla経路でoffhandに
             // フォールスルーする (実入力と同じ優先度)
+            if (sneak)
+                com.minecrafttogether.agent.game.GameOps.beginSneak(p);
             mc.options.keyUse.setDown(true);
             started = true;
             return;
@@ -57,6 +66,8 @@ public class UseHoldTask extends AgentTask {
     private void release(Minecraft mc, LocalPlayer p) {
         mc.options.keyUse.setDown(false);
         if (p.isUsingItem()) mc.gameMode.releaseUsingItem(p);
+        if (sneak)
+            com.minecrafttogether.agent.game.GameOps.endSneak(p);
     }
 
     private void finish(String note) {

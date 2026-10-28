@@ -168,10 +168,13 @@ public class MineTask extends AgentTask {
             String core = base.getPath()
                 .replace("deepslate_", "")
                 .replace("_ore", "");
-            for (String cand : List.of("raw_" + core, core, core + "_shard",
-                    core + "_gem", core + "_crystal", core + "_fragment", core + "_dust")) {
-                ResourceLocation id = ResourceLocation.tryParse(base.getNamespace() + ":" + cand);
-                if (id != null && BuiltInRegistries.ITEM.containsKey(id)) ids.add(id);
+            var wantPaths = Set.of("raw_" + core, core, core + "_shard",
+                core + "_gem", core + "_crystal", core + "_fragment",
+                core + "_dust");
+            // namespace横断で探す (ad_astra:moon_iron_ore→minecraft:raw_iron
+            // のようなクロスnamespaceドロップを拾うため、全idのpathを照合)
+            for (ResourceLocation id : BuiltInRegistries.ITEM.keySet()) {
+                if (wantPaths.contains(id.getPath())) ids.add(id);
             }
         }
         return ids;

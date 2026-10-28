@@ -615,3 +615,16 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
 - 残gapは docs/mod-support.md「mod追加アイテム起因のケース監査」参照
   (equip=hotbar限定・sneak修飾無し・NBT識別不可・countItemsの
   クロスnamespace・AoE/Tinkers未検証等)。
+
+### 監査gap対応 (全実機検証済)
+- `equip` armor/offhand: `equip{item:"minecraft:iron_helmet",slot_name:"head"}`
+  → `equipped:true`、読み戻しも確認。インベントリ内itemを
+  container click経路でarmorスロットに移動 (Curios系は別APIで今後)。
+- `use_item` sneak修飾: `sneak:true`でPRESS/RELEASE_SHIFT_KEYを挟む。
+  実機: 通常use→チェストGUI開放(`container_id:1`) vs
+  sneak+use→GUI回避(`container_id:0`)の対比を確認。
+- `item.info` 新op: 耐久・Forge ENERGY/FLUID・エンチャ・NBTキー要約。
+  実機: 無充電disassembler → `energy:{stored:0,max:400000}`、
+  日本語名「原子分解機」取得。mod道具の状態が見える化できた。
+- `countItems`クロスnamespace: `_ore`のドロップ候補 (raw_X/shard/gem等)
+  を全namespace走査に拡張 (ad_astra:moon_iron_ore→minecraft:raw_iron型)。

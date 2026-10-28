@@ -88,6 +88,7 @@ public final class GameOps {
             case "waypoint.get" -> waypointGet(params);
             case "waypoint.list" -> waypointList();
             case "waypoint.del" -> waypointDel(params);
+            case "item.info" -> itemInfo(params);
             case "quest.list" -> questList();
             case "quest.inspect" -> questInspect(params);
             case "move.set" -> moveSet(params);
@@ -182,6 +183,10 @@ public final class GameOps {
 
     private static JsonObject equip(JsonObject params) throws ApiError {
         LocalPlayer p = requirePlayer();
+        // armor/offhand系: equip {item:"modid:name", slot_name:"head|chest|legs|feet|offhand"}
+        if (params.has("slot_name")) {
+            return equipWearable(p, params);
+        }
         int slot = params.get("slot").getAsInt();
         if (slot < 0 || slot > 8) throw new ApiError("BAD_REQUEST", "slot must be 0-8 (hotbar)");
         p.getInventory().selected = slot;
@@ -190,6 +195,57 @@ public final class GameOps {
             p.connection.send(new net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket(slot));
         JsonObject r = new JsonObject();
         r.addProperty("slot", slot);
+        return r;
+    }
+
+    // プレイヤーインベントリmenu(containerId 0)のスロット番号
+    private static final Map<String, Integer> WEAR_SLOTS = Map.of(
+        "head", 5, "chest", 6, "legs", 7, "feet", 8, "offhand", 45);
+
+    /** armor/offhandスロットへ、インベントリ内の指定itemをclick経路で装備 */
+    private static JsonObject equipWearable(LocalPlayer p, JsonObject params)
+            throws ApiError {
+        String slotName = params.get("slot_name").getAsString().toLowerCase();
+        Integer target = WEAR_SLOTS.get(slotName);
+        if (target == null)
+            throw new ApiError("BAD_REQUEST",
+                "slot_name must be head|chest|legs|feet|offhand");
+        if (!params.has("item")) {
+            // item省略時は現在の装備を返す (read)
+            ItemStack cur = p.containerMenu.getSlot(target).getItem();
+            JsonObject r = new JsonObject();
+            r.addProperty("slot", slotName);
+            r.addProperty("item", cur.isEmpty() ? null
+                : BuiltInRegistries.ITEM.getKey(cur.getItem()).toString());
+            return r;
+        }
+        String want = params.get("item").getAsString();
+        // インベントリ内から対象itemを探す (hotbar 0-8 / main 9-35 → menu slot)
+        int src = -1;
+        var inv = p.getInventory();
+        for (int i = 0; i < 36; i++) {
+            ItemStack s = inv.getItem(i);
+            if (s.isEmpty()) continue;
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(s.getItem());
+            if (id != null && id.toString().equals(want)) { src = i; break; }
+        }
+        if (src < 0)
+            throw new ApiError("NOT_FOUND", "item not in inventory: " + want);
+        int srcMenu = src < 9 ? 36 + src : src; // hotbar→36-44, main→9-35
+        Minecraft mc = Minecraft.getInstance();
+        // pickup → 対象slotへplace (占有済みならswapになる)
+        mc.gameMode.handleInventoryMouseClick(0, srcMenu, 0,
+            net.minecraft.world.inventory.ClickType.PICKUP, p);
+        mc.gameMode.handleInventoryMouseClick(0, target, 0,
+            net.minecraft.world.inventory.ClickType.PICKUP, p);
+        ItemStack now = p.containerMenu.getSlot(target).getItem();
+        JsonObject r = new JsonObject();
+        r.addProperty("slot", slotName);
+        r.addProperty("item", now.isEmpty() ? null
+            : BuiltInRegistries.ITEM.getKey(now.getItem()).toString());
+        r.addProperty("equipped", !now.isEmpty()
+            && BuiltInRegistries.ITEM.getKey(now.getItem()).toString()
+                .equals(want));
         return r;
     }
 
@@ -339,34 +395,61 @@ public final class GameOps {
             && params.get("hand").getAsString().equalsIgnoreCase("off")
             ? InteractionHand.OFF_HAND : InteractionHand.MAIN_HAND;
         JsonObject r = new JsonObject();
+        boolean sneak = params.has("sneak") && params.get("sneak").getAsBoolean();
         // hold_ticks指定: 使用を保持してN tick後にrelease (弓・トライデント・盾等)
         if (params.has("hold_ticks") && !params.has("x")) {
             UseHoldTask t = new UseHoldTask(
                 TaskManager.get().newId("use"),
-                hand, params.get("hold_ticks").getAsInt());
+                hand, params.get("hold_ticks").getAsInt(), sneak);
             TaskManager.get().register(t);
             r.addProperty("task_id", t.id);
             return r;
         }
-        if (params.has("x")) {
-            BlockPos pos = new BlockPos(
-                params.get("x").getAsInt(),
-                params.get("y").getAsInt(),
-                params.get("z").getAsInt());
-            Direction face = Direction.UP;
-            if (params.has("face")) {
-                try { face = Direction.byName(params.get("face").getAsString()); }
-                catch (Exception ignored) {}
+        // sneak修飾: サーバーにはCommandPacket・クライアント側判定にはsetShiftKeyDown。
+        // wrenchモード切替や「sneak+useで設置」挙動をmodツールに発火させるため。
+        if (sneak) beginSneak(p);
+        try {
+            if (params.has("x")) {
+                BlockPos pos = new BlockPos(
+                    params.get("x").getAsInt(),
+                    params.get("y").getAsInt(),
+                    params.get("z").getAsInt());
+                Direction face = Direction.UP;
+                if (params.has("face")) {
+                    try { face = Direction.byName(params.get("face").getAsString()); }
+                    catch (Exception ignored) {}
+                }
+                Vec3 hit = Vec3.atCenterOf(pos).relative(face, 0.5);
+                var res = mc.gameMode.useItemOn(p, hand, new BlockHitResult(hit, face, pos, false));
+                r.addProperty("used_on", pos.toShortString());
+                r.addProperty("result", res.toString().toLowerCase());
+            } else {
+                var res = mc.gameMode.useItem(p, hand);
+                r.addProperty("result", res.toString().toLowerCase());
             }
-            Vec3 hit = Vec3.atCenterOf(pos).relative(face, 0.5);
-            var res = mc.gameMode.useItemOn(p, hand, new BlockHitResult(hit, face, pos, false));
-            r.addProperty("used_on", pos.toShortString());
-            r.addProperty("result", res.toString().toLowerCase());
-        } else {
-            var res = mc.gameMode.useItem(p, hand);
-            r.addProperty("result", res.toString().toLowerCase());
+        } finally {
+            if (sneak) endSneak(p);
         }
+        if (sneak) r.addProperty("sneak", true);
         return r;
+    }
+
+    public static void beginSneak(LocalPlayer p) {
+        p.setShiftKeyDown(true);
+        if (p.connection != null)
+            p.connection.send(new net.minecraft.network.protocol.game
+                .ServerboundPlayerCommandPacket(p,
+                    net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket
+                        .Action.PRESS_SHIFT_KEY));
+    }
+
+    public static void endSneak(LocalPlayer p) {
+        p.setShiftKeyDown(false);
+        if (p.connection != null)
+            p.connection.send(new net.minecraft.network.protocol.game
+                .ServerboundPlayerCommandPacket(p,
+                    net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket
+                        .Action.RELEASE_SHIFT_KEY));
     }
 
     /**
@@ -1244,6 +1327,79 @@ public final class GameOps {
             } catch (ReflectiveOperationException | NoClassDefFoundError e) {
                 r.addProperty("journeymap_error", e.getMessage());
             }
+        }
+        return r;
+    }
+
+    /**
+     * 手持ち/指定スロットのアイテム詳細。mod道具の充電量・耐久・エンチャ・
+     * NBTキーなど「同idでも挙動が変わる」状態を要約して返す。
+     * slot: 省略時はmainhand。0-8=hotbar, 9-35=main inventory
+     */
+    private static JsonObject itemInfo(JsonObject params) throws ApiError {
+        LocalPlayer p = requirePlayer();
+        var inv = p.getInventory();
+        int slot = params.has("slot") ? params.get("slot").getAsInt()
+            : inv.selected;
+        if (slot < 0 || slot > 35)
+            throw new ApiError("BAD_REQUEST", "slot must be 0-35");
+        ItemStack s = inv.getItem(slot);
+        JsonObject r = new JsonObject();
+        r.addProperty("slot", slot);
+        if (s.isEmpty()) { r.addProperty("empty", true); return r; }
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(s.getItem());
+        r.addProperty("id", id != null ? id.toString() : "unknown");
+        r.addProperty("count", s.getCount());
+        r.addProperty("name", s.getHoverName().getString());
+        if (s.isDamageableItem()) {
+            JsonObject d = new JsonObject();
+            d.addProperty("damage", s.getDamageValue());
+            d.addProperty("max", s.getMaxDamage());
+            r.add("durability", d);
+        }
+        // Forge ENERGY capability (電動ツール・セル等の充電量)
+        try {
+            s.getCapability(
+                net.minecraftforge.common.capabilities.ForgeCapabilities.ENERGY)
+                .ifPresent(e -> {
+                    JsonObject en = new JsonObject();
+                    en.addProperty("stored", e.getEnergyStored());
+                    en.addProperty("max", e.getMaxEnergyStored());
+                    r.add("energy", en);
+                });
+        } catch (Exception ignore) {}
+        // fluid capability (タンク内蔵ツール)
+        try {
+            s.getCapability(
+                net.minecraftforge.common.capabilities.ForgeCapabilities.FLUID_HANDLER_ITEM)
+                .ifPresent(f -> {
+                    var fs = f.getFluidInTank(0);
+                    if (!fs.isEmpty()) {
+                        JsonObject fl = new JsonObject();
+                        fl.addProperty("fluid",
+                            BuiltInRegistries.FLUID.getKey(fs.getFluid()).toString());
+                        fl.addProperty("amount", fs.getAmount());
+                        fl.addProperty("capacity", f.getTankCapacity(0));
+                        r.add("fluid", fl);
+                    }
+                });
+        } catch (Exception ignore) {}
+        // エンチャント一覧
+        var ench = net.minecraft.world.item.enchantment.EnchantmentHelper
+            .getEnchantments(s);
+        if (!ench.isEmpty()) {
+            JsonArray ea = new JsonArray();
+            ench.forEach((e, lvl) -> {
+                var k = BuiltInRegistries.ENCHANTMENT.getKey(e);
+                ea.add((k != null ? k.toString() : "?") + " " + lvl);
+            });
+            r.add("enchantments", ea);
+        }
+        // NBTトップレベルキー (modのmode等を見る手がかり)
+        if (s.hasTag()) {
+            JsonArray keys = new JsonArray();
+            s.getTag().getAllKeys().forEach(keys::add);
+            r.add("nbt_keys", keys);
         }
         return r;
     }

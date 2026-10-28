@@ -38,6 +38,7 @@ public final class AgentWsCapabilities {
             "waypoint.get",
             "waypoint.list",
             "waypoint.del",
+            "item.info",
             "quest.list",
             "quest.inspect",
             "move.set",

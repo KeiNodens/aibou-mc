@@ -145,6 +145,10 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
           .min(1)
           .optional()
           .describe('hold the use for N ticks then release (bow draw, trident, shield). returns task_id'),
+        sneak: z
+          .boolean()
+          .optional()
+          .describe('perform the use while sneaking (wrench/mode-switch tools that need sneak+use)'),
       },
     },
     async (a) => {
@@ -710,12 +714,38 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   server.registerTool(
     'equip',
     {
-      description: 'Select a hotbar slot (0-8) as the held item.',
-      inputSchema: { slot: z.number().int().min(0).max(8) },
+      description:
+        'Select a hotbar slot (0-8) as the held item, OR equip an item into ' +
+        'an armor/offhand slot: {item:"modid:name", slot_name:"head|chest|' +
+        'legs|feet|offhand"}. slot_name without item reports what is worn.',
+      inputSchema: {
+        slot: z.number().int().min(0).max(8).optional(),
+        item: z.string().optional().describe('registry id to equip into a wear slot'),
+        slot_name: z.enum(['head', 'chest', 'legs', 'feet', 'offhand']).optional(),
+      },
+    },
+    async (a) => {
+      try {
+        return json(await mod.call('equip', a));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'item_info',
+    {
+      description:
+        'Inspect an inventory item: durability, Forge energy/fluid charge, ' +
+        'enchantments, top-level NBT keys — the state that same-id mod items ' +
+        'differ by (charge, mode, damage). Slot: 0-8 hotbar, 9-35 inventory ' +
+        '(default: held slot).',
+      inputSchema: { slot: z.number().int().min(0).max(35).optional() },
     },
     async ({ slot }) => {
       try {
-        return json(await mod.call('equip', { slot }));
+        return json(await mod.call('item.info', slot === undefined ? {} : { slot }));
       } catch (e) {
         return err(e);
       }
