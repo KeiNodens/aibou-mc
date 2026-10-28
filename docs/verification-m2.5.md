@@ -353,3 +353,25 @@ path不達の巡回はBaritone側が終了しないため、タスクが無限ru
 - `use_item` の設置: クリック面がreplaceable/airだと鯖が拒否・位置がずれることがある (回復不能ではないが座標確認推奨)
 - peacefulではhungerが減らず食事できない (ゲーム仕様)
 - Phase 2以降 (機械GUI/自動化) はmachine定義JSON+汎用slot操作で対応予定 — design §5 参照
+
+## 追記: Phase 2 機械GUI (`process_in_machine` + machine定義JSON)
+
+`machines/<menu_id>.json` でinput/output/fuelスロットを宣言し、skillが読み込む。定義が無いmenuはヒューリスティック推定 (container_idxで機械/プレイヤー領域を分離、slot_class名にvirtual/output/fuel等の手がかりを利用)。
+
+### 実機検証 (フル262mod環境)
+
+| 検証 | 結果 |
+|---|---|
+| `mekanism:enrichment_chamber` menu構造調査 | slot 0,1=virtual (energy/upgrade), 2=input, 3=output, 4=extra. `container_idx` で機械(0-4)とプレイヤー(5+)を正しく分離 |
+| quick_move自動振り分け | プレイヤーinv→raw_tinをquick_moveで機械input slot 2へ自動振り分け |
+| 機械への電力供給 | `mekanism:creative_energy_cube` (config依存で出力せず) / `ae2:creative_energy_cell` では不通 → **`energizedpower:creative_battery_box` をsetblockで設置したら全方向FE給電で加工開始**。mod間のFE互換はブロック依存 |
+| `process_in_machine` enrichment_chamber (定義経由) | open→投入→poll→`tin_dust`回収→chat報告「tin_dust を4個作ったよ (定義slot)」 全自動 |
+| `process_in_machine` furnace (定義経由, input+fuel) | raw_tin+coal投入→`tin_ingot`回収 全自動 |
+| 出力アイテムIDの非一致 | 依頼`mekanism:raw_tin`→成果`thermal:tin_dust`/`thermal:tin_ingot` — skillは実際の出力slot中身を拾う方式で対応済み |
+
+### 判明した制約
+
+- **機械の電力はmod依存**: Mekanism機械は外部FE供給が必要で、供給ブロックとの互換は実機で要確認。skill側は加工が進まない場合timeoutで「入れたまま」を報告 (raw_tinは機械内に残る)
+- virtual slot (energy/upgrade等) への意図しない投入を防ぐためヒューリスティックでは `slot_class` に `virtual` を含むslotを除外
+- ヒューリスティックはクラス名依存 — Mekanismのように全slotが汎用クラスの機械では役割分解が弱い。確実性が必要な機械は `machines/*.json` に定義を足す運用
+- `menu_id` は `container.read` で実測するのが確実 (ブロックIDと一致しない場合あり)

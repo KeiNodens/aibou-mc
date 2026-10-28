@@ -419,12 +419,29 @@ public final class GameOps {
         ItemStack carried = menu.getCarried();
         ResourceLocation carriedId = BuiltInRegistries.ITEM.getKey(carried.getItem());
         r.addProperty("carried", carried.isEmpty() ? null : carriedId + " x" + carried.getCount());
+        // slotが属するContainer (機械inv / player inv等) をインスタンス単位でグループ化。
+        // 機械GUIでは machine側containerとplayer invが別オブジェクト — 定義JSONなしで
+        // input/output領域の自動推定が可能になる。mod側slotクラス名も併記する。
+        java.util.Map<net.minecraft.world.Container, Integer> containers =
+            new java.util.IdentityHashMap<>();
+        int[] nextIdx = {0};
         JsonArray slots = new JsonArray();
         for (int i = 0; i < menu.slots.size(); i++) {
             Slot s = menu.slots.get(i);
             ItemStack st = s.getItem();
             JsonObject o = new JsonObject();
             o.addProperty("slot", i);
+            net.minecraft.world.Container cont = s.container;
+            Integer cidx = containers.get(cont);
+            if (cidx == null) {
+                cidx = nextIdx[0]++;
+                containers.put(cont, cidx);
+            }
+            o.addProperty("container_idx", cidx);
+            String cls = s.getClass().getSimpleName();
+            if (!cls.equals("Slot") && !cls.equals("ResultSlot")) {
+                o.addProperty("slot_class", cls);
+            }
             if (st.isEmpty()) {
                 o.addProperty("empty", true);
             } else {
@@ -435,6 +452,16 @@ public final class GameOps {
             slots.add(o);
         }
         r.add("slots", slots);
+        // 各containerのslot数 (大きい方がplayer inv側とみなせる)
+        JsonObject contCounts = new JsonObject();
+        int[] counts = new int[nextIdx[0]];
+        for (int i = 0; i < menu.slots.size(); i++) {
+            counts[containers.get(menu.slots.get(i).container)]++;
+        }
+        for (int i = 0; i < counts.length; i++) {
+            contCounts.addProperty(String.valueOf(i), counts[i]);
+        }
+        r.add("container_sizes", contCounts);
         return r;
     }
 

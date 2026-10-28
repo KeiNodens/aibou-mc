@@ -1,0 +1,7 @@
+{
+  "menu_id": "mekanism:enrichment_chamber",
+  "block": "mekanism:enrichment_chamber",
+  "input": [2],
+  "output": [3],
+  "notes": "slots 0,1 are virtual (energy item/upgrade). powered externally (FE). discovered via quick_move routing + live run"
+}

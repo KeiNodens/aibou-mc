@@ -1,0 +1,8 @@
+{
+  "menu_id": "minecraft:smoker",
+  "block": "minecraft:smoker",
+  "input": [0],
+  "fuel": [1],
+  "output": [2],
+  "notes": "same slot layout as furnace"
+}

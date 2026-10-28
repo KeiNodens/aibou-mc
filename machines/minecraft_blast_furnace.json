@@ -1,0 +1,8 @@
+{
+  "menu_id": "minecraft:blast_furnace",
+  "block": "minecraft:blast_furnace",
+  "input": [0],
+  "fuel": [1],
+  "output": [2],
+  "notes": "same slot layout as furnace"
+}
