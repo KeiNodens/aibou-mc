@@ -8,16 +8,16 @@
 
 | 種別 | 例 | 置き換え先 |
 |---|---|---|
-| 実名・プレイヤー名 | `Player` (chat例・検証ログ) | `Player` 等の一般名 |
-| コミットauthorメール | `personal-mail@example.com` | GitHub noreply `211226690+KeiNodens@users.noreply.github.com` |
+| 実名・プレイヤー名 | 本名・本名のローマ字表記 (chat例・検証ログ) | `Player` 等の一般名 |
+| コミットauthorメール | 個人メールアドレス (実値) | GitHub noreply `211226690+KeiNodens@users.noreply.github.com` |
 | Windowsユーザーパス | `C:\Users\<name>`、`/c/dev` | 相対パス・`<path>` 等 |
 | プライベートインフラ | Tailscale IP `100.x`、tailnet名、ホスト名 | `<host>.<tailnet>` 等のプレースホルダ |
 | アカウント識別子 | Prism `profile.id`、MC UUID | 省略 or `xxxx...` |
 | シークレット | `BRIDGE_TOKEN` の実値、APIキー、webhook | コミット禁止 (env var名のみ可) |
 
-`Rin`/`ホストLLM`/`Muse` はプロジェクトのbot名・連携先名であり個人情報ではない。
-「ユーザーのMuseの名前がホストLLM」等の一人称・所有表現は「連携先をホストLLMとする前提」
-のようにプロジェクト記述へ言い換える。
+`Rin` はbotの製品名 (デフォルト表示名) として使用可。ただし開発者の実名や、
+個人の相棒としての固有名の言及は `プレイヤー` / `ホストLLM` 等へ一般化する。
+一人称・所有表現もプロジェクト記述へ言い換える。
 
 ## 2. 検査コマンド
 
