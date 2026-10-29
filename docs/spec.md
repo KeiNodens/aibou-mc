@@ -2,7 +2,7 @@
 
 - バージョン: 0.2 (review-2026-10-27.md 指摘反映)
 - 作成日: 2026-10-27
-- 対象読者: 実装者 (Devin/プレイヤー) および LLMエージェント (ホストLLM)
+- 対象読者: 実装者および LLMエージェント (MCPホスト)
 
 ## 1. 目的
 
@@ -20,10 +20,10 @@ mod環境のMinecraft Java版 1.20.1 (Forge 47.4.28) のワールドを、LLM駆
 
 | 用語 | 意味 |
 |---|---|
-| System2 | LLM側の思考・計画層。Muse「ホストLLM」などMCPクライアントが担う |
+| System2 | LLM側の思考・計画層。Muse などMCPクライアントが担う |
 | System1 | 高速実行層。移動・採掘・戦闘反射など即応性が要る処理 |
 | agent-mod | 第2Minecraftクライアントに導入する自作Forge mod。WebSocket APIを公開する |
-| bridge | MCPサーバー。agent-modとMCPクライアント (ホストLLM) の間を繋ぐNode/TypeScriptプロセス |
+| bridge | MCPサーバー。agent-modとMCPクライアントの間を繋ぐNode/TypeScriptプロセス |
 | 技能 (skill) | bridge側に置く複合動作の単位。gather・craft・follow 等 |
 | パック | mod群の構成。dev=軽量検証用、prod=本番262mod |
 | 実行管理状態 | 長時間操作の受理・進行・結果を識別するtask_id付きの状態。mod側で一時保持し、bridgeから照会する。観測データとは別に管理する |
