@@ -8,7 +8,7 @@
 ## 1. 全体構成
 
 ```
-ホストLLM (Muse ※接続方式が判明次第) / Codex (MVP検証ホスト)
+Muse (※接続方式が判明次第) / Codex (MVP検証ホスト)
     │  MCP stdio (主) / Streamable HTTP (副)
     ▼
 bridge  [Node.js + TypeScript]
@@ -67,7 +67,7 @@ agent-mod  [Forge 1.20.1 クライアントmod / Java 17]
 
 ### 2.2 bridge (Node.js + TypeScript)
 
-MCPサーバーとして振る舞い、ホストLLM (MCPクライアント) にツールを公開する。agent-modのWSにクライアントとして接続し、応答対応・イベント購読・再接続を担う。
+MCPサーバーとして振る舞い、MCPクライアント (Muse 等のホスト) にツールを公開する。agent-modのWSにクライアントとして接続し、応答対応・イベント購読・再接続を担う。
 
 **層構成**
 
