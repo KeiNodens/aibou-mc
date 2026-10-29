@@ -16,9 +16,15 @@ export class State {
   private chatLog: { from: string; text: string; ts: number }[] = [];
   private waiters: Waiter[] = [];
   private chatListeners: ((c: { from: string; text: string }) => void)[] = [];
+  private evtListeners: ((e: Evt) => void)[] = [];
 
   onChat(fn: (c: { from: string; text: string }) => void) {
     this.chatListeners.push(fn);
+  }
+
+  /** 全イベントの購読 (runholdの死亡/反射hook用) */
+  onEvent(fn: (e: Evt) => void) {
+    this.evtListeners.push(fn);
   }
 
   push(name: string, data: unknown): Evt {
@@ -30,6 +36,9 @@ export class State {
       this.chatLog.push({ from: d.from, text: d.text, ts: e.ts });
       if (this.chatLog.length > 200) this.chatLog.shift();
       for (const fn of this.chatListeners) fn(d);
+    }
+    for (const fn of this.evtListeners) {
+      try { fn(e); } catch { /* 購読側の失敗は握る */ }
     }
     this.wake(e);
     return e;

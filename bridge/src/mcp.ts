@@ -6,6 +6,9 @@ import { ModClient } from './modclient.js';
 import { Skills } from './skills.js';
 import { inspectSchematic, planSchematic } from './schematic.js';
 import { Journal } from './journal.js';
+import { RunHold, HoldKind } from './runhold.js';
+import { QuestGraph } from './questgraph.js';
+import { Autonomy } from './autonomy.js';
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
@@ -16,7 +19,7 @@ const err = (e: unknown) => ({
 
 // M2.5向けツール群。mod側の実装があるmethodはWS経由で呼び、
 // 未実装のものはmock-modがUNSUPPORTEDを返す。
-export function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal) {
+export function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal, runhold?: RunHold, questGraph?: QuestGraph, autonomy?: Autonomy) {
   const server = new McpServer({ name: 'minecraft', version: '0.0.1' });
 
   server.registerTool(
@@ -437,6 +440,66 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'goal_set',
+    {
+      description:
+        'Register or re-activate a persistent goal (survives restart). ' +
+        'Active goals are shown to the runner context and consolidated in the journal.',
+      inputSchema: {
+        text: z.string().describe('goal text'),
+        priority: z.number().int().optional(),
+        end_id: z.string().optional()
+          .describe('finish an existing goal id instead (status=done|failed|aside)'),
+        status: z.enum(['done', 'failed', 'aside']).optional(),
+      },
+    },
+    async ({ text, priority, end_id, status }) => {
+      try {
+        if (!journal) return json({ ok: false, note: 'journal disabled' });
+        if (end_id) return json({ ok: journal.goalEnd(end_id, status ?? 'done') });
+        return json({ ok: true, goal: journal.goalSet(text, { priority }) });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'goal_get',
+    {
+      description: 'List active goals (all goals with all=true).',
+      inputSchema: { all: z.boolean().optional() },
+    },
+    async ({ all }) => {
+      try {
+        if (!journal) return json({ goals: [], note: 'journal disabled' });
+        return json({ goals: journal.goalGet(all ?? false) });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'journal_snapshot',
+    {
+      description:
+        'Read the structured memory snapshot (data/agent-journal.json): goals, ' +
+        'workGraphs, facilities, reservations, knowledge, episodes. ' +
+        'These are recorded facts only — verify against live game state before use.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        if (!journal) return json({ note: 'journal disabled' });
+        return json(journal.snapshot());
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'quest_list',
     {
       description:
@@ -467,6 +530,56 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     async ({ name }) => {
       try {
         return json(await mod.call('quest.inspect', { name }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'quest_frontier',
+    {
+      description:
+        'List quests whose dependencies are all completed but which are not ' +
+        'done yet — the actionable frontier. Requires data/quest-graph.json ' +
+        '(tools/build-quest-graph.mjs) and live quest progress via quest_list.',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        if (!questGraph?.loaded()) {
+          return json({ frontier: [], note: 'quest-graph.json not built (tools/build-quest-graph.mjs)' });
+        }
+        const ql = await mod.call('quest.list').catch(() => ({ quests: [] }));
+        const done = questGraph.extractCompleted(ql);
+        const frontier = questGraph.frontier(done).map((q) => ({
+          id: q.id, title: q.title, chapter: q.chapter,
+          tasks: q.tasks.map((t) => `${t.type}:${t.item ?? ''} x${t.count ?? 1}`),
+          deps: q.deps,
+        }));
+        return json({ frontier, completed: done.size });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'quest_plan',
+    {
+      description:
+        'Return the dependency-resolved path to a goal quest (topological ' +
+        'order). The last entry is the goal itself.',
+      inputSchema: { goal: z.string().describe('quest title or id') },
+    },
+    async ({ goal }) => {
+      try {
+        if (!questGraph?.loaded()) {
+          return json({ note: 'quest-graph.json not built' });
+        }
+        const plan = questGraph.plan(goal);
+        if (!plan) return json({ note: `quest not found: ${goal}` });
+        return json({ plan: plan.map((q) => ({ id: q.id, title: q.title, deps: q.deps })) });
       } catch (e) {
         return err(e);
       }
@@ -1088,17 +1201,31 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   server.registerTool(
     'waypoint_save',
     {
-      description: 'Save current position (or given coords) under a name like "home".',
+      description:
+        'Save current position (or given coords) under a name like "home". ' +
+        'Pass r to make it an area waypoint (safe zone for reflex retreat suppression).',
       inputSchema: {
         name: z.string(),
         x: z.number().int().optional(),
         y: z.number().int().optional(),
         z: z.number().int().optional(),
+        r: z.number().int().optional()
+          .describe('area radius in blocks; set for home/safe-area waypoints'),
       },
     },
     async (params) => {
       try {
-        return json(await mod.call('waypoint.set', params));
+        const r = await mod.call('waypoint.set', params);
+        // 施設記憶: waypoint登録をconsolidationする (座標明示時)
+        if (journal && typeof params.x === 'number'
+            && typeof params.y === 'number' && typeof params.z === 'number') {
+          journal.noteFacility({
+            kind: 'waypoint',
+            pos: { x: params.x, y: params.y, z: params.z },
+            name: params.name,
+          });
+        }
+        return json(r);
       } catch (e) {
         return err(e);
       }
@@ -1278,6 +1405,88 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       inputSchema: {},
     },
     async () => json({ connected: mod.connected, generation: state.generation }),
+  );
+
+  server.registerTool(
+    'loop_status',
+    {
+      description:
+        'Execution loop status (read-only): whether a codex run is active, ' +
+        'queued, held, and why. holds[] shows the reasons the loop is paused ' +
+        '(dead/external/owner_stop/blocked/failed).',
+      inputSchema: {},
+    },
+    async () => json(runhold
+      ? { ...runhold.status(), connected: mod.connected, generation: state.generation }
+      : { note: 'runner disabled', connected: mod.connected, generation: state.generation }),
+  );
+
+  server.registerTool(
+    'loop_resume',
+    {
+      description:
+        'Release execution-loop holds. Specify hold to release one kind ' +
+        '(dead/external/owner_stop/blocked/failed), or omit to release all.',
+      inputSchema: { hold: z.string().optional() },
+    },
+    async ({ hold }) => {
+      try {
+        if (!runhold) return json({ ok: false, note: 'runner disabled' });
+        if (hold) runhold.release(hold as HoldKind);
+        else runhold.releaseAll();
+        return json({ ok: true, holds: runhold.status().holds });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'approve',
+    {
+      description:
+        'Approve a pending dangerous action (autonomy gate). Omit id to approve ' +
+        'the newest pending request. Approval opens the method for 5 minutes.',
+      inputSchema: { id: z.string().optional() },
+    },
+    async ({ id }) => {
+      try {
+        if (!autonomy) return json({ ok: false, note: 'autonomy disabled' });
+        const r = autonomy.approve(id);
+        return json({ ok: !!r.approved, approved: r.approved, pending: r.pending });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'deny',
+    {
+      description: 'Deny a pending dangerous action (autonomy gate).',
+      inputSchema: { id: z.string().optional() },
+    },
+    async ({ id }) => {
+      try {
+        if (!autonomy) return json({ ok: false, note: 'autonomy disabled' });
+        const r = autonomy.deny(id);
+        return json({ ok: !!r.denied, denied: r.denied, pending: r.pending });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'pending_approvals',
+    {
+      description: 'List actions waiting for approval under the autonomy gate.',
+      inputSchema: {},
+    },
+    async () => json({
+      level: autonomy?.level(),
+      pending: autonomy?.list() ?? [],
+    }),
   );
 
   return server;

@@ -103,7 +103,14 @@ public class ClientEvents {
             } catch (Exception ignored) {}
             ws.emit("damage", d);
         }
-        if (prevHealth > 0 && h <= 0) ws.emit("death", new JsonObject());
+        if (prevHealth > 0 && h <= 0) {
+            ws.emit("death", new JsonObject());
+            // 死亡地点を疑似waypointとして記録 (死亡→帰還反射の遷移先)
+            Waypoints.set("_death",
+                (int) Math.floor(p.getX()), (int) Math.floor(p.getY()),
+                (int) Math.floor(p.getZ()), -1,
+                p.level().dimension().location().toString());
+        }
         prevHealth = h;
 
         tickCount++;

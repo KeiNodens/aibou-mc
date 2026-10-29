@@ -65,7 +65,24 @@ public final class AgentWsCapabilities {
             "task.status",
             "task.result",
             "task.cancel",
-            "task.cancel_all"
+            "task.cancel_all",
+            "task.pause",
+            "task.resume",
+            "task.list"
         );
     }
+
+    /**
+     * observer接続に許可する読み取り専用method。
+     * controller以外の接続はここに無いreqを拒否される (READONLY)。
+     */
+    public static final java.util.Set<String> READONLY = java.util.Set.of(
+        "meta.capabilities", "mod.ping",
+        "obs.state", "obs.entity", "obs.scan", "obs.block", "obs.block_state",
+        "look_info", "container.read", "container.repo",
+        "item.info", "find_item", "recipe.lookup",
+        "waypoint.get", "waypoint.list",
+        "quest.list", "quest.inspect", "screen.read",
+        "task.status", "task.result", "task.list"
+    );
 }

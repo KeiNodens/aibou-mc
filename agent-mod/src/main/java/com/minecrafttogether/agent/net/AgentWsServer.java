@@ -9,9 +9,16 @@ import com.minecrafttogether.agent.game.AgentWsCapabilities;
 import com.minecrafttogether.agent.game.GameOps;
 import java.net.InetSocketAddress;
 import java.util.List;
+import java.util.Locale;
 import java.util.Random;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import org.java_websocket.WebSocket;
+import org.java_websocket.drafts.Draft;
+import org.java_websocket.exceptions.InvalidDataException;
 import org.java_websocket.handshake.ClientHandshake;
+import org.java_websocket.handshake.ServerHandshakeBuilder;
 import org.java_websocket.server.WebSocketServer;
 
 /**
@@ -19,11 +26,28 @@ import org.java_websocket.server.WebSocketServer;
  * - bridge がクライアントとして接続する
  * - 接続時に hello {generation, capabilities} を送る
  * - req の実行は必ずゲームメインスレッド (Minecraft#execute) に引き渡す
+ *
+ * 堅牢化 (P3):
+ * - bindはloopback固定 + リモートがloopbackでなければ 1008 で拒否
+ * - Originヘッダーがあればlocalhost系以外をHTTP 403で拒否 (ブラウザ経由のCSRF対策)
+ * - hello後10秒以内に {type:"identify", role} が無ければ 1002 で切断
+ * - role=observer は読み取り専用methodのみ許可 (AgentWsCapabilities.READONLY)
+ * - 1フレーム64KiB超は 1009 で切断
  */
 public class AgentWsServer extends WebSocketServer {
     private final int generation = new Random().nextInt(Integer.MAX_VALUE) + 1;
 
     private static final List<String> CAPABILITIES = AgentWsCapabilities.all();
+    private static final int MAX_FRAME = 64 * 1024;
+    private static final long IDENTIFY_TIMEOUT_MS = 10_000;
+
+    // identifyタイムアウト監視用 (daemon。Minecraftスレッドを汚さない)
+    private static final ScheduledExecutorService TIMER =
+        Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "agentmod-ws-timer");
+            t.setDaemon(true);
+            return t;
+        });
 
     public AgentWsServer(int port) {
         super(new InetSocketAddress("127.0.0.1", port));
@@ -34,31 +58,111 @@ public class AgentWsServer extends WebSocketServer {
     }
 
     @Override
+    public ServerHandshakeBuilder onWebsocketHandshakeReceivedAsServer(
+            WebSocket conn, Draft draft, ClientHandshake request)
+            throws InvalidDataException {
+        ServerHandshakeBuilder b =
+            super.onWebsocketHandshakeReceivedAsServer(conn, draft, request);
+        // Originがあればlocalhost系のみ許可。無いもの (Node ws等) は許可
+        String origin = request.getFieldValue("Origin");
+        if (origin != null && !origin.isEmpty()) {
+            String o = origin.toLowerCase(Locale.ROOT);
+            boolean ok = o.startsWith("http://localhost") || o.startsWith("https://localhost")
+                || o.startsWith("http://127.0.0.1") || o.startsWith("https://127.0.0.1")
+                || o.startsWith("http://[::1]") || o.startsWith("https://[::1]");
+            if (!ok) {
+                b.setHttpStatus((short) 403);
+                b.setHttpStatusMessage("Forbidden");
+                AgentMod.LOGGER.warn("[agentmod] rejected origin: {}", origin);
+            }
+        }
+        return b;
+    }
+
+    @Override
     public void onOpen(WebSocket conn, ClientHandshake handshake) {
+        // loopback以外からの接続はここでも拒否 (bind済みだが多層防御)
+        InetSocketAddress remote = conn.getRemoteSocketAddress();
+        if (remote != null && remote.getAddress() != null
+            && !remote.getAddress().isLoopbackAddress()) {
+            AgentMod.LOGGER.warn("[agentmod] rejected non-loopback remote: {}", remote);
+            conn.close(1008, "loopback only");
+            return;
+        }
+
         JsonObject hello = new JsonObject();
         hello.addProperty("type", "hello");
         hello.addProperty("generation", generation);
         hello.addProperty("mod_version", "0.1.0");
+        hello.addProperty("autonomy", AgentConfig.autonomyLevel());
+        hello.addProperty("profile", AgentConfig.profile());
         JsonArray caps = new JsonArray();
         CAPABILITIES.forEach(caps::add);
         hello.add("capabilities", caps);
         conn.send(hello.toString());
+
+        // identifyタイムアウト: 10秒以内にrole申告が無ければ切断
+        TIMER.schedule(() -> {
+            if (conn.isOpen() && conn.<String>getAttachment() == null) {
+                AgentMod.LOGGER.warn("[agentmod] identify timeout; closing");
+                conn.close(1002, "identify timeout");
+            }
+        }, IDENTIFY_TIMEOUT_MS, TimeUnit.MILLISECONDS);
         AgentMod.LOGGER.info("[agentmod] bridge connected");
     }
 
     @Override
     public void onMessage(WebSocket conn, String message) {
+        if (message.length() > MAX_FRAME) {
+            AgentMod.LOGGER.warn("[agentmod] frame too large ({}B); closing",
+                message.length());
+            conn.close(1009, "frame too large");
+            return;
+        }
         JsonObject msg;
         try {
             msg = JsonParser.parseString(message).getAsJsonObject();
         } catch (Exception e) {
             return;
         }
-        if (!msg.has("type") || !"req".equals(msg.get("type").getAsString())) return;
+        if (!msg.has("type")) return;
+        String type = msg.get("type").getAsString();
+
+        // identify: role申告。controller=全method、observer=READONLYのみ
+        if ("identify".equals(type)) {
+            String role = msg.has("role")
+                ? msg.get("role").getAsString() : "controller";
+            if (!"controller".equals(role) && !"observer".equals(role)) {
+                role = "controller";
+            }
+            conn.setAttachment(role);
+            JsonObject ack = new JsonObject();
+            ack.addProperty("type", "identified");
+            ack.addProperty("role", role);
+            conn.send(ack.toString());
+            AgentMod.LOGGER.info("[agentmod] identified as {}", role);
+            return;
+        }
+        if (!"req".equals(type)) return;
+
+        String role = conn.getAttachment();
+        if (role == null) {
+            // 未identifyのreqは拒否 (旧bridge互換はidentify不要期間で移行済み想定)
+            long id = msg.has("id") ? msg.get("id").getAsLong() : -1;
+            fail(conn, id, "NOT_IDENTIFIED", "send {type:identify, role} first");
+            return;
+        }
+
         long id = msg.has("id") ? msg.get("id").getAsLong() : -1;
         String method = msg.has("method") ? msg.get("method").getAsString() : "";
         JsonObject params = msg.has("params") && msg.get("params").isJsonObject()
             ? msg.getAsJsonObject("params") : new JsonObject();
+
+        if ("observer".equals(role) && !AgentWsCapabilities.READONLY.contains(method)) {
+            fail(conn, id, "OBSERVER_READONLY",
+                "observer cannot call " + method);
+            return;
+        }
 
         if (!CAPABILITIES.contains(method)) {
             fail(conn, id, "UNSUPPORTED", "method " + method + " not supported by agentmod");
@@ -86,7 +190,11 @@ public class AgentWsServer extends WebSocketServer {
         });
     }
 
-    /** evt を全bridge接続へブロードキャストする */
+    /**
+     * evt を全bridge接続へブロードキャストする。
+     * 遅い接続の背圧はjava-websocketの内部キューとTCP flow controlに委ねる
+     * (送信失敗時は接続が閉じられreconnectされる運用)。
+     */
     public void emit(String name, JsonObject data) {
         JsonObject evt = new JsonObject();
         evt.addProperty("type", "evt");

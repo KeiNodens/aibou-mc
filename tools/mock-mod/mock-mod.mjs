@@ -1,12 +1,19 @@
 // M2.5用の偽agent-mod。design §2.3のWS/JSON-RPC風プロトコルを話す。
 // stdinの1行=ゲーム内chat注入 (from:Player)。chat.sendは受信表示する。
+// --script <file.mjs> でfixtureを再生: モジュールは export default async (ctx) => {} を持ち、
+// ctx.injectChat/injectEvent/stub/waitReq/sleep を使ってシナリオを記述する。
 import { WebSocketServer } from 'ws';
 import readline from 'node:readline';
+import { pathToFileURL } from 'node:url';
 
 const PORT = Number(process.env.MOCK_MOD_PORT ?? 25587);
-const wss = new WebSocketServer({ port: PORT });
+const SCRIPT = process.argv.find((a, i) => process.argv[i - 1] === '--script');
+const wss = new WebSocketServer({ port: PORT, maxPayload: 64 * 1024 });
 let taskSeq = 0;
 const tasks = new Map();
+const stubs = new Map(); // method → (params) => result | {error:{code,message}}
+const waiters = []; // {method, resolve} — waitReq用
+const requestLog = []; // 全reqの記録 (fixture検証用)
 
 console.log(`[mock-mod] WS server ws://127.0.0.1:${PORT}`);
 console.log('[mock-mod] 1行入力=ゲーム内chatとして注入 (from=Player)');
@@ -15,6 +22,35 @@ const send = (ws, obj) => ws.send(JSON.stringify(obj));
 const reply = (ws, msg, result) => send(ws, { type: 'res', id: msg.id, ok: true, result });
 const fail = (ws, msg, code, message) =>
   send(ws, { type: 'res', id: msg.id, ok: false, error: { code, message } });
+
+// fixture ctx: bridge未接続でも注入はキューせず捨てる (connect後の利用を想定)
+const ctx = {
+  injectChat(from, text) {
+    for (const ws of wss.clients) send(ws, { type: 'evt', name: 'chat', data: { from, text } });
+  },
+  injectEvent(name, data) {
+    for (const ws of wss.clients) send(ws, { type: 'evt', name, data: data ?? {} });
+  },
+  // methodに対する応答を差替える。handler(params) → result または {error:{code,message}}
+  stub(method, handler) { stubs.set(method, handler); },
+  unstub(method) { stubs.delete(method); },
+  // 指定methodのreqが来るまで待つ (timeoutMsでnull)
+  waitReq(method, timeoutMs = 10_000) {
+    return new Promise((resolve) => {
+      const hit = requestLog.find((r) => r.method === method);
+      if (hit) return resolve(hit);
+      const timer = setTimeout(() => {
+        const i = waiters.findIndex((w) => w.resolve === finish);
+        if (i >= 0) waiters.splice(i, 1);
+        resolve(null);
+      }, timeoutMs);
+      const finish = (entry) => { clearTimeout(timer); resolve(entry); };
+      waiters.push({ method, resolve: finish });
+    });
+  },
+  requestLog,
+  sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
+};
 
 wss.on('connection', (ws) => {
   console.log('[mock-mod] bridge connected');
@@ -27,9 +63,29 @@ wss.on('connection', (ws) => {
     } catch {
       return;
     }
+    // identify (WS堅牢化): role受理だけ行う。不審roleでも従来どおり受理する (mock)
+    if (msg.type === 'identify') {
+      send(ws, { type: 'identified', role: msg.role ?? 'controller' });
+      return;
+    }
     if (msg.type !== 'req') return;
     const m = msg.method;
     const p = msg.params ?? {};
+    requestLog.push({ method: m, params: p, ts: Date.now() });
+    for (const w of [...waiters]) {
+      if (w.method === m || w.method === '*') {
+        waiters.splice(waiters.indexOf(w), 1);
+        w.resolve(requestLog[requestLog.length - 1]);
+      }
+    }
+
+    // stubがあれば最優先で応答
+    if (stubs.has(m)) {
+      const out = stubs.get(m)(p);
+      if (out?.error) fail(ws, msg, out.error.code ?? 'STUB', out.error.message ?? 'stubbed');
+      else reply(ws, msg, out);
+      return;
+    }
 
     if (m === 'chat.send') {
       console.log(`\x1b[36m[GAME CHAT] Rin: ${p.text}\x1b[0m`);
@@ -97,3 +153,23 @@ rl.on('line', (line) => {
   }
   console.log(`[mock-mod] injected: ${text}`);
 });
+
+// fixture再生: --script指定時のみ。接続を待ってからモジュールを実行する
+if (SCRIPT) {
+  const run = async () => {
+    await new Promise((r) => wss.once('connection', r));
+    await new Promise((r) => setTimeout(r, 300)); // hello/identify交換の待ち
+    try {
+      const mod = (await import(pathToFileURL(SCRIPT).href)).default;
+      // 関数形式 or {script, assert} オブジェクト形式の両方を受け付ける
+      const fn = typeof mod === 'function' ? mod : mod?.script;
+      if (typeof fn !== 'function') throw new Error('fixture has no script');
+      await fn(ctx);
+      console.log('[mock-mod] fixture script finished');
+    } catch (e) {
+      console.log('[mock-mod] fixture script error:', e);
+      process.exitCode = 1;
+    }
+  };
+  void run();
+}

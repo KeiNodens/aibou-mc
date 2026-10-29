@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import { State } from './state.js';
+import { Autonomy } from './autonomy.js';
 
 // agent-mod (またはmock-mod) のWSサーバーに接続するクライアント。
 // req/res相関・evt受信・hello/generation・自動再接続を担う (design §2.3)。
@@ -16,6 +17,7 @@ export class ModClient {
     private url: string,
     private state: State,
     private log: (...a: unknown[]) => void = console.log,
+    private autonomy?: Autonomy,
   ) {}
 
   start() {
@@ -39,6 +41,8 @@ export class ModClient {
       if (msg.type === 'hello') {
         this.state.generation = msg.generation as number;
         this.log('[modclient] generation =', msg.generation);
+        // WS堅牢化: hello応答としてrole申告する (10s以内必須)
+        ws.send(JSON.stringify({ type: 'identify', role: 'controller' }));
         return;
       }
       if (msg.type === 'evt') {
@@ -65,6 +69,12 @@ export class ModClient {
   call(method: string, params: unknown = {}): Promise<unknown> {
     return new Promise((resolve, reject) => {
       if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return reject(new Error('NOT_CONNECTED'));
+      // 承認ゲート (autonomy.level)。拒否時はapprovalイベントで通知される
+      const g = this.autonomy?.check(method, params as Record<string, unknown>);
+      if (g && !g.ok) {
+        return reject(new Error(
+          `APPROVAL_REQUIRED: ${g.req.method} pending as ${g.req.id} — approve with .ok ${g.req.id}`));
+      }
       const id = ++this.reqId;
       const timer = setTimeout(() => {
         this.pending.delete(id);

@@ -745,3 +745,145 @@ side:BOTHなのでbot側だけ外せない (ハンドシェイク拒否)。pack�
 - `type_text`のEditBox不在時フォールバック: `KeyboardHandler.charTyped`
   (private・SRG`m_90889_`)を`ObfuscationReflectionHelper`で反射呼出し→
   Forge ScreenEvent.CharacterTypedも発火 (`via:"keyboard_handler"`)。
+
+---
+
+# D19 P0〜P6 実装 検証記録 (2026-10-29)
+
+`docs/plan-d19.md` の全フェーズを一括実装。実機検証は今回保留
+(ユーザー環境のメモリ都合) で、mock-mod fixture + JUnit + 両buildで検証。
+要実機項目は末尾に列挙。
+
+## 検証基盤 (新設)
+
+- `tools/mock-mod/mock-mod.mjs` — `--script <fixture.mjs>` でシナリオ再生。
+  ctx: `stub/waitReq/injectChat/injectEvent/requestLog/sleep`。
+  `identify`(role受理) に対応済み。
+- `tools/run-fixture.mjs` — 一時workdirで mock+bridge を起動し
+  `{script, assert}` を実行。`h={mcp,file,rawfile,writefile,log,sleep,waitFor,restartBridge}`。
+  Windowsでは `taskkill /T /F` でプロセスツリーごとkill (孫残留対策)。
+- `tools/fixture-codex.mjs` — codex差替えスタブ。stdin promptを
+  `FIXTURE_PROMPT_OUT` へ記録。
+- `agent-mod/build.gradle` — JUnit5 (`useJUnitPlatform`) 導入。
+- fixture群: `tools/fixtures/p0-direct,p2-journal,p3-runhold,p4-quest,p5-mine,p6-autonomy.mjs`
+
+## P0 直パース + 文脈Bounded
+
+- `bridge/src/directparse.ts` 新設: 「来て」「止まれ」「ついてきて」「待ってて」
+  → skill直接実行。UNSUPPORTED学習 (`capabilities.json`) で以後LLMへ回帰。
+- `runner.ts` 3層化: 不変部(ルール+技能一覧) / 半不変部(世界文脈1行, 5s cache)
+  / 可変部(直近10turn verbatim + 旧分40字行digest 800字)。
+- **fixture PASS**: 「来て」→codex非起動でcome_here実行+「来たよ」、
+  未対応文のみcodex1回起動 (prompt 2149文字・3層構造入り)。
+
+## P1 生存反射 (mod側)
+
+- `ReflexPolicy.java` (POJO, JUnit対象): DROWN > RETREAT > EAT > SLEEP > RETURN
+  の優先度で判定。home領域内退避抑制・combat.mode=death・各cooldownを分離。
+- `ReflexGuard` 再構成: 溺死(keyJump常時+監視) / 退避(hp or 敵数, home goto)
+  / 自動食事(EatTask) / sleep同期(owner就寝検出→SleepTask, 非強制)
+  / 死亡→帰還(respawn検出, home優先→`_death` waypoint fallback)。
+- `EatTask`/`SleepTask` 新規、`AgentCapabilities` (capability学習)、
+  `Waypoints` を `{x,y,z,r,dim}` record化 (領域waypoint + `isWithin` + 旧形式移行)。
+  `AgentConfig` に reflex.* 閾値群・combat.mode・owner追加。
+  `ClientEvents` で死亡地点を `_death` として記録。
+- **JUnit 14件全PASS** (policy単位: 溺死最優先・home抑制・death mode・
+  cooldown・capable=false抑制・sleep非強制・respawn帰還)。gradlew build OK。
+
+## P2 構造化記憶
+
+- `journal.ts` 全改訂: JSONL生ログ + `agent-journal.json` (atomic tmp→rename,
+  debounce 1s + flush()) の2層。6分類 goals/workGraphs/facilities/reservations/
+  knowledge/episodes + cap+byNewest prune。
+- `skills.ts`: work.end時にepisode自動記録、ctx.call監視で
+  `use_item`/`interact`/`waypoint.set` 成功→施設記憶consolidation
+  (同kind+pos 4m内はevidence加算)。ctx.journalにnoteFacility/facilities/
+  graphStart/graphSet追加。
+- MCP: `goal_set`/`goal_get`/`journal_snapshot` 追加。
+  `waypoint_save` 成功時も施設記憶へ登録 (座標明示時)。
+- runner: active goalsを世界文脈行に併記。index.ts: beforeExit等でflush。
+- **fixture PASS**: goal+waypoint+skill実行→snapshot検証→**bridge強制kill後の
+  再起動で goals/episodes/facilities 全復元** (debounced writeの実効確認)。
+
+## P3 実行管理 + WS堅牢化
+
+- `AgentTask`: `PAUSED` state + `pause()/resume()` + `onPause/onResume` hook
+  (GotoTaskはBaritone停止/goal再発行) + `postcondition`/`postconditionDesc`。
+- `TaskManager`: PAUSED除外、SUCCEEDED直後にpostconditionを1回評価→
+  falseなら `FAILED(POSTCONDITION)`。「API呼出成功≠目標達成」の分離。
+- `GameOps`: `task.pause`/`task.resume`/`task.list` 追加
+  (capabilities+READONLY同期済み)。
+- `AgentWsServer` 堅牢化: loopback remote以外1008拒否・非localhost Origin 403・
+  identify 10s timeout(1002)・role別 (controller全method / observer READONLYのみ)
+  ・64KiB超frame 1009切断・未identify req拒否。
+- bridge: `runhold.ts` (Run/Hold+pump単一進行点、hold: dead/external/
+  owner_stop/blocked/failed) + `loop_status`/`loop_resume` + `modclient` identify
+  (controller) + state.onEvent購読。死亡→dead hold、respawned解除、
+  POSTCONDITION→blocked、新指示でowner_stop/blocked/failed解除。
+- **fixture PASS**: 「止まれ」→owner_stop、death→dead hold中は新指示でも
+  codex非起動、loop_resumeで復帰後にcodex起動、POSTCONDITION→blocked。
+
+## P4 クエストグラフ
+
+- `bridge/src/snbt.ts` 新設: SNBT小パーサ (空白/カンマ両区切り、型接尾辞、
+  裸キー、ネスト、文字列エスケープ)。`prismarine-nbt`非対応のため手書き。
+- `tools/build-quest-graph.mjs` → `bridge/data/quest-graph.json` 生成
+  (chapters/quests/deps/tasks/rewards + sha256 fingerprint + 重複/dangling警告)。
+  実ファイル `server/config/ftbquests/quests/` で 1章1クエスト抽出確認。
+- `bridge/src/questgraph.ts`: グラフ読込 + `frontier()` (依存全完了&未完了) +
+  `plan()` (topo) + 完了id正規化 (SNBT hex↔quest.list signed longの
+  BigInt統一) + 30sポーリングで新規完了→episode+screenshot。
+- MCP: `quest_frontier`/`quest_plan` 追加。
+- runner: `.goal <text>`/`.goals` ドットコマンド (クエスト名解決→goal登録)。
+- **fixture PASS**: 注入graphで frontier=[石集め]、plan=石→木→かまど topo順、
+  .goal→journal goal登録。
+
+## P5 採掘skill
+
+- `skills/mine_resource.mjs`: 資源名→block id+代表深度解決
+  (`data/mine-depths.json`, バニラ9+mekanism/create/ae2鉱石)、
+  鉱床記憶(facility kind='mine')参照→無ければ代表深度まで階段掘り
+  (dig段差+baritone.goto, MVP) → `baritone.mine` → 成功時に採掘地点を
+  鉱床記憶へ登録。skill名はbuiltin `mine` と衝突するため `mine_resource`。
+- **fixture PASS**: baritone.mine stub成功→facility `{kind:mine,
+  name:minecraft:stone, pos}` + episode記録。
+
+## P6 自律レベル + 承認ゲート
+
+- `bridge/src/autonomy.ts`: level 0=全mod操作要承認 / 1=危険操作のみ / 2=自律。
+  DANGEROUS={chat.command,toss,sign.write,container.repo_action,quest.claim}、
+  READONLYは常時通過。`AGENT_PROFILE=operator`→既定level2、`AUTONOMY_LEVEL`で上書き。
+- ゲートは `ModClient.call` 内側 (MCPツール・skill ctx.call全経路の単一点)。
+  拒否時 `approval`イベント→runnerがchat通知「.ok <id> / .deny <id>」。
+  承認はmethod単位5分間、`.ok` (最新or id指定) / `.deny` ドットコマンド +
+  `approve`/`deny`/`pending_approvals` MCPツール。
+- mod側: `AgentConfig.autonomyLevel()/profile()` + helloに `autonomy`/`profile`
+  付加 (公開のみ、gate判定はbridge側)。
+- **fixture PASS**: run_command(chat.command)拒否→pending→`.ok`→
+  同method通過の全フロー。
+
+## 検証コマンド一覧
+
+```bash
+node tools/run-fixture.mjs tools/fixtures/p0-direct.mjs    # PASS
+node tools/run-fixture.mjs tools/fixtures/p2-journal.mjs   # PASS
+node tools/run-fixture.mjs tools/fixtures/p3-runhold.mjs   # PASS
+node tools/run-fixture.mjs tools/fixtures/p4-quest.mjs     # PASS
+node tools/run-fixture.mjs tools/fixtures/p5-mine.mjs      # PASS
+node tools/run-fixture.mjs tools/fixtures/p6-autonomy.mjs  # PASS
+cd bridge && npm run build                               # tsc OK
+cd agent-mod && ./gradlew build                          # build+JUnit14 OK (JDK17要)
+```
+
+※ gradlew は JDK17指定必要: `JAVA_HOME="C:/Program Files/Java/jdk-17" ./gradlew build`
+(環境デフォルトがJDK25のため "Unsupported class file major version 69" で失敗する)
+
+## 要実機項目 (今回保留)
+
+- P1 反射の実動 (EatTask実行・退避goto・sleep同期・死亡帰還のゲーム内挙動)
+- P3 postcondition失敗→FAILED(POSTCONDITION)の実機発火、task.pause/resumeの
+  Baritone実停止、WS堅牢化の実接続 (identify/observer/Origin/大frame)
+- P4 quest.list実データ→frontier差分→screenshot、quest実機進捗
+- P5 mine_resource の実採掘 (階段掘りのlava非検出に注意)
+- P6 実運用でのgate挙動 (chat.command許可運用との整合)
+- skills側とmod側 Waypoints の二重管理は未統合 (明記のみ、統合は別決定)

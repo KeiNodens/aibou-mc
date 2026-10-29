@@ -1,0 +1,20 @@
+{
+  "_comment": "採掘深度テーブル (1.20.1 鉱石分布 + 主要mod鉱石)。y=代表深度, range=有効範囲, dim=次元(省略時overworld)",
+  "coal":     { "block": "minecraft:coal_ore",     "y": 95,  "range": [0, 256] },
+  "iron":     { "block": "minecraft:iron_ore",     "y": 15,  "range": [-64, 256] },
+  "copper":   { "block": "minecraft:copper_ore",   "y": 48,  "range": [-16, 112] },
+  "gold":     { "block": "minecraft:gold_ore",     "y": -16, "range": [-64, 32] },
+  "diamond":  { "block": "minecraft:diamond_ore",  "y": -59, "range": [-64, 16] },
+  "redstone": { "block": "minecraft:redstone_ore", "y": -59, "range": [-64, 16] },
+  "lapis":    { "block": "minecraft:lapis_ore",    "y": -1,  "range": [-64, 64] },
+  "emerald":  { "block": "minecraft:emerald_ore",  "y": 236, "range": [-16, 320] },
+  "quartz":   { "block": "minecraft:nether_quartz_ore", "y": 15, "range": [10, 117], "dim": "nether" },
+  "netherite":{ "block": "minecraft:ancient_debris", "y": 15, "range": [8, 119], "dim": "nether" },
+  "osmium":   { "block": "mekanism:osmium_ore",    "y": 40,  "range": [-64, 128], "mod": "mekanism" },
+  "tin":      { "block": "mekanism:tin_ore",       "y": 40,  "range": [-64, 128], "mod": "mekanism" },
+  "uranium":  { "block": "mekanism:uranium_ore",   "y": 16,  "range": [-64, 64],  "mod": "mekanism" },
+  "fluorite": { "block": "mekanism:fluorite_ore",  "y": 20,  "range": [-64, 128], "mod": "mekanism" },
+  "lead":     { "block": "mekanism:lead_ore",      "y": 32,  "range": [-64, 96],  "mod": "mekanism" },
+  "zinc":     { "block": "create:zinc_ore",        "y": 40,  "range": [-30, 70],  "mod": "create" },
+  "certus":   { "block": "ae2:quartz_ore",         "y": 40,  "range": [-64, 128], "mod": "ae2" }
+}

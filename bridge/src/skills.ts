@@ -35,10 +35,19 @@ export interface SkillCtx {
     work: string;
     checkpoint(step: string, data?: Record<string, unknown>): void;
     note(text: string, data?: Record<string, unknown>): void;
+    // 施設記憶の登録 (kind: mine/farm/chest/machine/base 等)
+    noteFacility(f: { kind: string; pos: { x: number; y: number; z: number };
+                      dim?: string; name?: string }): void;
+    // 施設記憶の検索 (kind指定で絞込。復元ではなく記録参照)
+    facilities(kind?: string): Array<{ kind: string; pos: { x: number; y: number; z: number }; name?: string }>;
+    // 作業グラフ: nodes=[{id,kind,name,status,deps}] → graph idを返す
+    graphStart(nodes: Array<Record<string, unknown>>): string | null;
+    graphSet(graphId: string, nodeId: string, status: string): void;
   };
 }
 
-type Running = { name: string; controller: AbortController; done: Promise<void> };
+export type SkillOutcome = { ok: boolean; cancelled?: boolean; error?: string };
+type Running = { name: string; controller: AbortController; done: Promise<SkillOutcome> };
 
 export class Skills {
   private registry = new Map<string, SkillModule>();
@@ -127,29 +136,36 @@ export class Skills {
     const work = this.journal?.newWorkId();
     this.journal?.append('work.start', { work, skill: name, args });
     const ctx = this.makeCtx(controller, work);
-    const done = (async () => {
+    const done = (async (): Promise<SkillOutcome> => {
       try {
         const result = await m.run(ctx, args);
         this.state.push('skill.done', { skill: name, ok: true, result });
         this.journal?.append('work.end', { work, skill: name, ok: true, result });
+        // episode: skill実行の記憶 (1行要約)
+        this.journal?.episode({
+          action: `skill:${name}`, params: args,
+          result: summarize(result), ok: true, work,
+        });
+        return { ok: true };
       } catch (e) {
         const cancelled = controller.signal.aborted;
-        this.state.push('skill.done', {
-          skill: name,
-          ok: false,
-          cancelled,
-          error: e instanceof Error ? e.message : String(e),
-        });
+        const error = e instanceof Error ? e.message : String(e);
+        this.state.push('skill.done', { skill: name, ok: false, cancelled, error });
         this.journal?.append('work.end', {
-          work, skill: name, ok: false, cancelled,
-          error: e instanceof Error ? e.message : String(e),
+          work, skill: name, ok: false, cancelled, error,
         });
+        this.journal?.episode({
+          action: `skill:${name}`, params: args,
+          result: cancelled ? 'cancelled' : error, ok: false, work,
+        });
+        return { ok: false, cancelled, error };
       } finally {
         this.current = null;
       }
     })();
     this.current = { name, controller, done };
-    return { started: true, skill: name, work };
+    // doneは実行結果を返す (直パースのcapability学習等で成否を知る用途)
+    return { started: true, skill: name, work, done };
   }
 
   cancel(): { cancelled: string | null } {
@@ -184,7 +200,12 @@ export class Skills {
       signal,
       throwIfCancelled,
       sleep,
-      call: (method, params) => mod.call(method, params ?? {}),
+      // ctx.call監視: ブロック/waypoint操作の成功を施設記憶へconsolidationする
+      call: async (method, params) => {
+        const r = await mod.call(method, params ?? {});
+        try { consolidateCall(journal, method, params); } catch { /* 記憶失敗は無視 */ }
+        return r;
+      },
       state: () => mod.call('obs.state'),
       say: (text) => mod.call('chat.send', { text }),
       journal: {
@@ -193,6 +214,13 @@ export class Skills {
           journal?.append('checkpoint', { work, step, ...(data ?? {}) }),
         note: (text, data) =>
           journal?.append('note', { work, text, ...(data ?? {}) }),
+        noteFacility: (f) => { journal?.noteFacility(f); },
+        facilities: (kind) => journal?.facilities(kind) ?? [],
+        graphStart: (nodes) =>
+          journal?.graphStart(nodes as never[])?.id ?? null,
+        graphSet: (graphId, nodeId, status) => {
+          journal?.graphSet(graphId, nodeId, status as never);
+        },
       },
       async waitTask(taskId, timeoutMs = 120_000) {
         const deadline = Date.now() + timeoutMs;
@@ -209,5 +237,37 @@ export class Skills {
         return null;
       },
     };
+  }
+}
+
+/** episodeのresult用: 値を1行の短い文字列に潰す */
+function summarize(v: unknown): string {
+  try {
+    const s = typeof v === 'string' ? v : JSON.stringify(v);
+    return s.length > 120 ? s.slice(0, 117) + '...' : s;
+  } catch {
+    return String(v);
+  }
+}
+
+/**
+ * ctx.call のconsolidation: 座標を伴うブロック操作・waypoint登録を
+ * 施設記憶 (facility) として集約する。同kind+座標4m以内はevidenceが増えるだけ。
+ */
+function consolidateCall(
+  journal: Journal | undefined,
+  method: string,
+  params: Record<string, unknown> | undefined,
+) {
+  if (!journal || !params) return;
+  const pos = (typeof params.x === 'number' && typeof params.y === 'number'
+    && typeof params.z === 'number')
+    ? { x: params.x, y: params.y, z: params.z } : null;
+  if (!pos) return;
+  if (method === 'waypoint.set' && typeof params.name === 'string') {
+    journal.noteFacility({ kind: 'waypoint', pos, name: params.name });
+  } else if (method === 'use_item' || method === 'interact') {
+    const kind = typeof params.block === 'string' ? params.block : 'interact';
+    journal.noteFacility({ kind, pos });
   }
 }

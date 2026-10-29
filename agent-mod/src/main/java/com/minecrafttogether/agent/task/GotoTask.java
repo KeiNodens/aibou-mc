@@ -66,6 +66,19 @@ public class GotoTask extends AgentTask {
     @Override
     public void cancel() { state = State.CANCELLING; }
 
+    @Override
+    protected void onPause() {
+        // 移動だけ止めてgoalは保持する。resumeで同じgoalへ再発行
+        IBaritone b = baritone();
+        if (b != null) b.getPathingBehavior().cancelEverything();
+    }
+
+    @Override
+    protected void onResume() {
+        IBaritone b = baritone();
+        if (b != null) b.getCustomGoalProcess().setGoalAndPath(goal);
+    }
+
     private void fail(String code, String msg) {
         errorCode = code; errorMessage = msg; state = State.FAILED;
     }

@@ -150,6 +150,10 @@ dependencies {
     // solapplepie kick bug guard (mixin) compileOnly dep
     compileOnly fg.deobf("blank:solapplepie:1.20.1-2.3.0")
 
+    // policy単位の小テスト (codex式)。Minecraft非依存のPOJOのみ対象とする
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
     // For more info:
     // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
     // http://www.gradle.org/docs/current/userguide/dependency_management.html
@@ -227,4 +231,8 @@ publishing {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
 }

@@ -60,6 +60,24 @@ public class TaskManager {
                     t.errorMessage = String.valueOf(e);
                 }
             }
+            // postcondition: SUCCEEDED宣言直後に実世界状態を1回だけ照合する。
+            // 「API呼出が通った」だけでは目標達成とみなさない (P3)
+            if (t.state == AgentTask.State.SUCCEEDED
+                && t.postcondition != null && !t.postChecked) {
+                t.postChecked = true;
+                boolean ok;
+                try {
+                    ok = t.postcondition.getAsBoolean();
+                } catch (Exception e) {
+                    ok = false;
+                }
+                if (!ok) {
+                    t.state = AgentTask.State.FAILED;
+                    t.errorCode = "POSTCONDITION";
+                    t.errorMessage = "postcondition failed"
+                        + (t.postconditionDesc != null ? ": " + t.postconditionDesc : "");
+                }
+            }
             if (t.done() && notified.add(t.id)) {
                 emitDone(t);
             }

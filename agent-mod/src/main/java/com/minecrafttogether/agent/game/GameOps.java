@@ -117,6 +117,9 @@ public final class GameOps {
             case "task.result" -> taskResult(params);
             case "task.cancel" -> taskCancel(params);
             case "task.cancel_all" -> taskCancelAll();
+            case "task.pause" -> taskPause(params);
+            case "task.resume" -> taskResume(params);
+            case "task.list" -> taskList();
             default -> throw new ApiError("UNSUPPORTED", method);
         };
     }
@@ -998,11 +1001,11 @@ public final class GameOps {
         int x, z;
         int y = params.has("y") ? params.get("y").getAsInt() : -1;
         if (params.has("name")) {
-            int[] wp = Waypoints.get(params.get("name").getAsString());
+            Waypoints.Wp wp = Waypoints.get(params.get("name").getAsString());
             if (wp == null) throw new ApiError("NOT_FOUND", "unknown waypoint: " + params.get("name").getAsString());
-            x = wp[0];
-            if (y == -1) y = wp[1];
-            z = wp[2];
+            x = wp.x();
+            if (y == -1) y = wp.y();
+            z = wp.z();
         } else {
             x = params.get("x").getAsInt();
             z = params.get("z").getAsInt();
@@ -1088,6 +1091,33 @@ public final class GameOps {
         JsonObject r = new JsonObject();
         r.addProperty("cancelled", n);
         r.addProperty("state", "cancelling");
+        return r;
+    }
+
+    private static JsonObject taskPause(JsonObject params) throws ApiError {
+        AgentTask t = findTask(params);
+        if (t.done()) throw new ApiError("ALREADY_DONE", "task " + t.id + " is " + t.stateName());
+        t.pause();
+        JsonObject r = new JsonObject();
+        r.addProperty("state", t.stateName());
+        return r;
+    }
+
+    private static JsonObject taskResume(JsonObject params) throws ApiError {
+        AgentTask t = findTask(params);
+        if (t.state != AgentTask.State.PAUSED)
+            throw new ApiError("NOT_PAUSED", "task " + t.id + " is " + t.stateName());
+        t.resume();
+        JsonObject r = new JsonObject();
+        r.addProperty("state", t.stateName());
+        return r;
+    }
+
+    private static JsonObject taskList() {
+        JsonObject r = new JsonObject();
+        com.google.gson.JsonArray arr = new com.google.gson.JsonArray();
+        for (AgentTask t : TaskManager.get().all()) arr.add(TaskManager.get().statusJson(t));
+        r.add("tasks", arr);
         return r;
     }
 
@@ -2050,12 +2080,16 @@ public final class GameOps {
         int x = params.has("x") ? params.get("x").getAsInt() : (int) Math.floor(p.getX());
         int y = params.has("y") ? params.get("y").getAsInt() : (int) Math.floor(p.getY());
         int z = params.has("z") ? params.get("z").getAsInt() : (int) Math.floor(p.getZ());
-        Waypoints.set(name, x, y, z);
+        // r指定時は領域waypoint (home safe area等)。dimは現在次元を記録
+        int rad = params.has("r") ? params.get("r").getAsInt() : -1;
+        Waypoints.set(name, x, y, z, rad,
+            rad >= 0 ? p.level().dimension().location().toString() : null);
         JsonObject r = new JsonObject();
         r.addProperty("saved", name);
         r.addProperty("x", x);
         r.addProperty("y", y);
         r.addProperty("z", z);
+        if (rad >= 0) r.addProperty("r", rad);
         // JourneyMapがあれば同名waypointをミラー登録
         if (JourneyMapBridge.isAvailable()) {
             try {
@@ -2070,12 +2104,14 @@ public final class GameOps {
     }
 
     private static JsonObject waypointGet(JsonObject params) throws ApiError {
-        int[] wp = Waypoints.get(params.get("name").getAsString());
+        Waypoints.Wp wp = Waypoints.get(params.get("name").getAsString());
         if (wp == null) throw new ApiError("NOT_FOUND", "unknown waypoint");
         JsonObject r = new JsonObject();
-        r.addProperty("x", wp[0]);
-        r.addProperty("y", wp[1]);
-        r.addProperty("z", wp[2]);
+        r.addProperty("x", wp.x());
+        r.addProperty("y", wp.y());
+        r.addProperty("z", wp.z());
+        if (wp.r() >= 0) r.addProperty("r", wp.r());
+        if (wp.dim() != null) r.addProperty("dim", wp.dim());
         return r;
     }
 
