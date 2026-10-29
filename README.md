@@ -157,44 +157,29 @@ sand" — if you already have 6 it just says so instead of digging anyway.
 
 ## Status & roadmap
 
-Milestones M0–M5 verified live on a **262-mod pack** (see
-`docs/verification-m2.5.md` for the full field log and `docs/mod-compat.md`
-for the mod compatibility notes — several mods needed removal/patching).
+Milestones M0–M5 are verified live on a **262-mod pack** (full field log:
+`docs/verification-m2.5.md`; compatibility notes: `docs/mod-compat.md`;
+per-mod support detail: `docs/mod-support.md`).
 
-Done: environment, mod skeleton, primitives, Baritone, skills, companion MVP,
-full-pack validation, crafting + meaning-level container/GUI ops
-(`container.read/click/button/trade`, `machines/*.json` — 112 machine defs,
-see `docs/mod-support.md`), entity interactions (feed/tame/shear/leash/mount/
-trade), `use_item` incl. charge-and-release (`hold_ticks`), Jade-powered
-`look_info`, AE2 ME-network ops (`container_repo` read +
-`container_repo_action` withdraw/autocraft + quick_move deposit), death-screen
-`respawn`, inventory desync recovery (`inventory_resync`), craft planning
-(`craft_plan` skill incl. machine-processing steps), named waypoints
-(`waypoint` skill, mirrored into JourneyMap when installed), reflex layer
-(damage/proximity interrupts + Baritone retreat), persistent work journal
-(`work_journal`/`work_checkpoint` — generation-independent), schematic
-ingestion (`schematic_inspect`/`schematic_plan` for .litematic/.schem), and
-FTB Quests progress ops (`quest_list`/`quest_inspect`), armor/offhand equip
-(`equip{item,slot_name}`), sneak-modified use (`use_item{sneak}`), item state
-inspection (`item_info` — energy/durability/enchants/NBT), NBT-variant
-visibility in `get_state` (`inventory_detail[].attrs` — `nbt_keys` +
-`energy_stored`), dig auto-tool-selection plus explicit `tool_slot` override,
-Curios accessory equipping (`container_open_curios` + `curios_id` slot
-labels — backpack/jetpack/charm slots reachable via semantic clicks),
-verified AoE mining through the normal dig path, keyboard/scroll input ops
-(`key`/`key_list`/`scroll` — injected KeyMapping presses plus a real
-OS-input path for mods that bypass keymappings, e.g. Mekanism's radial menu
-driven by hold+scroll; unbound mod keys get temporary F13–F24 bindings —
-FTB Ultimine vein-mining verified), pure-screen ops
-(`screen_read`/`screen_click`/`screen_close` — widget enumeration,
-text/index clicks, raw `{x,y}` coords, FTB sidebar buttons), generic text
-input (`type_text` for any EditBox plus `charTyped` reflection fallback),
-`sign_write`, `jei_search` (direct `IIngredientFilter` API path), and
-`quest_claim` (FTB Quests reward claiming verified end-to-end).
-Not done: positive-path `give`/`come_here` tests, Muse host connection
-(procedure documented in `docs/muse-connection.md` — not yet connected;
-the §7–8 wishlist in `docs/autonomy.md` was provided by Muse outside the
-game), long-duration soak.
+**Working today**
+
+| Area | What works |
+|---|---|
+| Foundations | Forge client mod + WebSocket API; primitives (`move` / `dig` / `look_at` / `equip` / `toss`); Baritone pathing (`goto` / `mine` / `follow`); task lifecycle with cancel/events |
+| Companion skills | Chat-driven runner; hot-reloadable skills (`follow_player`, `gather`, `come_here`, `give`, `craft`, `waypoint`, `stop_all`, …) |
+| Crafting & machine GUI | Meaning-level container ops (`container.read` / `click` / `button` / `trade`); 112 machine GUI definitions (`machines/*.json`); `craft_plan` incl. machine-processing steps; AE2 ME-network ops (read / withdraw / autocraft); `jei_search` |
+| World interaction | Entity interactions (feed / tame / shear / leash / mount / trade); `use_item` incl. charge-and-release and sneak variants; Curios accessory equipping; verified AoE mining through the normal dig path; dig auto-tool-selection |
+| Input & screens | Key/scroll injection plus a real OS-input path (Mekanism radial menu by hold+scroll, verified); pure-screen ops (`screen_read` / `click` / `close`); generic text input (`type_text`); `sign_write` |
+| Awareness & memory | Jade-powered `look_info`; item/NBT state inspection (`item_info`, `get_state`); persistent work journal & checkpoints; named waypoints (mirrored into JourneyMap); reflex layer (damage/proximity interrupts + retreat); schematic ingestion (`.litematic` / `.schem`); FTB Quests ops (list / inspect / claim) |
+| Recovery | Death-screen `respawn`; inventory desync recovery (`inventory_resync`) |
+
+**Not done yet**
+
+| Item | Note |
+|---|---|
+| `give` / `come_here` positive-path tests | Need a real second player |
+| Muse host connection | Procedure documented in `docs/muse-connection.md`; not yet connected |
+| Long-duration soak test | Not run yet |
 
 ## Optional integrations
 
