@@ -160,41 +160,29 @@ export default {
 
 ## 現状とロードマップ
 
-マイルストーン M0〜M5 を **262 modパック**で実機検証済みです
-(全記録は `docs/verification-m2.5.md`、mod互換メモは `docs/mod-compat.md`
-— いくつかのmodは除外や修正が必要でした)。
+マイルストーン M0〜M5 は **262 mod パック**で実機検証済み（検証ログ:
+`docs/verification-m2.5.md`、mod 互換性: `docs/mod-compat.md`、
+mod ごとの対応詳細: `docs/mod-support.md`）。
 
-完了: 環境構築、modスケルトン、原始操作、Baritone、技能層、相棒MVP、
-フルパック検証、クラフト+意味レベルのコンテナ/GUI操作
-(`container.read/click/button/trade`、`machines/*.json` — 機械定義112件、
-`docs/mod-support.md` 参照)、entity interaction (餌やり/懐き/毛刈り/
-リード/騎乗/取引)、`use_item` (チャージ解放の`hold_ticks`含む)、
-Jade連携の`look_info`、AE2 MEネットワーク操作 (`container_repo`読取 +
-`container_repo_action`引出/オートクラフト + quick_move入庫)、死亡画面の
-`respawn`、インベントリ不整合復旧 (`inventory_resync`)、クラフト計画
-(`craft_plan`スキル、機械工程ステップ含む)、名前付きwaypoint
-(`waypoint`スキル、JourneyMap導入時はミラー)、反射層 (被弾/接近での
-タスク中断 + Baritone離脱)、永続作業ジャーナル
-(`work_journal`/`work_checkpoint`、世代非依存)、schematic取り込み
-(`schematic_inspect`/`schematic_plan`、.litematic/.schem)、FTB Quests
-進行op (`quest_list`/`quest_inspect`)、armor/offhand装備
-(`equip{item,slot_name}`)、sneak修飾use (`use_item{sneak}`)、アイテム
-状態検査 (`item_info` — エネルギー/耐久/エンチャ/NBT)、`get_state`の
-NBTバリアント可視化 (`inventory_detail[].attrs` — `nbt_keys` +
-`energy_stored`)、digの最適ツール自動選択 + 明示的`tool_slot`指定、
-Curios装備 (`container_open_curios` + `curios_id` slotラベル)、
-通常dig経路でのAoE採掘検証、キーボード/スクロール入力op
-(`key`/`key_list`/`scroll` — KeyMapping注入に加え、独自キー実装を持つ
-mod向けの実OS入力経路。例: Mekanism radialをhold+scrollで操作。未バインド
-のmodキーはF13-F24へ仮割当 — FTB Ultimineのvein-mine実証)、純Screen操作
-(`screen_read`/`screen_click`/`screen_close` — widget列挙、text/index
-クリック、`{x,y}`座標指定、FTB sidebarボタン)、汎用テキスト入力
-(`type_text` — 任意のEditBox + `charTyped`反射フォールバック)、
-`sign_write`、`jei_search` (`IIngredientFilter`の直接API経路)、
-`quest_claim` (FTB Quests報酬クレームをe2e検証)。
-未完了: `give`/`come_here`のpositive経路テスト、Muse接続 (接続手順は
-`docs/muse-connection.md` に準備済みだが未接続。§7-8 の希望リストは
-ゲーム外のMuseから取り込み済み)、長時間soak。
+**現在できること**
+
+| 領域 | できること |
+|---|---|
+| 基盤 | Forge クライアント mod + WebSocket API; プリミティブ（`move` / `dig` / `look_at` / `equip` / `toss`）; Baritone による移動（`goto` / `mine` / `follow`）; キャンセル・イベント付きタスク管理 |
+| コンパニオンスキル | チャット駆動ランナー; ホットリロード可能なスキル群（`follow_player`、`gather`、`come_here`、`give`、`craft`、`waypoint`、`stop_all`、…） |
+| クラフト・マシン GUI | 意味レベルのコンテナ操作（`container.read` / `click` / `button` / `trade`）; マシン GUI 定義 112 件（`machines/*.json`）; 機械加工ステップを含む `craft_plan`; AE2 の ME ネットワーク操作（読み取り・取り出し・自動クラフト）; `jei_search` |
+| ワールド操作 | エンティティ操作（餌やり / 手懐け / 毛刈り / リード / 乗馬 / 取引）; 溜め解放・スニーク対応の `use_item`; Curios アクセサリ装備; 通常の掘削経路での範囲掘削（検証済み）; 掘削時の自動ツール選択 |
+| 入力・画面操作 | キー / スクロール注入 + 実 OS 入力経路（Mekanism のラジアルメニューを長押し+スクロールで操作、検証済み）; 画面操作（`screen_read` / `click` / `close`）; 汎用テキスト入力（`type_text`）; `sign_write` |
+| 認識・記憶 | Jade 連携の `look_info`; アイテム / NBT 状態の検査（`item_info`、`get_state`）; 永続ワークジャーナルとチェックポイント; 名前付きウェイポイント（JourneyMap へも反映）; 反射レイヤ（被ダメージ・接近割り込み + 撤退）; 設計図の取り込み（`.litematic` / `.schem`）; FTB Quests 操作（一覧 / 詳細 / 報酬受け取り） |
+| 復旧 | 死亡画面からの `respawn`; インベントリ不整合の復旧（`inventory_resync`） |
+
+**未完・これから**
+
+| 項目 | 備考 |
+|---|---|
+| `give` / `come_here` の正常系テスト | 実プレイヤーの2人目が必要 |
+| Muse ホスト接続 | 手順は `docs/muse-connection.md` に記載済み; 接続自体はまだ |
+| 長時間の連続稼働テスト | 未実施 |
 
 ## ライセンス
 
