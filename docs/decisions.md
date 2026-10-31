@@ -127,3 +127,25 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 | P4 クエスト自律 | FTB SNBT→DAGオフライン解析 / チャット.goal差し込み / 失敗棚上げ / 達成記念撮影 | Minemind |
 | P5 技能・経路 | 明示コマンドのLLMレス直パース / 畑スキル / 構造物・バイオームlocate / schematic実建築 / エリトラ飛行 / ペット世話 | Elly, Numen, mc_aiplayer, codex-companion |
 | P6 権限・将来 | autonomy.level (0/1/2) + safe/assist/auto相当 / 複数bot・多段LLM | mc_aiplayer, Elly, codex-companion |
+
+## D20. waypoint の正を mod 側に統一 (2026-11-01)
+
+- **決定**: waypoint の保存・解決の正を mod 側 (`Waypoints.java` / gameDir `agentmod-waypoints.json`) とし、skills 側 `skills/waypoint.mjs` は mod op を叩く薄いアダプタに書き換える。旧 `bridge/waypoints.json` は初回実行時に移行する (mod 側に無い名前のみ、同名は mod 優先)
+- **候補**: bridge 側ファイルを正にする / 二重管理のまま運用で吸収する
+- **理由**: mod 側スキーマが半径 (領域・反射の安全圏判定) を含むスーパーセットであり、JourneyMap ミラーも mod 側のみ。skills 側の登録は地図に出ず journal の施設記憶にも残らない。保存先もチェックアウト依存で worktree ごとに分裂する
+- **根拠**: ユーザー裁定 (2026-11-01、凛の提案を採用)
+
+## D21. world_craft 実行器の新設と Create 対応 (2026-11-01)
+
+- **決定**: GUI を持たない「ワールド内操作」型の加工を、汎用実行器スキル `world_craft` (投入→観測して待つ→回収、振る舞いは定義 JSON) で受ける。対象: Botania / Ars 装置 / Tinkers 鋳造 / AE2 結晶育成 / Create ステーション (millstone・fan 加工・press 等)。ステーションの前提インフラ (マナ・動力・形成) はプレイヤー担当とし、bot は操作のみ。前提不備は報告して止まる
+- **候補**: mod ごとに個別スキル / 機械定義 API の拡張で吸収する
+- **理由**: 対象群は全て同じ型 (投入→変化待ち→回収) で、レシピ自体は recipe_lookup で取得できる。Create は大型かつ現行バージョンで代表的な mod であり、ユーザーから対応希望が明示された
+- **対象外**: Create コントラプション (列車・移動/回転構造) の制御。動く構造物は Baritone の経路探索の前提にない
+- **根拠**: ユーザー裁定 (2026-11-01。「AE にも対応できるはず」との指摘を受け AE2 結晶育成を初期定義に含めた)
+
+## D22. ProjectE 対応 (2026-11-01)
+
+- **決定**: ProjectE に対応する。変換表は特殊 GUI のため、(1) 実機で GUI 構造を調査、(2) EMC・学習済み一覧は mod 側リフレクション op `projecte.status` で読む、(3) 取り出し/EMC 化は GUI 駆動スキル `transmute` で行う、の3段とする。知識と EMC は bot プレイヤー自身のものとして扱う
+- **候補**: 対象外のまま / GUI 駆動のみで状態も画面から読む
+- **理由**: ユーザーが愛好してきた mod であり使う意思が明示された。EMC 残高のような数値は画面テキスト依存にせず、Jade/AE2 と同じ soft dependency + リフレクションで確実に読む
+- **根拠**: ユーザー裁定 (2026-11-01)
