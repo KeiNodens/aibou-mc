@@ -5,6 +5,7 @@ import { z, ZodRawShape } from 'zod';
 import { State } from './state.js';
 import { ModClient } from './modclient.js';
 import { Journal } from './journal.js';
+import { planSchematic } from './schematic.js';
 
 /**
  * 技能層 (design §2.1-2): skills/ 配下の .mjs を動的importし、
@@ -24,6 +25,13 @@ export interface SkillCtx {
   call(method: string, params?: Record<string, unknown>): Promise<unknown>;
   state(): Promise<unknown>;
   say(text: string): Promise<unknown>;
+  /** 直近のゲーム内チャット (locateコマンドの結果読み取り等に使う) */
+  chatLog(n?: number): { from: string; text: string; ts: number }[];
+  /** schematicファイルの建築計画 (y下から順のブロック列) */
+  schematicPlan(file: string, maxLayers?: number): Promise<{
+    size: { x: number; y: number; z: number }; total: number;
+    blocks: { x: number; y: number; z: number; id: string }[];
+  }>;
   sleep(ms: number): Promise<void>;
   // mod側taskの完了(task.done)を待つ。timeoutで null、cancelで例外
   waitTask(taskId: string, timeoutMs?: number): Promise<Record<string, unknown> | null>;
@@ -208,6 +216,9 @@ export class Skills {
       },
       state: () => mod.call('obs.state'),
       say: (text) => mod.call('chat.send', { text }),
+      chatLog: (n = 50) => state.chat(n),
+      schematicPlan: (file, maxLayers) =>
+        planSchematic(file, { max_layers: maxLayers }),
       journal: {
         work: work ?? 'none',
         checkpoint: (step, data) =>

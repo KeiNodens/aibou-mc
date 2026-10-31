@@ -1,4 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
 import { ModClient } from './modclient.js';
 import { Journal } from './journal.js';
 import { State } from './state.js';
@@ -50,9 +51,88 @@ export class QuestGraph {
   private byId = new Map<string, QuestNode>(); // canonId → node
   private knownCompleted = new Set<string>();  // canonId
   private pollTimer: NodeJS.Timeout | null = null;
+  // set-aside (P4): 繰り返し失敗したクエストを frontier から外す
+  private failures = new Map<string, number>(); // canonId → 失敗回数
+  private aside = new Set<string>();            // canonId
+  private asideFile: string;
 
   constructor(private file: string) {
+    this.asideFile = path.join(path.dirname(file), 'quest-aside.json');
     this.load();
+    this.loadAside();
+  }
+
+  /** この回数失敗したら自動で棚上げする */
+  static readonly ASIDE_THRESHOLD = 3;
+
+  private loadAside() {
+    try {
+      if (!existsSync(this.asideFile)) return;
+      const d = JSON.parse(readFileSync(this.asideFile, 'utf8')) as {
+        failures?: Record<string, number>; aside?: string[];
+      };
+      this.failures = new Map(Object.entries(d.failures ?? {}));
+      this.aside = new Set(d.aside ?? []);
+    } catch (e) {
+      console.log('[questgraph] aside load failed:', e);
+    }
+  }
+
+  private saveAside() {
+    try {
+      const tmp = this.asideFile + '.tmp';
+      writeFileSync(tmp, JSON.stringify({
+        failures: Object.fromEntries(this.failures),
+        aside: [...this.aside],
+      }));
+      renameSync(tmp, this.asideFile);
+    } catch (e) {
+      console.log('[questgraph] aside save failed:', e);
+    }
+  }
+
+  /** クエストの失敗を記録。閾値到達で自動棚上げ */
+  noteFailure(idOrTitle: string): { title: string; failures: number; aside: boolean } | null {
+    const q = this.find(idOrTitle);
+    if (!q) return null;
+    const cid = canonId(q.id);
+    const n = (this.failures.get(cid) ?? 0) + 1;
+    this.failures.set(cid, n);
+    const nowAside = n >= QuestGraph.ASIDE_THRESHOLD;
+    if (nowAside) this.aside.add(cid);
+    this.saveAside();
+    return { title: q.title, failures: n, aside: this.aside.has(cid) };
+  }
+
+  /** 成功したら失敗カウントをリセット (棚上げは手動解除のみ) */
+  noteSuccess(idOrTitle: string) {
+    const q = this.find(idOrTitle);
+    if (!q) return;
+    const cid = canonId(q.id);
+    if (this.failures.delete(cid)) this.saveAside();
+  }
+
+  /** 手動の棚上げ/解除 */
+  setAside(idOrTitle: string, on: boolean): QuestNode | null {
+    const q = this.find(idOrTitle);
+    if (!q) return null;
+    const cid = canonId(q.id);
+    if (on) this.aside.add(cid); else this.aside.delete(cid);
+    this.saveAside();
+    return q;
+  }
+
+  isAside(q: QuestNode): boolean {
+    return this.aside.has(canonId(q.id));
+  }
+
+  asideList(): QuestNode[] {
+    return this.all().filter(q => this.isAside(q));
+  }
+
+  failureCount(idOrTitle: string): number {
+    const q = this.find(idOrTitle);
+    return q ? (this.failures.get(canonId(q.id)) ?? 0) : 0;
   }
 
   load() {
@@ -97,6 +177,7 @@ export class QuestGraph {
     return this.graph.quests.filter((q) => {
       const cid = canonId(q.id);
       if (completedIds.has(cid)) return false;
+      if (this.aside.has(cid)) return false; // 棚上げ中は候補に出さない
       return q.deps.every((d) => completedIds.has(canonId(d)));
     });
   }
@@ -153,6 +234,7 @@ export class QuestGraph {
         for (const cid of fresh) {
           const q = this.byId.get(cid);
           const title = q?.title ?? cid;
+          this.noteSuccess(cid);
           journal?.episode({
             action: 'quest:complete',
             result: `completed: ${title}`, ok: true,

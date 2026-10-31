@@ -9,6 +9,7 @@ import { Journal } from './journal.js';
 import { RunHold, HoldKind } from './runhold.js';
 import { QuestGraph } from './questgraph.js';
 import { Autonomy } from './autonomy.js';
+import { BotManager } from './bots.js';
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
@@ -19,7 +20,7 @@ const err = (e: unknown) => ({
 
 // M2.5向けツール群。mod側の実装があるmethodはWS経由で呼び、
 // 未実装のものはmock-modがUNSUPPORTEDを返す。
-export function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal, runhold?: RunHold, questGraph?: QuestGraph, autonomy?: Autonomy) {
+export function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal, runhold?: RunHold, questGraph?: QuestGraph, autonomy?: Autonomy, bots?: BotManager) {
   const server = new McpServer({ name: 'minecraft', version: '0.0.1' });
 
   server.registerTool(
@@ -456,7 +457,18 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     async ({ text, priority, end_id, status }) => {
       try {
         if (!journal) return json({ ok: false, note: 'journal disabled' });
-        if (end_id) return json({ ok: journal.goalEnd(end_id, status ?? 'done') });
+        if (end_id) {
+          const ended = journal.goalGet(true).find((g) => g.id === end_id);
+          const okEnd = journal.goalEnd(end_id, status ?? 'done');
+          // クエスト目標の失敗は set-aside カウンタへ (閾値で frontier から外れる)
+          let questFailure = undefined;
+          if (okEnd && status === 'failed' && ended?.text.startsWith('quest:')) {
+            // goal text形式: "quest:<id> <title>" — id部分だけで引く
+            const ref = ended.text.slice('quest:'.length).trim().split(/\s+/)[0];
+            questFailure = questGraph?.noteFailure(ref) ?? undefined;
+          }
+          return json({ ok: okEnd, ...(questFailure ? { questFailure } : {}) });
+        }
         return json({ ok: true, goal: journal.goalSet(text, { priority }) });
       } catch (e) {
         return err(e);
@@ -579,7 +591,13 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
         }
         const plan = questGraph.plan(goal);
         if (!plan) return json({ note: `quest not found: ${goal}` });
-        return json({ plan: plan.map((q) => ({ id: q.id, title: q.title, deps: q.deps })) });
+        return json({
+          plan: plan.map((q) => ({
+            id: q.id, title: q.title, deps: q.deps,
+            aside: questGraph.isAside(q),
+            failures: questGraph.failureCount(q.id),
+          })),
+        });
       } catch (e) {
         return err(e);
       }
@@ -601,6 +619,26 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     async (p) => {
       try {
         return json(await mod.call('jei.search', p));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'emi_search',
+    {
+      description:
+        'Set the EMI ingredient-search filter text (counterpart of ' +
+        'jei_search for packs that use EMI instead of JEI). Returns ' +
+        'UNSUPPORTED when EMI is not installed.',
+      inputSchema: {
+        text: z.string().optional().describe('search text; empty clears'),
+      },
+    },
+    async (p) => {
+      try {
+        return json(await mod.call('emi.search', p));
       } catch (e) {
         return err(e);
       }
@@ -1486,6 +1524,95 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     async () => json({
       level: autonomy?.level(),
       pending: autonomy?.list() ?? [],
+    }),
+  );
+
+  server.registerTool(
+    'session_summary',
+    {
+      description:
+        'Mechanical summary of the play session since the last summary: ' +
+        'episode counts by action, success/failure, goals completed/active. ' +
+        'record=true stores it as the session-end summary (advances the marker).',
+      inputSchema: { record: z.boolean().optional() },
+    },
+    async ({ record }) => {
+      try {
+        if (!journal) return json({ note: 'journal disabled' });
+        return json(journal.sessionSummary(record ?? false));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'work_resume_plan',
+    {
+      description:
+        'Suffix-repair plan for failed work: for each recently failed work id, ' +
+        'the checkpoints already completed and the error that stopped it. ' +
+        'Resume by redoing only the steps AFTER the last completed checkpoint.',
+      inputSchema: { limit: z.number().int().min(1).max(10).optional() },
+    },
+    async ({ limit }) => {
+      try {
+        if (!journal) return json({ failed: [], note: 'journal disabled' });
+        return json({ failed: journal.failedWorks(limit ?? 3) });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'quest_aside',
+    {
+      description:
+        'Manage quest set-aside: quests that fail repeatedly (3x) are removed ' +
+        'from quest_frontier automatically. action=list shows asides and ' +
+        'failure counts; aside/unaside move a quest manually; fail records ' +
+        'one failure for a quest.',
+      inputSchema: {
+        action: z.enum(['list', 'aside', 'unaside', 'fail']),
+        quest: z.string().optional().describe('quest title or id (not needed for list)'),
+      },
+    },
+    async ({ action, quest }) => {
+      try {
+        if (!questGraph?.loaded()) return json({ note: 'quest-graph.json not built' });
+        if (action === 'list') {
+          return json({
+            aside: questGraph.asideList().map((q) => ({
+              id: q.id, title: q.title,
+              failures: questGraph.failureCount(q.id),
+            })),
+          });
+        }
+        if (!quest) return json({ ok: false, note: 'quest is required' });
+        if (action === 'fail') {
+          return json({ ok: true, result: questGraph.noteFailure(quest) });
+        }
+        const q = questGraph.setAside(quest, action === 'aside');
+        return json({ ok: !!q, quest: q?.title ?? null });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'bots_status',
+    {
+      description:
+        'Multi-bot status: the primary bot plus any observer bots registered ' +
+        'via BOTS_JSON (name, connection state, generation).',
+      inputSchema: {},
+    },
+    async () => json({
+      bots: bots?.status() ?? [
+        { name: 'primary', connected: mod.connected, generation: state.generation, role: 'primary' },
+      ],
     }),
   );
 

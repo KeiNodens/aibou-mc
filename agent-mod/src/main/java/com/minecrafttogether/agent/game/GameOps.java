@@ -92,6 +92,7 @@ public final class GameOps {
             case "waypoint.del" -> waypointDel(params);
             case "item.info" -> itemInfo(params);
             case "jei.search" -> jeiSearch(params);
+            case "emi.search" -> emiSearch(params);
             case "quest.list" -> questList();
             case "quest.inspect" -> questInspect(params);
             case "quest.claim" -> questClaim(params);
@@ -676,6 +677,65 @@ public final class GameOps {
             throw new ApiError("UNSUPPORTED",
                 "jei unavailable: " + t.getMessage());
         }
+    }
+
+    /**
+     * emi.search: EMIのアイテム検索フィルタを設定する (JEI版の対)。
+     * EMIは本パック未収録のため、入口はリフレクションで複数候補を試し、
+     * どれも無ければ UNSUPPORTED を返す (JEIと同じ流儀)。
+     * 候補: (1) EmiApi.setSearchText (2) EmiScreenManager.search ウィジェット
+     * の setValue (3) EmiSearch.searchText フィールド。
+     */
+    private static JsonObject emiSearch(JsonObject params) throws ApiError {
+        String text = params.has("text")
+            ? params.get("text").getAsString() : "";
+        java.util.List<String> tried = new java.util.ArrayList<>();
+        // (1) EmiApi.setSearchText
+        try {
+            Class<?> api = Class.forName("dev.emi.emi.api.EmiApi");
+            var m = api.getMethod("setSearchText", String.class);
+            m.invoke(null, text);
+            JsonObject r = new JsonObject();
+            r.addProperty("set", true);
+            r.addProperty("via", "EmiApi.setSearchText");
+            r.addProperty("filter_text", text);
+            return r;
+        } catch (Throwable t) {
+            tried.add("EmiApi.setSearchText: " + t.getClass().getSimpleName());
+        }
+        // (2) EmiScreenManager.search (EmiSearchWidget) の setValue
+        try {
+            Class<?> mgr = Class.forName("dev.emi.emi.screen.EmiScreenManager");
+            Object widget = mgr.getField("search").get(null);
+            if (widget != null) {
+                widget.getClass().getMethod("setValue", String.class)
+                    .invoke(widget, text);
+                Object v = widget.getClass().getMethod("getValue").invoke(widget);
+                JsonObject r = new JsonObject();
+                r.addProperty("set", true);
+                r.addProperty("via", "EmiScreenManager.search");
+                r.addProperty("filter_text", String.valueOf(v));
+                return r;
+            }
+            tried.add("EmiScreenManager.search: null");
+        } catch (Throwable t) {
+            tried.add("EmiScreenManager.search: " + t.getClass().getSimpleName());
+        }
+        // (3) EmiSearch.searchText フィールド
+        try {
+            Class<?> search = Class.forName("dev.emi.emi.search.EmiSearch");
+            var f = search.getField("searchText");
+            f.set(null, text);
+            JsonObject r = new JsonObject();
+            r.addProperty("set", true);
+            r.addProperty("via", "EmiSearch.searchText");
+            r.addProperty("filter_text", text);
+            return r;
+        } catch (Throwable t) {
+            tried.add("EmiSearch.searchText: " + t.getClass().getSimpleName());
+        }
+        throw new ApiError("UNSUPPORTED",
+            "emi unavailable (not installed or no known entry point): " + tried);
     }
 
     /**

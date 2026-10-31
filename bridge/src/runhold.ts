@@ -12,6 +12,8 @@
  *   steering挿入点は「tool完了後/次run前」、follow-upは「完了直前」のみ。
  */
 
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+
 export type HoldKind = 'dead' | 'external' | 'owner_stop' | 'blocked' | 'failed';
 
 export interface LoopStatus {
@@ -21,6 +23,17 @@ export interface LoopStatus {
   lastRunAt: number | null;
   lastError: string | null;
   runningSkill: string | null;
+  /** 再起動で回収した stale run (前回プロセスがrun中に死んでいた) */
+  staleRecovered: { at: number; savedAt: number } | null;
+}
+
+interface PersistedRunState {
+  holds: { kind: HoldKind; reason: string; at: number }[];
+  lastRunAt: number | null;
+  lastError: string | null;
+  running: boolean;
+  runStartedAt: number | null;
+  savedAt: number;
 }
 
 export class RunHold {
@@ -29,21 +42,78 @@ export class RunHold {
   private queued = false;
   private lastRunAt: number | null = null;
   private lastError: string | null = null;
+  private runStartedAt: number | null = null;
+  private staleRecovered: { at: number; savedAt: number } | null = null;
+  private persistFile?: string;
 
   /** 実体の1回実行。runnerがcodex起動を注入する */
   constructor(private runOnce: () => Promise<void>,
-              private runningSkillName: () => string | null = () => null) {}
+              private runningSkillName: () => string | null = () => null,
+              opts: { persistFile?: string } = {}) {
+    this.persistFile = opts.persistFile;
+    this.restore();
+  }
+
+  /**
+   * 永続化状態の復元 (P3: atomic snapshot + stale lease回収)。
+   * holds は復元するが、実行中だった run は復元しない — 前回プロセスが
+   * run の途中で死んだ証拠なので lease を回収し、external hold で止める。
+   */
+  private restore() {
+    if (!this.persistFile) return;
+    try {
+      if (!existsSync(this.persistFile)) return;
+      const s = JSON.parse(readFileSync(this.persistFile, 'utf8')) as PersistedRunState;
+      for (const h of s.holds ?? []) this.holds.set(h.kind, { reason: h.reason, at: h.at });
+      this.lastRunAt = s.lastRunAt ?? null;
+      this.lastError = s.lastError ?? null;
+      if (s.running) {
+        this.staleRecovered = { at: Date.now(), savedAt: s.savedAt };
+        this.lastError = 'stale run reclaimed after restart';
+        this.holds.set('external', {
+          reason: 'stale run reclaimed: 前回プロセスがrun中に終了したため回収',
+          at: Date.now(),
+        });
+        this.persist();
+      }
+    } catch (e) {
+      console.log('[runhold] restore failed:', e);
+    }
+  }
+
+  /** atomic write (tmp→rename)。状態が変わるたびに呼ぶ */
+  private persist() {
+    if (!this.persistFile) return;
+    try {
+      const data: PersistedRunState = {
+        holds: [...this.holds.entries()].map(([kind, v]) => ({ kind, ...v })),
+        lastRunAt: this.lastRunAt,
+        lastError: this.lastError,
+        running: this.running,
+        runStartedAt: this.runStartedAt,
+        savedAt: Date.now(),
+      };
+      const tmp = this.persistFile + '.tmp';
+      writeFileSync(tmp, JSON.stringify(data));
+      renameSync(tmp, this.persistFile);
+    } catch (e) {
+      console.log('[runhold] persist failed:', e);
+    }
+  }
 
   hold(kind: HoldKind, reason: string) {
     this.holds.set(kind, { reason, at: Date.now() });
+    this.persist();
   }
 
   release(kind: HoldKind) {
     this.holds.delete(kind);
+    this.persist();
   }
 
   releaseAll() {
     this.holds.clear();
+    this.persist();
   }
 
   isHeld(): boolean {
@@ -68,6 +138,8 @@ export class RunHold {
     if (!this.queued) return 'idle';
     this.queued = false;
     this.running = true;
+    this.runStartedAt = Date.now();
+    this.persist();
     try {
       await this.runOnce();
       this.lastRunAt = Date.now();
@@ -77,6 +149,8 @@ export class RunHold {
       this.hold('failed', this.lastError);
     } finally {
       this.running = false;
+      this.runStartedAt = null;
+      this.persist();
     }
     return 'ran';
   }
@@ -91,6 +165,7 @@ export class RunHold {
       lastRunAt: this.lastRunAt,
       lastError: this.lastError,
       runningSkill: this.runningSkillName(),
+      staleRecovered: this.staleRecovered,
     };
   }
 }

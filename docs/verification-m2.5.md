@@ -887,3 +887,20 @@ cd agent-mod && ./gradlew build                          # build+JUnit14 OK (JDK
 - P5 mine_resource の実採掘 (階段掘りのlava非検出に注意)
 - P6 実運用でのgate挙動 (chat.command許可運用との整合)
 - skills側とmod側 Waypoints の二重管理は未統合 (明記のみ、統合は別決定)
+
+## Follow-up batch (2026-11-01)
+
+plan-d19 の未実装・一部実装分をまとめて実装。詳細と実機検証チェックリストは
+`docs/followup-2026-11-01.md` を参照。branch: rin/followup-20261101。
+
+- P2 セッション要約 (session_summary / endSession): fixture p2b PASS
+- P3 RunHold永続化 + stale回収 / suffix repair (work_resume_plan):
+  単体検証 tools/verify-runhold.mjs ALL PASS。fixture p3b は永続化まで確認、
+  再起動後段は rin環境の taskkill 制限で harness が安定しないため実機送り
+- P4 クエスト set-aside (失敗3回で frontier 外し): fixture p4b PASS
+- P5 技能7本 (farm/locate/pet_care/logistics/fishing/build_schematic/
+  fly_elytra): fixture p5b (ロード+smoke) PASS
+- P6 承認Web UI (/approvals, /api/approvals) + BotManager土台 (bots_status)
+- SSE /events、Prism自動起動 (PRISM_AUTOLAUNCH) 
+- emi.search op (JEI対。EMI未収録パックでは UNSUPPORTED)
+- build: tsc OK / gradlew build OK。既存fixture p0-p6 回帰 PASS

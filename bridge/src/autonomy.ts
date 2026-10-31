@@ -32,6 +32,7 @@ const READONLY = new Set([
   'obs.block', 'obs.block_state', 'look_info', 'container.read',
   'container.repo', 'item.info', 'find_item', 'recipe.lookup',
   'waypoint.get', 'waypoint.list', 'quest.list', 'quest.inspect',
+  'emi.search',
   'screen.read', 'task.status', 'task.result', 'task.list', 'chat.send',
 ]);
 

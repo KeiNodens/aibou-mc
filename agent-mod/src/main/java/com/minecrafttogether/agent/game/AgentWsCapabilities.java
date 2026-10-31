@@ -44,6 +44,7 @@ public final class AgentWsCapabilities {
             "quest.inspect",
             "quest.claim",
             "jei.search",
+            "emi.search",
             "move.set",
             "move.stop",
             "key.list",

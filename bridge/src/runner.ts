@@ -29,6 +29,8 @@ export interface RunnerOpts {
   journal?: Journal;
   /** クエストグラフ (.goalコマンドでクエスト名解決用) */
   questGraph?: QuestGraph;
+  /** Run/Hold状態の永続化ファイル (atomic snapshot + stale lease回収用) */
+  runStateFile?: string;
   /** 承認ゲート (.ok/.deny、危険操作の承認要求通知用) */
   autonomy?: Autonomy;
 }
@@ -83,7 +85,8 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
   let worldCache = { at: 0, text: '(世界情報なし)' };
 
   // 実行管理: codex runの発火は全てpump()を通す (1本のみ並行)
-  const rh = new RunHold(() => run(), () => opts.skills?.runningName() ?? null);
+  const rh = new RunHold(() => run(), () => opts.skills?.runningName() ?? null,
+    { persistFile: opts.runStateFile });
 
   // 死亡→dead hold、respawnedで解除 (反射イベント経路)
   state.onEvent((e) => {
@@ -231,6 +234,14 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
       .join('\n');
     const world = await worldCtx();
     const boundedLog = `## これまでの会話 (古い分・ダイジェスト)\n${digest}\n\n## 直近の会話\n${recent}`;
+    // suffix repair: 前回失敗した作業は、完了済みstepを再実行せず失敗step以降だけ組み直す
+    const failed = opts.journal?.failedWorks(2) ?? [];
+    const resumeNote = failed.length
+      ? '\n\n## 前回失敗した作業 (再開時は完了済みstepを繰り返さず、失敗した所から先だけ進めること)\n'
+        + failed.map(f =>
+          `- ${f.work} skill=${f.skill ?? '?'} error=${f.error ?? '?'}`
+          + (f.doneSteps.length ? ` 完了済みstep: ${f.doneSteps.join(' → ')}` : '')).join('\n')
+      : '';
 
     let prompt: string;
     if (opts.promptFile) {
@@ -238,8 +249,9 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
       prompt = tpl.includes('{chatLog}')
         ? tpl.replace('{chatLog}', boundedLog).replace('{worldCtx}', world)
         : `${tpl}\n\n${boundedLog}`;
+      prompt += resumeNote;
     } else {
-      prompt = `${buildHead(catalog)}\n\n## 世界の状況\n${world}\n\n${boundedLog}\n\n上記の最新の発言に応答してください。作業を求められている場合は、利用可能なツールで実行し、結果を send_chat で報告してください。`;
+      prompt = `${buildHead(catalog)}\n\n## 世界の状況\n${world}\n\n${boundedLog}${resumeNote}\n\n上記の最新の発言に応答してください。作業を求められている場合は、利用可能なツールで実行し、結果を send_chat で報告してください。`;
     }
     console.log(`[runner] prompt ${prompt.length} chars`);
     mkdirSync(opts.logDir, { recursive: true });

@@ -99,6 +99,21 @@ interface Snapshot {
   knowledge: Knowledge[];
   episodes: Episode[];
   counter: number;
+  /** 最後にセッション要約を記録した時刻 (ms epoch)。0=未記録 */
+  lastSummaryAt?: number;
+}
+
+export interface SessionSummary {
+  at: number;
+  since: number;
+  episodes: number;
+  ok: number;
+  failed: number;
+  byAction: Record<string, number>;
+  goalsDone: number;
+  goalsActive: number;
+  facilitiesTotal: number;
+  line: string;
 }
 
 const CAPS = {
@@ -341,7 +356,104 @@ export class Journal {
       knowledge: this.snap.knowledge.map(k => ({ ...k })),
       episodes: this.snap.episodes.map(e => ({ ...e })),
       counter: this.snap.counter,
+      lastSummaryAt: this.snap.lastSummaryAt ?? 0,
     };
+  }
+
+  // ---- セッション要約 (P2) ----
+
+  /**
+   * 前回要約以降の episodes / goals から機械的なセッション要約を作る。
+   * record=true で episode (session:summary) と JSONL に残し、lastSummaryAt を進める。
+   * LLM要約ではなく集計ベース — 再開時の「前回なにをしたか」を1行で引ける。
+   */
+  sessionSummary(record = false): SessionSummary {
+    const since = this.snap.lastSummaryAt ?? 0;
+    const eps = this.snap.episodes.filter(e => e.ts > since && e.action !== 'session:summary');
+    const byAction: Record<string, number> = {};
+    let ok = 0;
+    for (const e of eps) {
+      byAction[e.action] = (byAction[e.action] ?? 0) + 1;
+      if (e.ok) ok++;
+    }
+    const goalsDone = this.snap.goals.filter(
+      g => g.status === 'done' && g.updatedAt > since).length;
+    const goalsActive = this.snap.goals.filter(g => g.status === 'active').length;
+    const top = Object.entries(byAction)
+      .sort((a, b) => b[1] - a[1]).slice(0, 3)
+      .map(([k, v]) => `${k}×${v}`).join(' ');
+    const line = eps.length
+      ? `前回: 作業${eps.length}件 (成功${ok}/失敗${eps.length - ok}) `
+        + `${top} 目標完了${goalsDone} / 進行中${goalsActive}`
+      : '前回: 記録なし';
+    const sum: SessionSummary = {
+      at: Date.now(), since,
+      episodes: eps.length, ok, failed: eps.length - ok,
+      byAction, goalsDone, goalsActive,
+      facilitiesTotal: this.snap.facilities.length, line,
+    };
+    if (record) {
+      this.episode({
+        action: 'session:summary',
+        result: line, ok: true,
+      });
+      this.append('session.summary', { ...sum });
+      this.snap.lastSummaryAt = sum.at;
+      this.markDirty();
+    }
+    return sum;
+  }
+
+  /** セッション終了時: 要約を記録してから snapshot を書き切る */
+  endSession(): SessionSummary {
+    const sum = this.sessionSummary(true);
+    this.flush();
+    return sum;
+  }
+
+  /**
+   * 失敗で終わった作業の一覧 (suffix repair 用)。
+   * work.end(ok:false) の作業について、完了済み checkpoint と失敗情報を返す。
+   * 再開時は doneSteps を再実行せず、失敗step以降だけを組み直す。
+   */
+  failedWorks(limit = 3): Array<{
+    work: string; skill?: string; error?: string; at: number;
+    doneSteps: string[]; lastCheckpoint?: string;
+  }> {
+    const all = this.tail(2000);
+    const byWork = new Map<string, {
+      work: string; skill?: string; error?: string; at: number;
+      doneSteps: string[]; lastCheckpoint?: string;
+    }>();
+    for (const e of all) {
+      if (!e.work) continue;
+      if (e.kind === 'work.start') {
+        byWork.set(e.work, {
+          work: e.work, skill: e.skill as string | undefined,
+          at: e.ts, doneSteps: [],
+        });
+      } else if (e.kind === 'checkpoint') {
+        const w = byWork.get(e.work);
+        if (w && typeof e.step === 'string') {
+          w.doneSteps.push(e.step);
+          w.lastCheckpoint = e.step;
+        }
+      } else if (e.kind === 'work.end') {
+        const w = byWork.get(e.work);
+        if (w) {
+          if (e.ok === false && !e.cancelled) {
+            w.error = typeof e.error === 'string' ? e.error : 'failed';
+            w.at = e.ts;
+          } else {
+            byWork.delete(e.work);
+          }
+        }
+      }
+    }
+    return [...byWork.values()]
+      .filter(w => w.error !== undefined)
+      .sort((a, b) => b.at - a.at)
+      .slice(0, limit);
   }
 
   private markDirty() {
