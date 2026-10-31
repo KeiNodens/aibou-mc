@@ -904,3 +904,17 @@ plan-d19 の未実装・一部実装分をまとめて実装。詳細と実機�
 - SSE /events、Prism自動起動 (PRISM_AUTOLAUNCH) 
 - emi.search op (JEI対。EMI未収録パックでは UNSUPPORTED)
 - build: tsc OK / gradlew build OK。既存fixture p0-p6 回帰 PASS
+
+## D20 waypoint 統合 (2026-11-01)
+
+- skills/waypoint.mjs を mod 側アダプタに書き換え (waypoint.set/get/list/del)。
+  radius 引数を追加し MCP 側と同等化。登録が journal 施設記憶にも残るように
+  なった (ctx.call の consolidation 経由)
+- 旧 bridge/waypoints.json の移行を実装 (初回実行時、mod 側優先、
+  移行後に .migrated へ改名。壊れたファイルは .corrupt へ退避)
+- mock-mod に waypoint.* ハンドラを追加 (Java Waypoints の意味論を模倣)
+- 単体検証 tools/verify-waypoint.mjs: ALL PASS (移行・remember・radius・
+  goto 解決・remove・not_found)
+- fixture p7-waypoint: PASS (skill remember → MCP 一覧に可視 /
+  MCP 保存 → skill の list・goto が解決 / radius 同等性 / remove 相互可視)
+- 回帰: p5b PASS

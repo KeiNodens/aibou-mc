@@ -12,6 +12,7 @@ const wss = new WebSocketServer({ port: PORT, maxPayload: 64 * 1024 });
 let taskSeq = 0;
 const tasks = new Map();
 const stubs = new Map(); // method → (params) => result | {error:{code,message}}
+const mockWaypoints = new Map(); // waypoint.* 用 (Java Waypoints の意味論を模倣)
 const waiters = []; // {method, resolve} — waitReq用
 const requestLog = []; // 全reqの記録 (fixture検証用)
 
@@ -113,6 +114,29 @@ wss.on('connection', (ws) => {
         },
         events_since_last: [],
       });
+    } else if (m === 'waypoint.set') {
+      // 座標省略時は現在位置 (obs.state の pos を floor した値)
+      const wp = {
+        x: typeof p.x === 'number' ? p.x : 103,
+        y: typeof p.y === 'number' ? p.y : 64,
+        z: typeof p.z === 'number' ? p.z : -31,
+      };
+      if (typeof p.r === 'number' && p.r >= 0) {
+        wp.r = p.r;
+        wp.dim = 'minecraft:overworld';
+      }
+      mockWaypoints.set(p.name, wp);
+      reply(ws, msg, { saved: p.name, ...wp });
+    } else if (m === 'waypoint.get') {
+      const wp = mockWaypoints.get(p.name);
+      if (!wp) fail(ws, msg, 'NOT_FOUND', 'unknown waypoint');
+      else reply(ws, msg, { ...wp });
+    } else if (m === 'waypoint.list') {
+      reply(ws, msg, { waypoints: Object.fromEntries(mockWaypoints) });
+    } else if (m === 'waypoint.del') {
+      if (!mockWaypoints.delete(p.name)) {
+        fail(ws, msg, 'NOT_FOUND', `unknown waypoint: ${p.name}`);
+      } else reply(ws, msg, { deleted: p.name });
     } else if (m === 'obs.scan') {
       reply(ws, msg, {
         blocks: { 'minecraft:oak_log': 41, 'minecraft:dirt': 62, 'minecraft:stone': 88 },

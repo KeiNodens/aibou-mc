@@ -3,7 +3,14 @@
 2026-11-01 のユーザー裁定（decisions.md D20–D22）に基づく設計メモ。
 実機検証は従来分と合わせて次回合同セッションでまとめて行う。
 
-## 1. waypoint 統合（D20）
+## 1. waypoint 統合（D20）✅ 実装済み（2026-11-01）
+
+アダプタ書き換え + 旧ファイル移行を実装し、単体検証
+（tools/verify-waypoint.mjs）と fixture（tools/fixtures/p7-waypoint.mjs）で
+確認済み。mock-mod に waypoint.* ハンドラも追加した。
+本番移行の対象は本体ツリー bridge/waypoints.json の「home」
+（-1,63,-3、2026-10-28 登録）で、マージ後に skill が初回実行された時点で
+mod 側へ取り込まれる。
 
 現状は二重管理:
 
