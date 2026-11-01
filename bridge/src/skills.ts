@@ -140,6 +140,37 @@ export class Skills {
   run(name: string, args: Record<string, unknown>) {
     const m = this.registry.get(name);
     if (!m) throw new Error(`unknown skill: ${name}`);
+    // Review F5: stop_all must preempt. Routing it through the BUSY gate
+    // meant "stop" during a long skill fell through to the LLM path and
+    // never reached the mod. Abort the running skill, then run stop_all
+    // outside the exclusivity slot so its stop calls land immediately.
+    if (name === 'stop_all' && this.current) {
+      const prev = this.current;
+      prev.controller.abort();
+      const controller = new AbortController();
+      const work = this.journal?.newWorkId();
+      this.journal?.append('work.start', { work, skill: name, args, preempted: prev.name });
+      const ctx = this.makeCtx(controller, work);
+      const done = (async (): Promise<SkillOutcome> => {
+        // Let the aborted skill start unwinding, but never block the stop.
+        await Promise.race([
+          prev.done,
+          new Promise((r) => setTimeout(r, 1500)),
+        ]);
+        try {
+          const result = await m.run(ctx, args);
+          this.state.push('skill.done', { skill: name, ok: true, result });
+          this.journal?.append('work.end', { work, skill: name, ok: true, result });
+          return { ok: true };
+        } catch (e) {
+          const error = e instanceof Error ? e.message : String(e);
+          this.state.push('skill.done', { skill: name, ok: false, error });
+          this.journal?.append('work.end', { work, skill: name, ok: false, error });
+          return { ok: false, error };
+        }
+      })();
+      return { started: true, skill: name, work, done };
+    }
     if (this.current) throw new Error(`BUSY: skill '${this.current.name}' is running`);
 
     const controller = new AbortController();
