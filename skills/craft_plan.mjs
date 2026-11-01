@@ -55,6 +55,7 @@ export default {
     depth: { type: 'integer', required: false, description: 'max recipe depth (default 4)' },
   },
   async run(ctx, { item, count = 1, depth = 4 }) {
+    depth = Math.max(0, Math.min(depth, 12)); // D59/P2-18: 深さ上限
     const machineDefs = loadMachineHints();
     const state = await ctx.call('obs.state');
     const inv = new Map();
@@ -209,7 +210,15 @@ export default {
     };
 
     // itemをneed個作るのに必要なものを展開
+    // D59/P2-18: 展開予算とキャンセル確認。旧実装は AbortSignal を
+    // 一切見ず、広いレシピツリーで排他枠を塞ぎ続けることができた
+    let expandCalls = 0;
+    const EXPAND_BUDGET = 4000;
     const expand = async (id, need, d) => {
+      ctx.throwIfCancelled();
+      if (++expandCalls > EXPAND_BUDGET) {
+        throw new Error('craft_plan: recipe expansion budget exceeded');
+      }
       if (d > depth || visiting.has(id)) { addMissing(id, need); return; }
       visiting.add(id);
       const key = `${id}`;

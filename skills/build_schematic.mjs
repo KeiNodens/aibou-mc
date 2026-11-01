@@ -123,16 +123,28 @@ export default {
     // same id and props subset match.
     let placed = 0;
     let skipped = 0;
+    let totalNonAir = 0;
     const placements = [];
+    // D59/P2-16: スキャンで既設と判定した機械も commission 対象に含める
+    // (旧実装は今回配置分だけで、再実行時に既設機械の設定が漏れた)
+    const existingMachines = [];
     for (const b of blocks) {
+      // D59/P2-16: スキャン中も中断を受け付ける (旧実装は全計画を
+      // 直列RPCで回し切るまで abort が効かなかった)
+      ctx.throwIfCancelled();
       if (AIRS.has(b.id)) continue;
-      if (placements.length >= max_blocks) break;
+      totalNonAir++;
+      if (placements.length >= max_blocks) continue;
       const wx = x + b.x, wy = y + b.y, wz = z + b.z;
       const cur = await ctx.call('obs.block_state', { x: wx, y: wy, z: wz }).catch(() => null);
       if (cur?.block === b.id) {
         const propsOk = !b.props || Object.entries(b.props)
           .every(([k, v]) => String(cur.properties?.[k]) === String(v));
-        if (propsOk) { skipped++; continue; }
+        if (propsOk) {
+          skipped++;
+          existingMachines.push({ x: wx, y: wy, z: wz, id: b.id });
+          continue;
+        }
       }
       placements.push({
         x: wx, y: wy, z: wz, id: b.id,
@@ -182,7 +194,7 @@ export default {
       const targets = commissionBlocks();
       if (targets.size) {
         const seenPos = new Set();
-        for (const pl of placements) {
+        for (const pl of [...placements, ...existingMachines]) {
           if (!targets.has(pl.id)) continue;
           const key = `${pl.x},${pl.y},${pl.z}`;
           if (seenPos.has(key)) continue;
@@ -196,7 +208,9 @@ export default {
         }
       }
     }
-    const remaining = plan.total - placed - skipped;
+    // D59/P2-16: remaining は非air総数基準 (plan.total は air の扱いで
+    // ずれ、過大表示になっていた)
+    const remaining = Math.max(0, totalNonAir - placed - skipped);
     await ctx.say(
       `建築: ${placed}個置いた (既設${skipped} / 残り約${remaining})` +
       (missingItems.size ? ` 材料が無いもの: ${[...missingItems].join(', ')}` : '') +
@@ -205,7 +219,7 @@ export default {
       done: remaining <= 0, placed, skipped, failed,
       missing: missingItems.size, missing_items: [...missingItems],
       mismatched: mismatchedAt.slice(0, 20), mismatched_count: mismatchedCount,
-      remaining, total: plan.total, via: 'build_task',
+      remaining, total: totalNonAir, plan_total: plan.total, via: 'build_task',
       commissioned,
     };
   },

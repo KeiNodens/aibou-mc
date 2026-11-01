@@ -8,7 +8,15 @@ function splitSides(read) {
   const sizes = read?.container_sizes ?? {};
   const idxs = Object.keys(sizes).map(Number);
   if (!read || read.menu_id === 'player_inventory' || idxs.length < 2) return null;
-  const playerIdx = idxs.reduce((a, b) => (sizes[a] >= sizes[b] ? a : b));
+  // D59/P2-11: logistics (F1修正済み) と同じ精密判定を使う。
+  // 旧「最大コンテナ=プレイヤー」規則は大型鍋メニューで側が反転した
+  let playerIdx;
+  if (typeof read.player_container_idx === 'number'
+    && idxs.includes(read.player_container_idx)) {
+    playerIdx = read.player_container_idx;
+  } else {
+    playerIdx = idxs.find((i) => sizes[i] === 36) ?? idxs[idxs.length - 1];
+  }
   return { playerIdx, menuId: read.menu_id };
 }
 
@@ -97,20 +105,45 @@ export default {
         return { done: false, reason: 'pot_layout_unexpected', contSlots };
       let slotCursor = 0;
       for (const need of needed) {
-        for (let unit = 0; unit < need.count; unit++) {
+        const dst = ingredientSlots[slotCursor++];
+        if (dst === undefined) return { done: false, reason: 'pot_full' };
+        // D59/P2-12: 必要個数だけを右クリック (1個ずつ) で置く。
+        // 旧実装は単位ごとにスタック全量を掴んで全量置いたため、
+        // 2単位目で在庫が消えて ingredient_vanished になっていた。
+        // process_in_machine の確立パターン (掴む→右クリック×n→残りを戻す)
+        let placed = 0;
+        while (placed < need.count) {
           ctx.throwIfCancelled();
           const cur = await ctx.call('container.read');
+          const dstNow = (cur.slots ?? []).find((s) => s.slot === dst);
+          placed = (dstNow && !dstNow.empty && dstNow.id === need.item)
+            ? (dstNow.count ?? 0) : placed;
+          if (placed >= need.count) break;
           const src = (cur.slots ?? []).find((s) =>
             s.container_idx === sides.playerIdx && !s.empty && s.id === need.item);
           if (!src) return { done: false, reason: 'ingredient_vanished', item: need.item };
-          const dst = ingredientSlots[slotCursor++];
-          if (dst === undefined) return { done: false, reason: 'pot_full' };
+          const want = Math.min(need.count - placed, src.count ?? 1);
           await ctx.call('container.click', {
             slot: src.slot, action: 'pickup', menu_id: sides.menuId,
           });
-          await ctx.call('container.click', {
-            slot: dst, action: 'pickup', menu_id: sides.menuId,
-          });
+          for (let i = 0; i < want; i++) {
+            await ctx.call('container.click', {
+              slot: dst, action: 'pickup', button: 1, menu_id: sides.menuId,
+            });
+          }
+          const after = await ctx.call('container.read');
+          if (after.carried) {
+            await ctx.call('container.click', {
+              slot: src.slot, action: 'pickup', menu_id: sides.menuId,
+            }).catch(() => {});
+          }
+          const dstAfter = (after.slots ?? []).find((s) => s.slot === dst);
+          const nowCount = (dstAfter && !dstAfter.empty && dstAfter.id === need.item)
+            ? (dstAfter.count ?? 0) : 0;
+          if (nowCount <= placed) {
+            return { done: false, reason: 'ingredient_insert_failed', item: need.item };
+          }
+          placed = nowCount;
         }
       }
       await ctx.call('container.close').catch(() => {});
@@ -126,10 +159,15 @@ export default {
         const outs = (poll.slots ?? []).filter((s) =>
           s.container_idx !== ps.playerIdx && !s.empty && s.id === args.target);
         for (const o of outs) {
+          // D59/P2-13: quick_move の成否を再読で検証してから数える
           await ctx.call('container.click', {
             slot: o.slot, action: 'quick_move', menu_id: ps.menuId,
           });
-          cooked += o.count ?? 0;
+          const chk = await ctx.call('container.read').catch(() => null);
+          const left = (chk?.slots ?? []).find((s) => s.slot === o.slot);
+          const leftCount = (left && !left.empty && left.id === args.target)
+            ? (left.count ?? 0) : 0;
+          cooked += Math.max(0, (o.count ?? 0) - leftCount);
         }
         await ctx.call('container.close').catch(() => {});
       }

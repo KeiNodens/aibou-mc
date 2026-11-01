@@ -71,11 +71,18 @@ export default {
       }
       for (const t of targets) {
         await ctx.call('dig', { x, y: t.y, z }).catch(() => {});
+        await ctx.sleep(420);
+        // D59/P2-14: 掘れたかを再観測で確認する。掘れていないのに
+        // 論理座標だけ前進すると坑道報告と実態が乖離するため、
+        // 失敗したら掘削を止めて理由を返す
+        const chk = await bsAt(x, t.y, z).catch(() => null);
+        if (chk && chk !== 'minecraft:air' && chk !== 'minecraft:cave_air') {
+          return 'dig_failed';
+        }
         dug++;
         if (t.id.includes('_ore') || t.id === 'minecraft:ancient_debris') {
           ores[t.id] = (ores[t.id] ?? 0) + 1;
         }
-        await ctx.sleep(420);
       }
       return null;
     };

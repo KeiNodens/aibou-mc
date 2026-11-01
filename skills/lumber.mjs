@@ -67,8 +67,12 @@ export default {
         const c = cells[0];
         baseCell = baseCell ?? c;
         await ctx.call('dig', { x: c.x, y: c.y, z: c.z }).catch(() => {});
-        chopped++;
         await ctx.sleep(380);
+        // D59/P2-14: 掘れたかをセル再観測で確認してから数える
+        // (旧実装は dig の成否を見ずに数え、全失敗でも報告が水増しされた)
+        const chk = await ctx.call('obs.block_state', { x: c.x, y: c.y, z: c.z })
+          .catch(() => null);
+        if (!chk?.block || chk.block === 'minecraft:air') chopped++;
       }
       treesDone++;
       if (replant && baseCell && seedSapling) {

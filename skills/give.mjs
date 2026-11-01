@@ -36,6 +36,18 @@ export default {
       await ctx.call('task.cancel', { task_id: f.task_id }).catch(() => {});
       await ctx.call('baritone.stop').catch(() => {});
     }
+    // D59/P2-15: 投げる前に到達を事後確認する。旧実装は追従が
+    // タイムアウトしても現在地で全量を投げて成功報告していた
+    const finalE = await ctx.call('obs.entity', { name: player }).catch(() => null);
+    if (!finalE?.count) {
+      await ctx.say(`${player} を見失ったから渡せなかった`);
+      return { given: 0, error: 'TARGET_LOST' };
+    }
+    const finalDist = finalE.entities[0].dist;
+    if (typeof finalDist === 'number' && finalDist > 4) {
+      await ctx.say(`${player} に近づけなかったから渡せなかった`);
+      return { given: 0, error: 'TOO_FAR', dist: finalDist };
+    }
     // 装備して投げる
     await ctx.call('equip', { slot: slot.slot });
     const n = Math.min(count ?? slot.count, slot.count);

@@ -57,7 +57,15 @@ async function fetchFromOpenChest(ctx, sides, read, item, want) {
     await ctx.call('container.click', {
       slot: s.slot, action: 'quick_move', menu_id: sides.menuId,
     });
-    got += s.count ?? 0;
+    // D59/P2-13: quick_move は宛先満杯でも正常応答する。スロットの
+    // 減少分だけを実移動として数える (旧実装は旧 count をそのまま加算)
+    const after = await ctx.call('container.read').catch(() => null);
+    const left = (after?.slots ?? []).find((x) => x.slot === s.slot);
+    const leftCount = (left && !left.empty && left.id === item)
+      ? (left.count ?? 0) : 0;
+    const movedHere = Math.max(0, (s.count ?? 0) - leftCount);
+    if (movedHere <= 0) break; // プレイヤー側が満杯なら以降も動かない
+    got += movedHere;
   }
   return got;
 }
@@ -215,7 +223,12 @@ export default {
           await ctx.call('container.click', {
             slot: s.slot, action: 'quick_move', menu_id: sides.menuId,
           });
-          moved += s.count ?? 0;
+          // D59/P2-13: 実移動分だけ数える (チェスト満杯時の虚偽報告防止)
+          const afterD = await ctx.call('container.read').catch(() => null);
+          const leftD = (afterD?.slots ?? []).find((x) => x.slot === s.slot);
+          const leftCountD = (leftD && !leftD.empty && leftD.id === s.id)
+            ? (leftD.count ?? 0) : 0;
+          moved += Math.max(0, (s.count ?? 0) - leftCountD);
         }
         await ctx.say(`チェストに預けたよ (${moved}個分)`);
         return { done: true, deposited: moved };

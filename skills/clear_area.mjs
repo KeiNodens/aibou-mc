@@ -40,8 +40,11 @@ export default {
         if (g?.task_id) await ctx.waitTask(g.task_id, 25_000).catch(() => null);
         for (const t of targets) {
           await ctx.call('dig', { x: t.x, y: t.y, z: t.z }).catch(() => {});
-          cleared++;
           await ctx.sleep(380);
+          // D59/P2-14: 掘れたかを再観測で確認してから数える
+          const chk = await ctx.call('obs.block_state', { x: t.x, y: t.y, z: t.z })
+            .catch(() => null);
+          if (!chk?.block || chk.block === 'minecraft:air') cleared++;
           if (cleared >= max_blocks) break outer;
         }
       }

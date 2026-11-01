@@ -181,9 +181,17 @@ export default {
         await ctx.call('container.click', {
           slot: s.slot, action: 'quick_move', menu_id: menu.menu_id,
         });
-        produced += s.count;
-        seen[s.id] = (seen[s.id] ?? 0) + s.count;
-        gotAny = true;
+        // D59/P2-13: 実移動分だけ数える。旧実装は旧 count を加算したため、
+        // インベントリ満杯で何も動かなくても produced が水増しされ、
+        // 2回目の collectPass で同じスロットを二重に数えていた
+        const chkP = await ctx.call('container.read').catch(() => null);
+        const leftP = (chkP?.slots ?? []).find((x) => x.slot === s.slot);
+        const leftCountP = (leftP && !leftP.empty && leftP.id === s.id)
+          ? (leftP.count ?? 0) : 0;
+        const movedP = Math.max(0, s.count - leftCountP);
+        produced += movedP;
+        if (movedP > 0) seen[s.id] = (seen[s.id] ?? 0) + movedP;
+        gotAny = gotAny || movedP > 0;
       }
       return gotAny;
     };
