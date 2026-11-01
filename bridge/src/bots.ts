@@ -53,7 +53,7 @@ export class BotManager {
   addObserver(def: BotDef) {
     if (this.extras.has(def.name) || def.name === this.primaryName) return;
     const state = new State();
-    const mod = new ModClient(def.url, state, console.log);
+    const mod = new ModClient(def.url, state, console.log, undefined, 'observer');
     this.extras.set(def.name, { def, mod, state });
     mod.start();
     console.log(`[bots] observer bot '${def.name}' → ${def.url}`);

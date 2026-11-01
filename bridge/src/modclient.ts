@@ -18,6 +18,8 @@ export class ModClient {
     private state: State,
     private log: (...a: unknown[]) => void = console.log,
     private autonomy?: Autonomy,
+    /** WS identify で申告する role。observer bot は 'observer' (読取専用) */
+    private role: 'controller' | 'observer' = 'controller',
   ) {}
 
   start() {
@@ -27,6 +29,19 @@ export class ModClient {
   private connect() {
     const ws = new WebSocket(this.url);
     this.ws = ws;
+    // D59/P2-22: 死活監視 (ping/pong)。黙った経路断 (スリープ等で FIN が
+    // 来ない) を検出できず、healthz が mod:true を返し続ける問題への対策
+    let alive = true;
+    ws.on('pong', () => { alive = true; });
+    const hb = setInterval(() => {
+      if (!alive) {
+        this.log('[modclient] heartbeat lost; terminating');
+        ws.terminate();
+        return;
+      }
+      alive = false;
+      try { ws.ping(); } catch { /* close 側で処理 */ }
+    }, 15_000);
     ws.on('open', () => {
       this.connected = true;
       this.log('[modclient] connected', this.url);
@@ -42,7 +57,7 @@ export class ModClient {
         this.state.generation = msg.generation as number;
         this.log('[modclient] generation =', msg.generation);
         // WS堅牢化: hello応答としてrole申告する (10s以内必須)
-        ws.send(JSON.stringify({ type: 'identify', role: 'controller' }));
+        ws.send(JSON.stringify({ type: 'identify', role: this.role }));
         return;
       }
       if (msg.type === 'evt') {
@@ -59,7 +74,15 @@ export class ModClient {
       }
     });
     ws.on('close', () => {
+      clearInterval(hb);
       this.connected = false;
+      // D59/P2-22: 応答待ちは即座に失敗させる (旧実装は各呼出が個別の
+      // 30秒タイマ満了まで残り、mod 落ちの検出が遅れた)
+      for (const [, p] of this.pending) {
+        clearTimeout(p.timer);
+        p.reject(new Error('NOT_CONNECTED: mod connection closed'));
+      }
+      this.pending.clear();
       this.log('[modclient] closed; retry in 3s');
       setTimeout(() => this.connect(), 3000);
     });

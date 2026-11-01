@@ -240,10 +240,19 @@ export class QuestGraph {
       this.watchStarting.unref?.();
       return;
     }
+    // D59/P2-20: 初回ポーリングはベースラインとして取り込むだけにする。
+    // 旧実装は knownCompleted が空のまま比較したため、再起動のたびに
+    // 既完了クエスト全件が「新規完了」として通知・記録されていた
+    let baselineDone = false;
     this.pollTimer = setInterval(async () => {
       try {
         const res = await mod.call('quest.list');
         const now = this.extractCompleted(res);
+        if (!baselineDone) {
+          baselineDone = true;
+          this.knownCompleted = now;
+          return;
+        }
         const prevFrontier = this.frontier(this.knownCompleted);
         const fresh = [...now].filter((id) => !this.knownCompleted.has(id));
         for (const cid of fresh) {

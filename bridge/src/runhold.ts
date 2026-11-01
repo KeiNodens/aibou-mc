@@ -52,6 +52,15 @@ export class RunHold {
               opts: { persistFile?: string } = {}) {
     this.persistFile = opts.persistFile;
     this.restore();
+    // D59/P1-7: queued の再駆動を保証するウォッチドッグ。
+    // 旧設計は「次の人間チャットが来たときの pump 呼出」にだけ再駆動を
+    // 依存しており、skill 終了や hold 解除のタイミングでは queued な
+    // 要求が無言で滞留した。pump 自体が全条件を guard するので、
+    // 1秒間隔で条件が揃ったかだけを見る。
+    const wd = setInterval(() => {
+      if (this.queued && !this.running) void this.pump();
+    }, 1000);
+    wd.unref?.();
   }
 
   /**

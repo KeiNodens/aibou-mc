@@ -19,6 +19,9 @@ export interface SkillModule {
   description: string;
   // { argName: {type:'string'|'number'|'integer'|'boolean', required?:bool, description?:string} }
   params?: Record<string, { type: string; required?: boolean; description?: string }>;
+  /** 実行ウォッチドッグ (ms)。0 = 無制限 (follow系など恒常実行スキルのみ)。
+   *  未指定は Skills 側の既定 (SKILL_TIMEOUT_MS / 20分) */
+  timeoutMs?: number;
   run(ctx: SkillCtx, args: Record<string, unknown>): Promise<unknown>;
 }
 
@@ -71,8 +74,17 @@ export class Skills {
     private journal?: Journal,
   ) {}
 
-  async load() {
-    this.registry.clear();
+  private loadChain: Promise<void> = Promise.resolve();
+
+  /** D59/P2-19: 新レジストリを完成させてから差し替える (旧実装は冒頭の
+   *  registry.clear() から再構築完了まで、ツール一覧が欠けた状態が
+   *  外に見えた)。load 同士も直列化し、旧版モジュールの後勝ち復活を防ぐ */
+  load(): Promise<void> {
+    this.loadChain = this.loadChain.then(() => this.doLoad());
+    return this.loadChain;
+  }
+
+  private async doLoad() {
     let files: string[] = [];
     try {
       files = readdirSync(this.dir).filter((f) => f.endsWith('.mjs'));
@@ -80,6 +92,7 @@ export class Skills {
       console.log(`[skills] dir not found: ${this.dir}`);
       return;
     }
+    const next = new Map<string, SkillModule>();
     for (const f of files) {
       try {
         const url = pathToFileURL(path.join(this.dir, f)).href + `?t=${Date.now()}`;
@@ -88,19 +101,24 @@ export class Skills {
           console.log(`[skills] ${f}: invalid module (need {name, run})`);
           continue;
         }
-        this.registry.set(m.name, m);
+        next.set(m.name, m);
         console.log(`[skills] loaded ${m.name} (${f})`);
       } catch (e) {
         console.log(`[skills] ${f}: load failed`, e);
       }
     }
+    this.registry = next;
   }
 
-  /** ファイル監視でホットリロード */
+  /** ファイル監視でホットリロード (保存イベントの連打はデバウンス) */
   watch() {
     try {
+      let t: NodeJS.Timeout | null = null;
       watch(this.dir, () => {
-        this.load().catch((e) => console.log('[skills] reload failed', e));
+        if (t) clearTimeout(t);
+        t = setTimeout(() => {
+          this.load().catch((e) => console.log('[skills] reload failed', e));
+        }, 300);
       });
       console.log(`[skills] watching ${this.dir}`);
     } catch {
@@ -120,14 +138,24 @@ export class Skills {
     return this.current?.name ?? null;
   }
 
-  /** スキルのparams定義をzod shapeに変換 */
+  /** スキルのparams定義をzod shapeに変換。
+   *  D59/P2-17: 数値には既定の範囲を付ける。座標系 (x/y/z) だけ負数を許し、
+   *  それ以外 (count/radius/length 等) は 0 以上に制限する — 負の個数が
+   *  mod まで届いて偽の成功 ({given:-1} 等) を生む経路を塞ぐ */
   static zodShape(m: SkillModule): ZodRawShape {
+    const COORD = new Set(['x', 'y', 'z']);
     const shape: Record<string, z.ZodTypeAny> = {};
     for (const [k, spec] of Object.entries(m.params ?? {})) {
       let t: z.ZodTypeAny;
       switch (spec.type) {
-        case 'number': t = z.number(); break;
-        case 'integer': t = z.number().int(); break;
+        case 'number':
+          t = COORD.has(k) ? z.number() : z.number().min(0).max(1_000_000);
+          break;
+        case 'integer':
+          t = COORD.has(k)
+            ? z.number().int()
+            : z.number().int().min(0).max(1_000_000);
+          break;
         case 'boolean': t = z.boolean(); break;
         default: t = z.string();
       }
@@ -137,13 +165,28 @@ export class Skills {
     return shape as ZodRawShape;
   }
 
+  /** 直通経路 (直パース/runner) 用の引数検証。MCP経路は zod が担う */
+  private validateArgs(m: SkillModule, args: Record<string, unknown>) {
+    const schema = z.object(Skills.zodShape(m)).passthrough();
+    const r = schema.safeParse(args);
+    if (!r.success) {
+      throw new Error(
+        `invalid args for skill '${m.name}': `
+        + r.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join('; '));
+    }
+  }
+
   run(name: string, args: Record<string, unknown>) {
     const m = this.registry.get(name);
     if (!m) throw new Error(`unknown skill: ${name}`);
+    this.validateArgs(m, args);
     // Review F5: stop_all must preempt. Routing it through the BUSY gate
     // meant "stop" during a long skill fell through to the LLM path and
     // never reached the mod. Abort the running skill, then run stop_all
     // outside the exclusivity slot so its stop calls land immediately.
+    // D59/P1-8: ただし stop_all 自身は実行中ずっと排他枠を占有する。
+    // 旧実装は枠外実行で、停止処理の最中に新規スキルが割り込み、
+    // 「止めたはず」の後に bot が再び動き出す競合があった。
     if (name === 'stop_all' && this.current) {
       const prev = this.current;
       prev.controller.abort();
@@ -167,13 +210,23 @@ export class Skills {
           this.state.push('skill.done', { skill: name, ok: false, error });
           this.journal?.append('work.end', { work, skill: name, ok: false, error });
           return { ok: false, error };
+        } finally {
+          if (this.current?.controller === controller) this.current = null;
         }
       })();
+      this.current = { name, controller, done };
       return { started: true, skill: name, work, done };
     }
     if (this.current) throw new Error(`BUSY: skill '${this.current.name}' is running`);
 
     const controller = new AbortController();
+    // D59/P2-18: ウォッチドッグ。中断を無視するスキルが排他枠を永久に
+    // 塞がないよう、制限時間で abort する (follow系は timeoutMs:0 で免除)
+    const timeoutMs = m.timeoutMs
+      ?? Number(process.env.SKILL_TIMEOUT_MS ?? 1_200_000);
+    const watchdog = timeoutMs > 0
+      ? setTimeout(() => controller.abort(), timeoutMs)
+      : null;
     // 世代非依存のwork id: 再起動を跨いで進捗を追跡できる
     const work = this.journal?.newWorkId();
     this.journal?.append('work.start', { work, skill: name, args });
@@ -202,7 +255,10 @@ export class Skills {
         });
         return { ok: false, cancelled, error };
       } finally {
-        this.current = null;
+        if (watchdog) clearTimeout(watchdog);
+        // D59/P1-8: 自分が現行枠のときだけ解放する (stop_all に枠を
+        // 引き継いだ旧スキルの finally が新枠を消さないように)
+        if (this.current?.controller === controller) this.current = null;
       }
     })();
     this.current = { name, controller, done };

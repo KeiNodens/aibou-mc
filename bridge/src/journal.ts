@@ -1,4 +1,4 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { State } from './state.js';
 
@@ -162,19 +162,51 @@ export class Journal {
     return id;
   }
 
+  private appendsSinceRotateCheck = 0;
+
   append(kind: string, data: Record<string, unknown> = {}) {
     const e: JournalEntry = { ts: Date.now(), kind, ...data };
     try { appendFileSync(this.file, JSON.stringify(e) + '\n'); }
     catch (err) { console.log('[journal] append failed', err); }
+    // D59/P2-25: ローテーション (旧実装は無制限に肥大した)。
+    // 100回に1回だけサイズを見て、上限超えなら .1 へ退避する
+    if (++this.appendsSinceRotateCheck >= 100) {
+      this.appendsSinceRotateCheck = 0;
+      try {
+        const max = Number(process.env.JOURNAL_MAX_BYTES ?? 32 * 1024 * 1024);
+        if (statSync(this.file).size > max) {
+          renameSync(this.file, this.file + '.1');
+          console.log('[journal] rotated journal.jsonl (>max bytes)');
+        }
+      } catch { /* ローテーション失敗は追記自体を止めない */ }
+    }
     return e;
   }
 
-  /** 末尾n件 (work指定時はそのworkのみ) */
+  /** 末尾n件 (work指定時はそのworkのみ)。
+   *  D59/P2-25: ファイル全体を読まず、末尾ウィンドウ (8MB) だけを読む。
+   *  旧実装は tail のたびに全行を同期 parse し、肥大とともに
+   *  イベントループを止めていた */
   tail(n = 50, work?: string): JournalEntry[] {
     try {
       if (!existsSync(this.file)) return [];
-      const lines = readFileSync(this.file, 'utf8').trim().split('\n').filter(Boolean);
-      const entries = lines
+      const size = statSync(this.file).size;
+      const WINDOW = 8 * 1024 * 1024;
+      let text: string;
+      if (size <= WINDOW) {
+        text = readFileSync(this.file, 'utf8');
+      } else {
+        const fd = openSync(this.file, 'r');
+        try {
+          const buf = Buffer.alloc(WINDOW);
+          readSync(fd, buf, 0, WINDOW, size - WINDOW);
+          text = buf.toString('utf8');
+        } finally { closeSync(fd); }
+        // 先頭は行の途中なので捨てる
+        const nl = text.indexOf('\n');
+        text = nl >= 0 ? text.slice(nl + 1) : '';
+      }
+      const entries = text.trim().split('\n').filter(Boolean)
         .map(l => { try { return JSON.parse(l) as JournalEntry; } catch { return null; } })
         .filter((e): e is JournalEntry => !!e && (!work || e.work === work));
       return entries.slice(-n);
