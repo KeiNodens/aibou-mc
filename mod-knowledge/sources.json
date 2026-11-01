@@ -94,6 +94,22 @@
                  "forestry":  {
                                   "repo":  "https://github.com/thedarkcolour/ForestryMC",
                                   "note":  "branch 1.20.1 tip = 2.11.1 (gradle-verified); ForestryMC org repo is legacy"
-                              }
+                              },
+                 "rftoolsbuilder":  {
+                                        "repo":  "https://github.com/McJtyMods/RFToolsBuilder",
+                                        "note":  "branch 1.20, version-window pin for 6.0.10 (tip is 6.0.11)"
+                                    },
+                 "rftoolspower":  {
+                                      "repo":  "https://github.com/McJty/RFToolsPower",
+                                      "note":  "branch 1.20 tip = 6.0.3 (gradle-verified)"
+                                  },
+                 "rftoolsstorage":  {
+                                        "repo":  "https://github.com/McJtyMods/RFToolsStorage",
+                                        "note":  "branch 1.20 tip = 5.0.4 (gradle-verified)"
+                                    },
+                 "rftoolsutility":  {
+                                        "repo":  "https://github.com/McJtyMods/RFToolsUtility",
+                                        "note":  "branch 1.20, version-window pin for 6.0.7 (tip is 6.0.8)"
+                                    }
              }
 }
