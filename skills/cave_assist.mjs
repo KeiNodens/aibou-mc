@@ -33,6 +33,20 @@ const NOTABLE = new Map([
   ['minecraft:deepslate_emerald_ore', 'エメラルド'],
   ['minecraft:ancient_debris', '古代の残骸'],
 ]);
+// 次元別の敵対テーブル (D45): ネザーはウィザースケ/ブレイズ/
+// ホグリン/ブルート (ガストは飛行・遠距離で近接対象外、ピグリン
+// 系は条件付き中立なので含めない)。エンドはシュルカー中心
+// (エンダーマンは視線条件の中立なので含めない)。
+const NETHER_HOSTILES = new Set([
+  'minecraft:wither_skeleton', 'minecraft:blaze',
+  'minecraft:magma_cube', 'minecraft:hoglin', 'minecraft:piglin_brute',
+]);
+const END_HOSTILES = new Set([
+  'minecraft:shulker', 'minecraft:endermite', 'minecraft:silverfish',
+]);
+const hostilesFor = (dim) =>
+  dim === 'minecraft:the_nether' ? NETHER_HOSTILES
+    : dim === 'minecraft:the_end' ? END_HOSTILES : HOSTILES;
 const TRAIL_URL = new URL('../data/cave-trail.json', import.meta.url);
 const PARTY_TOOLS_URL = new URL('../data/party-tools.json', import.meta.url);
 const PLACES_URL = new URL('../data/places.json', import.meta.url);
@@ -149,6 +163,12 @@ export default {
     const st0 = await ctx.state().catch(() => null);
     const botName = st0?.name;
     const entryDim = st0?.dimension ?? null;
+    const hostiles = hostilesFor(entryDim);
+    const inNether = entryDim === 'minecraft:the_nether';
+    // 金装備 (防具スロットに golden_ 部位があるか): ピグリン対策
+    const wearsGold = (st0?.inventory_detail ?? []).some((sl) =>
+      sl.slot >= 36 && String(sl.id).includes('golden_'));
+    let piglinWarned = false;
     const entry = st0?.pos ? { x: Math.floor(st0.pos.x), y: Math.floor(st0.pos.y), z: Math.floor(st0.pos.z) } : null;
     const crumbs = entry ? [entry] : [];
     if (entry) {
@@ -198,12 +218,24 @@ export default {
         // mod 側 CombatTask (D31) に力学を任せる
         if (fight) {
           const all = ents(await ctx.call('obs.entity', {}).catch(() => null));
-          const foe = all.find((e) => HOSTILES.has(etype(e)) &&
+          const foe = all.find((e) => hostiles.has(etype(e)) &&
             (dist(e, pl) <= 7 || dist(e, me) <= 5));
+          // ピグリン注意 (ネザー・金装備なし): 一度だけ知らせる
+          if (inNether && !wearsGold && !piglinWarned) {
+            const pig = all.find((e) =>
+              (etype(e) === 'minecraft:piglin'
+                || etype(e) === 'minecraft:zombified_piglin')
+              && dist(e, me) <= 10);
+            if (pig) {
+              piglinWarned = true;
+              await ctx.say('金装備が無いから、ピグリンには気をつけて')
+                .catch(() => {});
+            }
+          }
           if (foe) {
             fights++;
             const eng = await ctx.call('combat.engage', {
-              types: [...HOSTILES],
+              types: [...hostiles],
               anchor_entity_id: eid(pl),
               leash: 16,
               max_seconds: 45,
@@ -330,6 +362,10 @@ export default {
               }
               if (together) continue;
             }
+            // 金装備なしで金鉱石を掘るとピグリンが敵対する
+            if (inNether && !wearsGold && ore === 'minecraft:nether_gold_ore') {
+              continue;
+            }
             for (const s of f?.found ?? []) {
               const key = `${s.x},${s.y},${s.z}`;
               // プレイヤーの作業圏 (3m 以内) は掘らない — 同じ鉱脈の奪い合い回避
@@ -357,6 +393,24 @@ export default {
               const plNow = ents(await ctx.call('obs.entity',
                 { name: player ?? pl.name }).catch(() => null))[0] ?? pl;
               if (plNow && dist(plNow, spot) < 2.5) break;
+              // 古代の残骸は露出面があるものだけ (埋没は places 行き)
+              if (target.id === 'minecraft:ancient_debris') {
+                let exposed = false;
+                for (const [nx, ny, nz] of [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]]) {
+                  const b = await ctx.call('obs.block_state', {
+                    x: spot.x + nx, y: spot.y + ny, z: spot.z + nz,
+                  }).catch(() => null);
+                  if (b?.id === 'minecraft:air' || b?.id === 'minecraft:cave_air') {
+                    exposed = true; break;
+                  }
+                }
+                if (!exposed) {
+                  visited.add(`${spot.x},${spot.y},${spot.z}`);
+                  await recordPlace('ore', 'minecraft:ancient_debris', spot);
+                  ctx.journal?.note('debris_buried', { ...spot });
+                  break;
+                }
+              }
               // 横に溶岩がある塊は掘らない
               if (await nearLava(ctx, spot)) {
                 visited.add(`${spot.x},${spot.y},${spot.z}`);
