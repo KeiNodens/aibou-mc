@@ -78,6 +78,14 @@
                  "thermal_dynamics":  {
                                           "repo":  "https://github.com/CoFH/ThermalDynamics",
                                           "note":  "branch 1.20.1, last commit of 11.0.1 window (CI build .23)"
-                                      }
+                                      },
+                 "immersiveengineering":  {
+                                              "repo":  "https://github.com/BluSunrize/ImmersiveEngineering",
+                                              "note":  "exact tag 10.2.0-183"
+                                          },
+                 "immersivepetroleum":  {
+                                            "repo":  "https://github.com/TwistedGate/ImmersivePetroleum",
+                                            "note":  "branch 1.20.1 tip is the 4.3.1-36b release commit; Flaxbeard repo is frozen, do not use"
+                                        }
              }
 }
