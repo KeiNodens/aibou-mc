@@ -28,6 +28,8 @@ public class CraftTask extends AgentTask {
     private final int want;
     private CraftingRecipe recipe;
     private int produced = 0;
+    private int pendingTake = 0;
+    private boolean takeMeasured = false;
     private int phase = 0; // 0=解決 1=配置送信 2=取り出し 3=待機
     private int waitTicks = 0;
     private int totalTicks = 0;
@@ -87,7 +89,10 @@ public class CraftTask extends AgentTask {
                             + " (recipe not in recipe book or materials missing)");
                     return;
                 }
-                produced += res.getCount();
+                // Review S5: do not count the result yet — count what
+                // actually leaves the result slot in phase 3.
+                pendingTake = res.getCount();
+                takeMeasured = false;
                 mc.gameMode.handleInventoryMouseClick(
                     menu.containerId, 0, 0, ClickType.QUICK_MOVE, p);
                 phase = 3;
@@ -95,6 +100,12 @@ public class CraftTask extends AgentTask {
             }
             case 3 -> {
                 if (waitTicks < TAKE_WAIT) return;
+                if (!takeMeasured) {
+                    takeMeasured = true;
+                    int left = menu.getSlot(0).getItem().getCount();
+                    produced += Math.max(0, pendingTake - left);
+                    pendingTake = 0;
+                }
                 if (produced >= want) {
                     succeed();
                     return;

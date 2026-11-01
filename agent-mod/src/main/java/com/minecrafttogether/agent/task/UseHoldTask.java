@@ -79,6 +79,13 @@ public class UseHoldTask extends AgentTask {
     }
 
     @Override
+    protected void onPause() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.player != null) release(mc, mc.player);
+        else if (mc != null) mc.options.keyUse.setDown(false);
+    }
+
+    @Override
     public void cancel() { state = State.CANCELLING; }
 
     private void fail(String code, String msg) {

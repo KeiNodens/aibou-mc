@@ -2182,6 +2182,14 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   void applyGate();
   const gateTimer = setInterval(() => { void applyGate(); }, 15_000);
   (gateTimer as unknown as { unref?: () => void }).unref?.();
+  // Review F7: HTTP mode creates one server per request; the gate
+  // timer must die with its server or closed instances accumulate
+  // and keep polling meta.mods forever.
+  const origClose = server.close.bind(server);
+  server.close = async () => {
+    clearInterval(gateTimer);
+    await origClose();
+  };
 
   return server;
 }

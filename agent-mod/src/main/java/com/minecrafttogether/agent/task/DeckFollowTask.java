@@ -113,5 +113,11 @@ public class DeckFollowTask extends AgentTask {
     }
 
     @Override
+    protected void onPause() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) releaseKeys(mc);
+    }
+
+    @Override
     public void cancel() { state = State.CANCELLING; }
 }

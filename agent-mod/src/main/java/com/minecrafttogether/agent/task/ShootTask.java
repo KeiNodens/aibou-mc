@@ -176,6 +176,13 @@ public class ShootTask extends AgentTask {
     }
 
     @Override
+    protected void onPause() {
+        // Release the draw; tick re-draws on resume.
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) mc.options.keyUse.setDown(false);
+    }
+
+    @Override
     public void cancel() { state = State.CANCELLING; }
 
     private void fail(String code, String msg) {

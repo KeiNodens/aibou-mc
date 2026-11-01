@@ -117,6 +117,21 @@ public class MineTask extends AgentTask {
     }
 
     @Override
+    protected void onPause() {
+        // Review S4: stop the Baritone process itself, not just ticking.
+        IBaritone b = GotoTask.baritone();
+        if (b != null) {
+            b.getMineProcess().cancel();
+            b.getPathingBehavior().cancelEverything();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        started = false; // tick re-issues the mine process
+    }
+
+    @Override
     public void cancel() { state = State.CANCELLING; }
 
     // ブロックとドロップアイテムのIDが違う代表的な対応。

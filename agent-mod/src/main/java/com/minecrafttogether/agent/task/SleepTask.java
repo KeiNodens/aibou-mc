@@ -73,6 +73,17 @@ public class SleepTask extends AgentTask {
     }
 
     @Override
+    protected void onPause() {
+        IBaritone b = GotoTask.baritone();
+        if (b != null) b.getPathingBehavior().cancelEverything();
+    }
+
+    @Override
+    protected void onResume() {
+        started = false; // tick re-issues the approach
+    }
+
+    @Override
     public void cancel() { state = State.CANCELLING; }
 
     private void fail(String code, String msg) {

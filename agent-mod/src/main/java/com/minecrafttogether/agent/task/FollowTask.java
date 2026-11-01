@@ -60,6 +60,20 @@ public class FollowTask extends AgentTask {
     }
 
     @Override
+    protected void onPause() {
+        IBaritone b = GotoTask.baritone();
+        if (b != null) {
+            b.getFollowProcess().cancel();
+            b.getPathingBehavior().cancelEverything();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        started = false; // tick re-issues the follow process
+    }
+
+    @Override
     public void cancel() { state = State.CANCELLING; }
 
     private Entity findTarget(Minecraft mc) {

@@ -140,6 +140,20 @@ public class EatTask extends AgentTask {
     }
 
     @Override
+    protected void onPause() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null && mc.player != null) {
+            release(mc, mc.player);
+            restore(mc, mc.player);
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        started = false; // tick restarts the eat attempt cleanly
+    }
+
+    @Override
     public void cancel() { state = State.CANCELLING; }
 
     private void fail(String code, String msg) {

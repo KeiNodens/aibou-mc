@@ -116,15 +116,29 @@ export default {
       const p = rotatePoint(out.x, out.z, plan.size, rot);
       return { ...out, x: p.x, z: p.z, props: rotateProps(out.props, rot) };
     });
-    const placements = blocks
-      .filter((b) => !AIRS.has(b.id))
-      .slice(0, max_blocks)
-      .map((b) => ({
-        x: x + b.x, y: y + b.y, z: z + b.z, id: b.id,
-        ...(b.props ? { props: b.props } : {}),
-      }));
+    // Review F3: apply max_blocks AFTER removing blocks that are
+    // already placed. Slicing the raw plan first made every re-run
+    // re-send the same first chunk, so plans larger than max_blocks
+    // never progressed. Already-placed uses BuildTask's own rule:
+    // same id and props subset match.
     let placed = 0;
     let skipped = 0;
+    const placements = [];
+    for (const b of blocks) {
+      if (AIRS.has(b.id)) continue;
+      if (placements.length >= max_blocks) break;
+      const wx = x + b.x, wy = y + b.y, wz = z + b.z;
+      const cur = await ctx.call('obs.block_state', { x: wx, y: wy, z: wz }).catch(() => null);
+      if (cur?.block === b.id) {
+        const propsOk = !b.props || Object.entries(b.props)
+          .every(([k, v]) => String(cur.properties?.[k]) === String(v));
+        if (propsOk) { skipped++; continue; }
+      }
+      placements.push({
+        x: wx, y: wy, z: wz, id: b.id,
+        ...(b.props ? { props: b.props } : {}),
+      });
+    }
     let failed = 0;
     let mismatchedCount = 0;
     const mismatchedAt = [];

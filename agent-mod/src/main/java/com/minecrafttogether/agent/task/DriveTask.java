@@ -81,5 +81,12 @@ public class DriveTask extends AgentTask {
     }
 
     @Override
+    protected void onPause() {
+        // Review S4: release the held movement keys, not just ticking.
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) releaseKeys(mc);
+    }
+
+    @Override
     public void cancel() { state = State.CANCELLING; }
 }
