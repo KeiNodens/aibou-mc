@@ -24,6 +24,15 @@ const ORES = [
   'minecraft:nether_gold_ore', 'minecraft:nether_quartz_ore',
   'minecraft:ancient_debris',
 ];
+// 発見を分かち合う鉱石: together では自動で掘らず、知らせて残す。
+// solo では通常通り掘るが、発見自体は journal に残す (LLM が後で拾える)。
+const NOTABLE = new Map([
+  ['minecraft:diamond_ore', 'ダイヤ'],
+  ['minecraft:deepslate_diamond_ore', 'ダイヤ'],
+  ['minecraft:emerald_ore', 'エメラルド'],
+  ['minecraft:deepslate_emerald_ore', 'エメラルド'],
+  ['minecraft:ancient_debris', '古代の残骸'],
+]);
 const TRAIL_URL = new URL('../data/cave-trail.json', import.meta.url);
 
 const ents = (r) => (Array.isArray(r) ? r : (r?.entities ?? r?.found ?? []));
@@ -68,6 +77,7 @@ export default {
     }
     if (together) await ctx.say('ついていくね').catch(() => {});
     const visited = new Set();
+    const announcedVeins = new Set();
     let torchesPlaced = 0;
     let oresMined = 0;
     let fights = 0;
@@ -171,6 +181,24 @@ export default {
           let target = null;
           for (const ore of ORES) {
             const f = await ctx.call('obs.block', { block: ore, radius: 10 }).catch(() => null);
+            if (NOTABLE.has(ore)) {
+              for (const s of f?.found ?? []) {
+                // together では notable の塊は (告知済みの鉱脈の残り含め)
+                // 常に自動採掘の対象から外す
+                if (together) visited.add(`${s.x},${s.y},${s.z}`);
+                const veinKey = `${ore}:${Math.round(s.x / 4)},${Math.round(s.y / 4)},${Math.round(s.z / 4)}`;
+                if (announcedVeins.has(veinKey)) continue;
+                announcedVeins.add(veinKey);
+                ctx.journal?.note('discovery', {
+                  ore, x: s.x, y: s.y, z: s.z, together,
+                });
+                if (together) {
+                  await ctx.say(`${NOTABLE.get(ore)}見つけた！掘らずに残してあるから、こっち来て`)
+                    .catch(() => {});
+                }
+              }
+              if (together) continue;
+            }
             for (const s of f?.found ?? []) {
               const key = `${s.x},${s.y},${s.z}`;
               // プレイヤーの作業圏 (3m 以内) は掘らない — 同じ鉱脈の奪い合い回避

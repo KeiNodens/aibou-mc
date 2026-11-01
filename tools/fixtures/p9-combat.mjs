@@ -22,7 +22,9 @@ export default {
     const key3 = (x, y, z) => `${x},${y},${z}`;
     const ORE_A = { x: 1, y: 64, z: 1 };
     const ORE_B = { x: 0, y: 64, z: -4 };
+    const ORE_C = { x: 6, y: 64, z: 6 }; // ダイヤ (notable): together では掘らない
     ctx.stub('obs.block', (p) => {
+      if (p.block === 'minecraft:diamond_ore') return { found: [ORE_C] };
       if (p.block !== 'minecraft:iron_ore') return { found: [] };
       return { found: [ORE_A, ORE_B].filter((s2) => !dugSpots.has(key3(s2.x, s2.y, s2.z))) };
     });
@@ -71,6 +73,15 @@ export default {
     }
     if (!ca2 || ca2.ores_mined !== 1) {
       throw new Error(`ore courtesy wrong: ${JSON.stringify(ca2)}`);
+    }
+    // notable: ダイヤは掘らず、discovery として journal に残るはず
+    const j2 = await h.mcp('journal', { action: 'read', limit: 100 });
+    const disc = (j2.entries ?? []).some((e) => {
+      const t = JSON.stringify(e);
+      return t.includes('discovery') && t.includes('diamond_ore');
+    });
+    if (!disc) {
+      throw new Error(`discovery note missing: ${JSON.stringify((j2.entries ?? []).slice(-6))}`);
     }
   },
 };
