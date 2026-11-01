@@ -5,6 +5,8 @@ import com.minecrafttogether.agent.AgentConfig;
 import com.minecrafttogether.agent.AgentMod;
 import com.minecrafttogether.agent.net.AgentWsServer;
 import com.minecrafttogether.agent.task.AgentTask;
+import com.minecrafttogether.agent.task.CombatTask;
+import com.minecrafttogether.agent.task.ShootTask;
 import com.minecrafttogether.agent.task.EatTask;
 import com.minecrafttogether.agent.task.GotoTask;
 import com.minecrafttogether.agent.task.SleepTask;
@@ -94,6 +96,10 @@ public final class ReflexGuard {
         Entity threat = nearestThreat(p);
         if (!hurt && threat == null) return;
         if (alreadyRetreating()) return;
+        // Review S2: requested combat (CombatTask/ShootTask) is intentional —
+        // the threat closing in is the point. Combat tasks carry their own
+        // hp_abort, so the reflex must not cancel them or flee mid-fight.
+        if (requestedCombatRunning()) return;
         int interrupted = interruptTasks(threat, hurt);
         flee(p, threat, hurt);
         emitReflex(p, hurt, threat, interrupted);
@@ -151,6 +157,7 @@ public final class ReflexGuard {
     private static boolean anyUserTaskRunning() {
         for (AgentTask t : TaskManager.get().all()) {
             if (t.id.startsWith("reflex-")) continue;
+            if (t instanceof CombatTask || t instanceof ShootTask) continue;
             if (t.state == AgentTask.State.RUNNING
                 || t.state == AgentTask.State.QUEUED) return true;
         }
@@ -245,6 +252,16 @@ public final class ReflexGuard {
         return best;
     }
 
+    private static boolean requestedCombatRunning() {
+        for (AgentTask t : TaskManager.get().all()) {
+            if ((t instanceof CombatTask || t instanceof ShootTask)
+                && (t.state == AgentTask.State.RUNNING || t.state == AgentTask.State.QUEUED)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static int interruptTasks(Entity threat, boolean hurt) {
         int n = 0;
         String reason = hurt
@@ -252,6 +269,7 @@ public final class ReflexGuard {
             : "reflex: hostile within " + (int) THREAT_RADIUS + " blocks";
         for (AgentTask t : TaskManager.get().all()) {
             if (t.id.startsWith("reflex-")) continue;
+            if (t instanceof CombatTask || t instanceof ShootTask) continue;
             if (t.state == AgentTask.State.RUNNING
                 || t.state == AgentTask.State.QUEUED) {
                 t.errorCode = "INTERRUPTED";
