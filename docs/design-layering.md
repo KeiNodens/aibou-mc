@@ -49,7 +49,7 @@ aibou-mc の実行を mod / bridge / LLM の3層で割り直す。
 
 ## mod に降ろす候補 (優先順)
 
-- **P1 CombatTask**: 戦闘ループ (接近・照準・クールダウン攻撃・
+- **P1 CombatTask** ✅ 実装済み (D31): 戦闘ループ (接近・照準・クールダウン攻撃・
   リーシュ・HP中断)。cave_assist の JS ループ (550ms) を置換する。
   「何を敵とみなすか」は方針パラメータとして外から受ける (力学と
   判断の分離)。postcondition = 対象の死亡確認
@@ -78,6 +78,6 @@ aibou-mc の実行を mod / bridge / LLM の3層で割り直す。
 
 ## 実施順序
 
-CombatTask → wait.condition → contraption 追従 → BuildTask 検討。
+CombatTask ✅ → wait.condition → contraption 追従 → BuildTask 検討。
 各タスクは「開始 op + task.done (理由と戦績) + cancel 可」の形に
 統一し、LLM が節目を見て介入できる粒度を保つ。

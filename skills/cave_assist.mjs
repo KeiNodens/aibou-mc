@@ -97,23 +97,23 @@ export default {
           pl = all.find((e) => etype(e) === 'minecraft:player' && e.name !== botName) ?? null;
         }
         if (!pl) { await ctx.sleep(1200); continue; }
-        // 戦闘: プレイヤー7m以内 or 自分5m以内の敵
+        // 戦闘: プレイヤー7m以内 or 自分5m以内の敵がいたら
+        // mod 側 CombatTask (D31) に力学を任せる
         if (fight) {
           const all = ents(await ctx.call('obs.entity', {}).catch(() => null));
           const foe = all.find((e) => HOSTILES.has(etype(e)) &&
             (dist(e, pl) <= 7 || dist(e, me) <= 5));
           if (foe) {
             fights++;
-            for (let swing = 0; swing < 14; swing++) {
-              ctx.throwIfCancelled();
-              const cur = ents(await ctx.call('obs.entity', { name: etype(foe) }).catch(() => null))
-                .find((e) => eid(e) === eid(foe));
-              if (!cur) break;
-              const stNow = await ctx.state().catch(() => null);
-              if (!stNow?.pos || dist(stNow.pos, pl) > 18) break;
-              if (dist(stNow.pos, cur) > 3.2) await gotoNear(ctx, cur, 8_000);
-              await ctx.call('entity.attack', { entity_id: eid(cur) }).catch(() => {});
-              await ctx.sleep(550);
+            const eng = await ctx.call('combat.engage', {
+              types: [...HOSTILES],
+              anchor_entity_id: eid(pl),
+              leash: 16,
+              max_seconds: 45,
+              hp_abort: 4,
+            }).catch(() => null);
+            if (eng?.task_id) {
+              await ctx.waitTask(eng.task_id, 50_000).catch(() => null);
             }
             continue;
           }

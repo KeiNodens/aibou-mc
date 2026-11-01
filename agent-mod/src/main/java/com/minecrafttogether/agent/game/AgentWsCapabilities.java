@@ -21,6 +21,7 @@ public final class AgentWsCapabilities {
             "look_info",
             "interact",
             "entity.attack",
+            "combat.engage",
             "use_item",
             "container.read",
             "container.click",

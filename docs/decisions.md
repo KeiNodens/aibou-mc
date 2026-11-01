@@ -163,13 +163,20 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - **決定**: FD を3経路で扱う。作物は farm スキル拡張 (キャベツ/タマネギは dig+植え直し、トマトは右クリック収穫、米は対象外)、まな板・ストーブ・スキレットは world_craft のステーション定義、cooking pot は専用 cook スキル (レシピ駆動、draft)
 - **理由**: ユーザーから農作物と FD 料理の対応状況の質問があり、現行ギャップ (farm はバニラ5種のみ、FD は機械定義のみ) を埋めるため。FD の調理系は「GUI の鍋」と「ワールド内操作」に分かれ、既存の枠組み (world_craft / レシピ解決) に素直に乗る
 - **根拠**: ユーザーの質問 (2026-11-01) + mod-support.md の FD 棚卸し (cooking_pot [d]、cutting_board/skillet はワールド内操作型)
-
-## D25. 全 mod 対応化 (2026-11-01)
-
-- **決定**: 監査対象の全パック (本番 1.20.1 / ATM9 No Frills・To the Sky / Essential TerraFirmaCraft / Monifactory) の全コンテンツ mod に、aibou-mc 側の対応経路 (機械 def / station 定義 / 専用 op・スキル / 汎用経路の明記) をコードとして用意する。実機検証は従来通りバッチ送り
-- **線引き**: Create のコントラプション制御 (D21) と Integrated Dynamics のロジック構築は従来裁定どおり対象外。multiblock の「形成」は設計図ビルド経路、形成後の操作は def/station で扱う
-- **実装**: 機械 def +31 件 (計 143)、station +9 件 (計 21)、Refined Storage の汎用リフレクション probe op、Waystones の warp スキル、Ad Astra 酸素チェーンの def、TFC / GregTech のコア def
-- **根拠**: ユーザー指示「全部対応アリにしたい。実機検証はまだいいけど」(2026-11-01) + 同日の mod 対応監査
+
+
+## D25. 全 mod 対応化 (2026-11-01)
+
+
+
+- **決定**: 監査対象の全パック (本番 1.20.1 / ATM9 No Frills・To the Sky / Essential TerraFirmaCraft / Monifactory) の全コンテンツ mod に、aibou-mc 側の対応経路 (機械 def / station 定義 / 専用 op・スキル / 汎用経路の明記) をコードとして用意する。実機検証は従来通りバッチ送り
+
+- **線引き**: Create のコントラプション制御 (D21) と Integrated Dynamics のロジック構築は従来裁定どおり対象外。multiblock の「形成」は設計図ビルド経路、形成後の操作は def/station で扱う
+
+- **実装**: 機械 def +31 件 (計 143)、station +9 件 (計 21)、Refined Storage の汎用リフレクション probe op、Waystones の warp スキル、Ad Astra 酸素チェーンの def、TFC / GregTech のコア def
+
+- **根拠**: ユーザー指示「全部対応アリにしたい。実機検証はまだいいけど」(2026-11-01) + 同日の mod 対応監査
+
 
 ## D27. コントラプションの「難しい部分」への着手 (2026-11-01)
 
@@ -198,3 +205,22 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - **実装したもの**: quest_prepare (クエスト→素材不足の橋渡し)、commission (配置後設定の実行フレームワーク。計画は機械定義の commission 配列か引数で渡す)、cave_assist (随行・松明・鉱石手伝い・戦闘アシスト。敵対判定はバニラ既知リストのみ)、lead_back (breadcrumb を逆に辿る帰り道案内)、branch_mine (支坑つき直進掘り)、ranch (繁殖・ミルク・毛刈り・回収)、clear_area (整地。fill は未対応)、recover (deathpoint 記録→死に戻り回収。記録は runner の死亡フック)、expedition_prep (装備・酸素・食料の実測チェック)、pattern_encode (AE2 端末のレイアウト調査ドラフト)、entity.attack op
 - **道の記憶**: cave_assist が入口を cave_entry waypoint に記録し、移動経路を data/cave-trail.json に残す。lead_back が逆順に辿る
 - **根拠**: ユーザーとの遊び方棚卸し (2026-11-01)。commissioning / パターン作成 / クエスト素材 / 戦闘 / 整地 / 畜産 / 環境スーツ / 死に戻りの 8 件 + 一緒に洞窟・ブランチマイニング + 洞窟の道記憶の要望
+
+## D31 3層分担の見直しと CombatTask (2026-11-01)
+
+- 実行の分担を mod / bridge / LLM で割り直す方針を
+  `docs/design-layering.md` に定めた。原則: 反応速度が要るものは
+  mod、ファイル・索引が中心なら bridge、意味と価値の判断は LLM。
+  下層に降ろすのは力学のみで、タスクは数秒〜数十秒の粒度に切り、
+  LLM が節目を見て介入できる形を保つ (一緒に遊ぶ仕組みの維持)
+- 第1弾として戦闘ループを mod 側タスク化: CombatTask +
+  `combat.engage` op。対象は entity_id 指定 or types フィルタ
+  (対象種別の方針は呼び出し側)、anchor/leash で範囲を縛り、
+  攻撃は実クールダウン基準。終了理由 (killed/cleared/no_target/
+  timeout/low_hp/leash) と戦績を task.done で返す
+- cave_assist の JS 戦闘ループ (550ms) は engage 呼び出しに置換。
+  新スキル `fight` は engage の薄いラッパ
+- `entity.attack` は単発プリミティブとして残す (判断はタスク側)
+- 降ろす候補の残り: 条件待ちタスク (P1)、contraption 追従 (P2)、
+  BuildTask (P2)、Fishing/Drive/Glide (P3)。実機検証は従来どおり
+  まとめて行う

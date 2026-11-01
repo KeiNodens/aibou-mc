@@ -40,3 +40,8 @@ tools/tunnel/
 agent-mod/libs/*.jar
 bridge/waypoints.json
 bridge/data/
+
+fixture-*.log
+fixture-*.err
+data/cave-trail.json
+run-one.ps1

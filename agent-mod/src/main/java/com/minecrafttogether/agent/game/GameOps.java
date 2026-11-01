@@ -4,6 +4,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.minecrafttogether.agent.AgentMod;
 import com.minecrafttogether.agent.task.AgentTask;
+import com.minecrafttogether.agent.task.CombatTask;
 import com.minecrafttogether.agent.task.CraftTask;
 import com.minecrafttogether.agent.task.DigTask;
 import com.minecrafttogether.agent.task.EmoteTask;
@@ -74,6 +75,7 @@ public final class GameOps {
             case "look_info" -> lookInfo(params);
             case "interact" -> interact(params);
             case "entity.attack" -> entityAttack(params);
+            case "combat.engage" -> combatEngage(params);
             case "use_item" -> useItem(params);
             case "container.read" -> containerRead();
             case "container.click" -> containerClick(params);
@@ -1870,6 +1872,41 @@ public final class GameOps {
         r.addProperty("entity_id", e.getId());
         r.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString());
         r.addProperty("target_health", e instanceof net.minecraft.world.entity.LivingEntity le ? le.getHealth() : -1);
+        return r;
+    }
+
+    /**
+     * combat.engage: 戦闘タスクを開始する (D31)。対象は entity_id 指定か
+     * types (entity type id の配列) フィルタ。anchor_entity_id /
+     * anchor {x,y,z} + leash で行動範囲を縛れる。hp_abort は残HPの
+     * 中断ライン (0 で無効)。
+     */
+    private static JsonObject combatEngage(JsonObject params) throws ApiError {
+        requirePlayer();
+        Integer entityId = params.has("entity_id") ? params.get("entity_id").getAsInt() : null;
+        java.util.Set<String> types = new java.util.HashSet<>();
+        if (params.has("types")) {
+            for (var el : params.getAsJsonArray("types")) types.add(el.getAsString());
+        }
+        if (entityId == null && types.isEmpty()) {
+            throw new ApiError("BAD_REQUEST", "combat.engage needs entity_id or types");
+        }
+        Integer anchorEntityId = params.has("anchor_entity_id")
+            ? params.get("anchor_entity_id").getAsInt() : null;
+        net.minecraft.world.phys.Vec3 anchorPos = null;
+        if (params.has("anchor")) {
+            var a = params.getAsJsonObject("anchor");
+            anchorPos = new net.minecraft.world.phys.Vec3(
+                a.get("x").getAsDouble(), a.get("y").getAsDouble(), a.get("z").getAsDouble());
+        }
+        double leash = params.has("leash") ? params.get("leash").getAsDouble() : 0;
+        int maxSeconds = params.has("max_seconds") ? params.get("max_seconds").getAsInt() : 60;
+        float hpAbort = params.has("hp_abort") ? params.get("hp_abort").getAsFloat() : 0;
+        CombatTask t = new CombatTask(TaskManager.get().newId("combat"),
+            entityId, types, anchorEntityId, anchorPos, leash, maxSeconds, hpAbort);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
         return r;
     }
 

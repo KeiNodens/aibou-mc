@@ -152,6 +152,15 @@ wss.on('connection', (ws) => {
         send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
         console.log(`[mock-mod] task ${taskId} succeeded`);
       }, 3000);
+    } else if (m === 'combat.engage') {
+      const taskId = `combat-t${++taskSeq}`;
+      tasks.set(taskId, { state: 'running' });
+      reply(ws, msg, { task_id: taskId });
+      setTimeout(() => {
+        const result = { reason: 'cleared', kills: 1, hits: 3, duration_ticks: 60 };
+        tasks.set(taskId, { state: 'succeeded', result });
+        send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
+      }, 500);
     } else if (m === 'task.status' || m === 'task.result') {
       const t = tasks.get(p.task_id);
       if (t) reply(ws, msg, { task_id: p.task_id, generation: 1, ...t });
