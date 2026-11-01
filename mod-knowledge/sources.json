@@ -1,13 +1,35 @@
 {
   "comment": "mod id -> source repository for D40 layer-3 analysis. Add entries as analysis targets grow; tags are resolved by version substring (tools/fetch_mod_source.py).",
   "mods": {
-    "ae2": { "repo": "https://github.com/AppliedEnergistics/Applied-Energistics-2" },
-    "mekanism": { "repo": "https://github.com/mekanism/Mekanism" },
-    "create": { "repo": "https://github.com/Creators-of-Create/Create" },
-    "tconstruct": { "repo": "https://github.com/SlimeKnights/TinkersConstruct" },
-    "botania": { "repo": "https://github.com/VazkiiMods/Botania" },
-    "ars_nouveau": { "repo": "https://github.com/baileyholl/Ars-Nouveau" },
-    "projecte": { "repo": "https://github.com/sinkillerj/ProjectE" },
-    "jade": { "repo": "https://github.com/Snownee/Jade" }
+    "ae2": {
+      "repo": "https://github.com/AppliedEnergistics/Applied-Energistics-2"
+    },
+    "mekanism": {
+      "repo": "https://github.com/mekanism/Mekanism"
+    },
+    "create": {
+      "repo": "https://github.com/Creators-of-Create/Create"
+    },
+    "tconstruct": {
+      "repo": "https://github.com/SlimeKnights/TinkersConstruct"
+    },
+    "botania": {
+      "repo": "https://github.com/VazkiiMods/Botania"
+    },
+    "ars_nouveau": {
+      "repo": "https://github.com/baileyholl/Ars-Nouveau"
+    },
+    "projecte": {
+      "repo": "https://github.com/sinkillerj/ProjectE"
+    },
+    "jade": {
+      "repo": "https://github.com/Snownee/Jade"
+    },
+    "twilightforest": {
+      "repo": "https://github.com/TeamTwilight/TwilightForest"
+    },
+    "rftoolsdim": {
+      "repo": "https://github.com/McJtyMods/RFToolsDimensions"
+    }
   }
 }
