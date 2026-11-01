@@ -90,6 +90,10 @@
                  "enderio":  {
                                  "repo":  "https://github.com/Team-EnderIO/EnderIO",
                                  "note":  "exact tag v6.2.18-beta"
-                             }
+                             },
+                 "forestry":  {
+                                  "repo":  "https://github.com/thedarkcolour/ForestryMC",
+                                  "note":  "branch 1.20.1 tip = 2.11.1 (gradle-verified); ForestryMC org repo is legacy"
+                              }
              }
 }
