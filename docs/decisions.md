@@ -424,3 +424,50 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
     形状がずれると、壊れた機能がグリーンに見える。今回、
     実形状と違うスタブ (block_state の id キー、クリックの
     全スタック移動) を実挙動に合わせて直した。
+
+## D59 (2026-11-02): 敵対的レビュー50件中 P1+P2 36件の修正
+- docs/review-adversarial-2026-11-02.md (P1×9, P2×27, P3×14)
+  のうち P1+P2 を一括修正した。ブランチ
+  fix/adversarial-review-2026-11-02、コミット fbe1c43 /
+  0772e22 / c7924cd / 9a43ba5 / 6778093 / 020282e。
+  P3 は別バッチ。push はしない (大晃の判断待ち)。
+- 裁定 (大晃、2026-11-02):
+  - 管理系 (approve/deny/loop_resume、/api/approvals 決裁) は
+    専用トークン BRIDGE_ADMIN_TOKEN で分離する。admin は通常
+    トークンのスーパーセット。runner の Codex には通常
+    トークンのみ渡す。BRIDGE_TOKEN 設定時に ADMIN 未設定なら
+    管理系は HTTP 経由で無効化し、起動時に警告する。
+  - ドット命令の決裁系 (.ok/.deny/.goal) と hold 解除は
+    所有者 (bridge env BRIDGE_OWNER) の発言のみ有効。
+    未設定時は従来通り全員可+警告。
+  - mod WS にはトークンを導入しない。代わりに role を
+    fail-closed 化する (未知/省略は切断、再 identify での
+    昇格不可、observer は読み取り系のみ、未 identify 接続へ
+    イベントを流さない)。
+  - bridge の待受は既定 127.0.0.1。非 loopback は BRIDGE_HOST
+    明示+トークン必須 (無ければ起動拒否)。根拠: Muse 用
+    起動は Tailscale Serve が localhost へ中継し、常に
+    トークンを設定する (muse-connect スクリプトで確認)。
+  - 移動系タスクは単一排他 (2件目は BUSY)。反射系
+    (reflex-*) は先行を cancel して割り込める。
+  - 反射ポリシー: 依頼戦闘中は RETREAT 抑制 (D58 の S2 と
+    同旨。戦闘側 hp_abort が正)、EAT は全ユーザータスク
+    実行中は抑制、DROWN は常時最優先。
+  - 検証は静的検証 (tsc / gradle / verify 群 / fixture) まで。
+    Java 挙動の実機確認は既存の実機検証バッチへ合流する。
+- 設計判断として残すもの:
+  - 承認グラントは method+params のダイジェストにバインド
+    する (承認後に引数を差し替えても実行できない)。
+  - quick_move / dig 等の「成功応答が実移動を保証しない」
+    操作は、再読した実測差分だけを数える (スキル層全体の
+    原則。F2 の実測報告方針の一般化)。
+  - fixture/verify のモックは実挙動を写す状態持ちにする
+    (F4 の教訓の再発防止: 固定スクリプト read は再読検証型の
+    実装と両立しない)。run-fixture は既定エフェメラルポート
+    +起動前応答チェックで、残存プロセスへの誤 PASS を防ぐ。
+  - 認証境界は fixture (p56) で固定する: 無/誤トークン401、
+    通常トークンの管理系 403、管理トークンの通過。
+- 運用上の後続作業: Muse connector の登録クレデンシャルを
+  admin トークンへ差し替える (setup-token.ps1 が admin も
+  生成・表示するよう更新済み)。それまで凛の MCP 経由
+  approve は 403 になる (ゲーム内 .ok と承認 UI は使える)。

@@ -846,3 +846,42 @@ P2 は silent failure と虚偽成功の蓄積が中心で、特に「数えた�
 (P2-13/P2-14) と反射・タスク層の競合 (P2-4〜P2-8) は、個別には小さく見えて
 実プレイの信頼を削る種類のもの。検証基盤側 (P2-24) は、PASS の安心感に対して
 実カバレッジが最も過大になっている箇所。
+
+---
+
+## 修正記録 (D59、2026-11-02)
+
+P1+P2 全36件をブランチ `fix/adversarial-review-2026-11-02` で修正した
+(裁定は docs/decisions.md の D59 参照)。P3 は別バッチ。
+
+| 区分 | コミット | 対象 |
+|---|---|---|
+| batch 1 境界 | fbe1c43 | P1-1, P1-2, P1-3, P1-4, P1-9, P2-1, P2-2, P2-23 |
+| batch 2 実行系 | 0772e22 | P1-7, P1-8, P2-3, P2-17, P2-18, P2-19, P2-20, P2-22, P2-25 |
+| batch 3 schematic/knowledge | c7924cd | P1-6, P2-21, P2-27 |
+| agent-mod | 9a43ba5 | P1-5, P2-4, P2-5, P2-6, P2-7, P2-8, P2-9, P2-10, P2-26 |
+| スキル層 | 6778093 | P2-11, P2-12, P2-13, P2-14, P2-15, P2-16, craft_plan 予算 (P2-18 個別分) |
+| 検証基盤 | 020282e | P2-24 (a)-(d), muse-connect の admin トークン対応 |
+
+検証状態:
+- bridge `tsc --noEmit` PASS。verify 群 (toogate/runhold/scale/
+  logistics/waypoint/build-extras/catalog/schematic-create) PASS
+  (schematic-create は到達不能だった意味 op 検証が実際に走る形に
+  直して PASS)。verify-skills-d23 は既存失敗 T8c/T8d のみ
+  (本バッチ起因の新規失敗なし。T1/T6d は再読検証型の実装に合わせ
+  モックを状態持ちに更新して PASS)。
+- agent-mod: gradle test PASS (ReflexPolicyTest 17件、
+  うち新規3件は P2-4 の抑制ルール)。
+- P1-6 はプローブで再検証済み (小数座標は即 throw、整数座標は
+  正常動作)。
+- fixture 群: p56 (認証境界、新設) / p22 / p6 / p3 / p3b / p4 /
+  p5b / p11 / p0 すべて PASS。過程で追加の不具合3件を検出・修正:
+  (1) admin ゲートが実在しないツール名を見ており空転していた
+  (実ツール approvals/bots の action を見る形に修正、p56 で固定)、
+  (2) fixture 群は AIBOU_TOOL_PROFILE=full 前提だが run-fixture が
+  設定しておらず、環境変数頼みだった (ハーネス側で既定化)、
+  (3) run-fixture の子プロセスが shell ラッパー経由で、権限制限
+  環境では kill が届かず残存プロセス化していた (node 直接 spawn に
+  変更し、再起動 fixture p3b が安定 PASS)。
+- Java 挙動の実機確認は裁定 Q7 により対象外 (既存の実機検証
+  バッチへ合流)。
