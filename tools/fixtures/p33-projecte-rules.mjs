@@ -9,7 +9,7 @@ export default {
     const list = await h.mcp('knowledge', { action: 'rules' });
     const mine = (list?.rule_files ?? []).find((f) => f.mod === 'projecte');
     if (!mine) throw new Error(`projecte rule file not listed: ${JSON.stringify(list)}`);
-    if (mine.rules !== 12) throw new Error(`expected 12 rules, got ${mine.rules}`);
+    if (mine.rules !== 13) throw new Error(`expected 13 rules, got ${mine.rules}`);
     if (!String(mine.source_commit).startsWith('68fbb2de')) {
       throw new Error(`wrong source commit: ${mine.source_commit}`);
     }

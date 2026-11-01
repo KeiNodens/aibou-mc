@@ -29,10 +29,25 @@ transmutation table GUI:
 
 Practical shape for the skill (still needs live GUI verification):
 open table → click items from bot inventory into slots 0–7 to learn →
-use slot 9 to burn surplus for EMC → set the lock slot (8) to the
-target → take from the matching output slot. Screen text/search is a
-client filter only; the outputs are container slots, so slot clicks
-suffice.
+use slot 9 to burn surplus for EMC → take items from the output slots
+(SlotOutput.remove deducts the EMC server-side).
+
+Getting the wanted item INTO an output slot is the subtle part. The
+ring is a client-side view: learned items, EMC descending, costing
+more than the pool hidden, 16 per view. Three ways to surface a
+target:
+- **Lock shortcut**: put a sample of the target in the lock slot (8)
+  and it is pinned to output slot 0 (or the fuel slot) — no paging.
+- **Paging**: the GUI's < / > buttons step `searchpage` (12 entries
+  per step). Cheap staples (cobblestone EMC 1) sit on the LAST page,
+  so a well-taught bot needs many clicks this way; the bridge's
+  `screen` click tool can press the buttons.
+- **Search filter**: the GUI's text box sets `filter` (name
+  substring) and resets the page — the precise route, but the bridge
+  has no text-typing op yet; setting the public `filter`/`searchpage`
+  fields on the bot's client inventory via a small mod-side helper
+  (reflection, like projecte.status) is the candidate design when
+  the transmute skill is built.
 
 ## EMC economics in one paragraph
 
