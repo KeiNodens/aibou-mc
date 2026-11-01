@@ -529,6 +529,54 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'contraption_status',
+    {
+      description:
+        'List nearby Create-style contraption entities (probe, D27): ' +
+        'class, position, seat count (reflection), whether the bot is ' +
+        'a passenger, and speed when readable. Pass local {x,y,z} to ' +
+        'also get that contraption-local point in global coordinates ' +
+        '(used to track seats/blocks on a moving deck).',
+      inputSchema: {
+        local: z.object({
+          x: z.number(), y: z.number(), z: z.number(),
+        }).optional(),
+      },
+    },
+    async ({ local }) => {
+      try {
+        return json(await mod.call('contraption.status',
+          local ? { local } : {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'contraption_ride',
+    {
+      description:
+        'Try to sit on a seat of the nearest (or given) contraption ' +
+        'entity (D27): seat position is resolved by reflection and ' +
+        'clicked via interactAt, with a plain interact fallback. ' +
+        'Returns whether the bot ended up riding.',
+      inputSchema: {
+        entity_id: z.number().int().optional(),
+        seat: z.number().int().optional(),
+      },
+    },
+    async ({ entity_id, seat }) => {
+      try {
+        return json(await mod.call('contraption.ride',
+          { entity_id, seat }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'work_journal',
     {
       description:

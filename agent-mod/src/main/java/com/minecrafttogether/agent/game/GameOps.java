@@ -86,6 +86,8 @@ public final class GameOps {
             case "registry.blocks" -> registryBlocks(params);
             case "projecte.status" -> projecteStatus(params);
             case "refinedstorage.status" -> refinedStorageStatus(params);
+            case "contraption.status" -> contraptionStatus(params);
+            case "contraption.ride" -> contraptionRide(params);
             case "craft" -> craft(params);
             case "emote" -> emote(params);
             case "respawn" -> respawn();
@@ -1536,6 +1538,189 @@ public final class GameOps {
             } catch (Throwable ignored) { }
         }
         return null;
+    }
+
+    /**
+     * contraption.status: 近くのコントラプション (Create 等の
+     * ContraptionEntity 系) を列挙する probe (D27、soft dependency)。
+     * 座席は getContraption() の seats を反射で数え、local 指定時は
+     * toGlobalVector で座席等のグローバル座標も返す。
+     */
+    private static JsonObject contraptionStatus(JsonObject params)
+            throws ApiError {
+        LocalPlayer p = requirePlayer();
+        var mc = Minecraft.getInstance();
+        JsonArray found = new JsonArray();
+        JsonObject local = params.has("local") && params.get("local").isJsonObject()
+            ? params.getAsJsonObject("local") : null;
+        for (var e : mc.level.entitiesForRendering()) {
+            String cn = e.getClass().getName().toLowerCase();
+            if (!cn.contains("contraption")) continue;
+            JsonObject o = new JsonObject();
+            o.addProperty("entity_id", e.getId());
+            o.addProperty("class", e.getClass().getName());
+            o.addProperty("x", e.getX());
+            o.addProperty("y", e.getY());
+            o.addProperty("z", e.getZ());
+            o.addProperty("distance", e.distanceTo(p));
+            o.addProperty("bot_is_passenger", p.getVehicle() == e);
+            o.addProperty("delta_speed", e.getDeltaMovement().length());
+            Object con = contraptionOf(e);
+            if (con != null) {
+                java.util.List<?> seats = seatsOf(con);
+                if (seats != null) o.addProperty("seats", seats.size());
+                try {
+                    Object sp = con.getClass().getMethod("getSpeed").invoke(con);
+                    if (sp instanceof Number n) o.addProperty("speed", n.doubleValue());
+                } catch (Throwable ignored) { }
+            }
+            if (local != null) {
+                var g = toGlobal(e, con,
+                    local.has("x") ? local.get("x").getAsDouble() : 0,
+                    local.has("y") ? local.get("y").getAsDouble() : 0,
+                    local.has("z") ? local.get("z").getAsDouble() : 0);
+                if (g != null) {
+                    JsonObject gj = new JsonObject();
+                    gj.addProperty("x", g.x);
+                    gj.addProperty("y", g.y);
+                    gj.addProperty("z", g.z);
+                    o.add("local_global", gj);
+                }
+            }
+            found.add(o);
+            if (found.size() >= 5) break;
+        }
+        JsonObject r = new JsonObject();
+        r.add("found", found);
+        r.addProperty("riding", p.getVehicle() != null);
+        return r;
+    }
+
+    /** エンティティから Contraption 本体オブジェクトを反射で取る */
+    private static Object contraptionOf(Object entity) {
+        try {
+            return entity.getClass().getMethod("getContraption").invoke(entity);
+        } catch (Throwable ignored) { }
+        for (Class<?> c = entity.getClass(); c != null; c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (f.getType().getName().contains("Contraption")
+                        && !f.getType().getName().contains("Entity")) {
+                    try {
+                        f.setAccessible(true);
+                        Object v = f.get(entity);
+                        if (v != null) return v;
+                    } catch (Throwable ignored) { }
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Contraption の座席リスト (BlockPos 列) を反射で取る */
+    private static java.util.List<?> seatsOf(Object contraption) {
+        for (String name : new String[]{"seats", "getSeats"}) {
+            try {
+                if (name.startsWith("get")) {
+                    Object v = contraption.getClass().getMethod(name).invoke(contraption);
+                    if (v instanceof java.util.List<?> l) return l;
+                } else {
+                    for (Class<?> c = contraption.getClass(); c != null;
+                            c = c.getSuperclass()) {
+                        try {
+                            java.lang.reflect.Field f = c.getDeclaredField(name);
+                            f.setAccessible(true);
+                            Object v = f.get(contraption);
+                            if (v instanceof java.util.List<?> l) return l;
+                        } catch (Throwable ignored) { }
+                    }
+                }
+            } catch (Throwable ignored) { }
+        }
+        return null;
+    }
+
+    /** ローカル座標 → グローバル座標 (toGlobalVector 反射、失敗時は平行移動) */
+    private static net.minecraft.world.phys.Vec3 toGlobal(Object entity,
+            Object contraption, double x, double y, double z) {
+        var in = new net.minecraft.world.phys.Vec3(x, y, z);
+        for (Object host : new Object[]{entity, contraption}) {
+            if (host == null) continue;
+            for (Class<?>[] sig : new Class<?>[][]{
+                    {net.minecraft.world.phys.Vec3.class},
+                    {net.minecraft.world.phys.Vec3.class, float.class}}) {
+                try {
+                    var m = host.getClass().getMethod("toGlobalVector", sig);
+                    Object v = sig.length == 1
+                        ? m.invoke(host, in) : m.invoke(host, in, 1.0f);
+                    if (v instanceof net.minecraft.world.phys.Vec3 g) return g;
+                } catch (Throwable ignored) { }
+            }
+        }
+        if (entity instanceof net.minecraft.world.entity.Entity en)
+            return new net.minecraft.world.phys.Vec3(
+                en.getX() + x, en.getY() + y, en.getZ() + z);
+        return null;
+    }
+
+    /**
+     * contraption.ride: 近い (or 指定 id の) コントラプションの座席に
+     * 着席を試みる (D27)。座席位置への interactAt を本命とし、
+     * 通常 interact をフォールバックにする。結果は vehicle の実状態で返す。
+     */
+    private static JsonObject contraptionRide(JsonObject params)
+            throws ApiError {
+        LocalPlayer p = requirePlayer();
+        var mc = Minecraft.getInstance();
+        net.minecraft.world.entity.Entity target = null;
+        double best = Double.MAX_VALUE;
+        int wantId = params.has("entity_id") ? params.get("entity_id").getAsInt() : -1;
+        for (var e : mc.level.entitiesForRendering()) {
+            if (!e.getClass().getName().toLowerCase().contains("contraption"))
+                continue;
+            if (wantId >= 0) {
+                if (e.getId() == wantId) { target = e; break; }
+            } else if (e.distanceTo(p) < best) {
+                best = e.distanceTo(p);
+                target = e;
+            }
+        }
+        if (target == null)
+            throw new ApiError("NOT_FOUND", "contraption.ride: no contraption entity nearby");
+        String via = "interact";
+        Object con = contraptionOf(target);
+        java.util.List<?> seats = con != null ? seatsOf(con) : null;
+        if (seats != null && !seats.isEmpty()) {
+            int idx = params.has("seat") ? params.get("seat").getAsInt() : 0;
+            Object seatPos = seats.get(Math.min(Math.max(idx, 0), seats.size() - 1));
+            try {
+                double sx = ((Number) seatPos.getClass().getMethod("getX")
+                    .invoke(seatPos)).doubleValue() + 0.5;
+                double sy = ((Number) seatPos.getClass().getMethod("getY")
+                    .invoke(seatPos)).doubleValue();
+                double sz = ((Number) seatPos.getClass().getMethod("getZ")
+                    .invoke(seatPos)).doubleValue() + 0.5;
+                var g = toGlobal(target, con, sx, sy, sz);
+                if (g != null) {
+                    var hit = new net.minecraft.world.phys.EntityHitResult(target, g);
+                    mc.gameMode.interactAt(p, target, hit,
+                        net.minecraft.world.InteractionHand.MAIN_HAND);
+                    via = "interactAt(seat " + idx + ")";
+                }
+            } catch (Throwable ignored) { }
+        }
+        if (p.getVehicle() == null && !"interactAt".equals(via.substring(0, Math.min(9, via.length())))) {
+            try {
+                mc.gameMode.interact(p, target,
+                    net.minecraft.world.InteractionHand.MAIN_HAND);
+            } catch (Throwable ignored) { }
+        }
+        JsonObject r = new JsonObject();
+        r.addProperty("via", via);
+        r.addProperty("entity_id", target.getId());
+        var veh = p.getVehicle();
+        r.addProperty("riding", veh != null);
+        if (veh != null) r.addProperty("vehicle_class", veh.getClass().getName());
+        return r;
     }
 
     /** 知識エントリ (ItemInfo) からアイテム id 文字列を取り出す */

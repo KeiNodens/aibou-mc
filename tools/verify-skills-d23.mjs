@@ -8,6 +8,9 @@ import worldCraft from '../skills/world_craft.mjs';
 import farm from '../skills/farm.mjs';
 import cook from '../skills/cook.mjs';
 import warp from '../skills/warp.mjs';
+import ride from '../skills/ride.mjs';
+import trainDrive from '../skills/train_drive.mjs';
+import deckWalk from '../skills/deck_walk.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -421,6 +424,57 @@ const chestRead = (chestSlots) => ({
     station: 'naturesaura_altar', input: 'minecraft:iron_ingot', at: { x: 5, y: 64, z: 5 },
   });
   check('T7c altar run done', rn.done === true, JSON.stringify(rn));
+}
+
+// ---------- T8: D27 contraption batch ----------
+{
+  // (a) ride 着席
+  let ridingA = false;
+  const ctxR = makeCtx({
+    'contraption.status': () => ({ riding: ridingA, found: ridingA ? [] : [{ class: 'com.simibubi.create.content.contraptions.ContraptionEntity', seats: 2 }] }),
+    'contraption.ride': () => { ridingA = true; return { riding: true, via: 'interactAt(seat 0)' }; },
+  }, { state: { inventory_detail: [] } });
+  const rr = await ride.run(ctxR, {});
+  check('T8a ride seated', rr.done === true && rr.seats === 2, JSON.stringify(rr));
+
+  // (b) ride 離席 (sneak パルスで riding が落ちる)
+  let ridingB = true;
+  const ctxL = makeCtx({
+    'move.set': (params) => { if (params.sneak) ridingB = false; return {}; },
+    'contraption.status': () => ({ riding: ridingB, found: [] }),
+  }, { state: { inventory_detail: [] } });
+  const rl = await ride.run(ctxL, { leave: true });
+  check('T8b ride left', rl.done === true && rl.left === true, JSON.stringify(rl));
+
+  // (c) train_drive: 速度が付く
+  const speedSeq = [0, 0.5, 1.2];
+  const ctxT = makeCtx({
+    'contraption.status': () => ({
+      riding: true,
+      found: [{ bot_is_passenger: true, speed: speedSeq.length ? speedSeq.shift() : 1.2 }],
+    }),
+    'move.set': {},
+  }, { state: { inventory_detail: [] } });
+  const rt = await trainDrive.run(ctxT, { seconds: 3 });
+  check('T8c train moved', rt.done === true && rt.moved === true && rt.max_speed === 1.2, JSON.stringify(rt));
+
+  // (d) deck_walk: 動く目標に追いつく (自分が少しずつ近づく世界)
+  const me = { x: 0, y: 64, z: 0 };
+  const ctxD2 = makeCtx({
+    'contraption.status': () => ({
+      riding: false,
+      found: [{ x: 0, y: 64, z: 0, local_global: { x: 5, y: 64, z: 0 } }],
+    }),
+    'look_at': {},
+    'move.set': {},
+  }, {
+    state: () => {
+      me.x = Math.min(me.x + 1.5, 5);
+      return { pos: { ...me }, inventory_detail: [] };
+    },
+  });
+  const rd2 = await deckWalk.run(ctxD2, { local_x: 5, local_y: 0, local_z: 0 });
+  check('T8d deck walk arrived', rd2.done === true, JSON.stringify(rd2));
 }
 
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
