@@ -53,8 +53,10 @@ export default {
     fight: { type: 'boolean', required: false, description: 'engage hostiles (default true)' },
     ores: { type: 'boolean', required: false, description: 'help mine ores (default true)' },
     torches: { type: 'boolean', required: false, description: 'place torches (default true; needs torches in hotbar)' },
+    mode: { type: 'string', required: false, description: 'together (default: announces detours, combat results, and when it cannot follow) or quiet (no mid-run lines)' },
   },
-  async run(ctx, { player, minutes = 10, seconds, fight = true, ores = true, torches = true }) {
+  async run(ctx, { player, minutes = 10, seconds, fight = true, ores = true, torches = true, mode = 'together' }) {
+    const together = mode !== 'quiet';
     const durMs = Math.min(seconds ? seconds * 1000 : minutes * 60_000, 30 * 60_000);
     const deadline = Date.now() + durMs;
     const st0 = await ctx.state().catch(() => null);
@@ -64,11 +66,15 @@ export default {
     if (entry) {
       await ctx.call('waypoint.set', { name: 'cave_entry', ...entry }).catch(() => {});
     }
+    if (together) await ctx.say('ついていくね').catch(() => {});
     const visited = new Set();
     let torchesPlaced = 0;
     let oresMined = 0;
     let fights = 0;
     let lastTorch = null;
+    let lastFollowDist = null;
+    let stuckCount = 0;
+    let stuckAnnounced = false;
     let tick = 0;
     const saveTrail = async () => {
       try {
@@ -112,17 +118,40 @@ export default {
               max_seconds: 45,
               hp_abort: 4,
             }).catch(() => null);
+            let ev = null;
             if (eng?.task_id) {
-              await ctx.waitTask(eng.task_id, 50_000).catch(() => null);
+              ev = await ctx.waitTask(eng.task_id, 50_000).catch(() => null);
+            }
+            if (together && ev?.result) {
+              if (ev.result.reason === 'low_hp') {
+                await ctx.say('HPが危なくて下がった。ごめん').catch(() => {});
+              } else if ((ev.result.kills ?? 0) > 0) {
+                await ctx.say('片付けたよ。大丈夫？').catch(() => {});
+              }
             }
             continue;
           }
         }
         // 追随
         if (dist(me, pl) > 6) {
+          const dNow = dist(me, pl);
+          if (lastFollowDist != null && Math.abs(dNow - lastFollowDist) < 0.5) {
+            stuckCount++;
+          } else {
+            stuckCount = 0;
+          }
+          lastFollowDist = dNow;
+          if (together && stuckCount >= 4 && !stuckAnnounced) {
+            stuckAnnounced = true;
+            await ctx.say('そっち、どうも登れないみたい。先行ってて、道ができたら追いつく')
+              .catch(() => {});
+          }
           await gotoNear(ctx, pl);
           continue;
         }
+        lastFollowDist = null;
+        stuckCount = 0;
+        stuckAnnounced = false;
         // 松明
         if (torches && (!lastTorch || dist(me, lastTorch) >= 7.5)) {
           const slot = hotbarSlot(st, 'minecraft:torch');
@@ -144,17 +173,31 @@ export default {
             const f = await ctx.call('obs.block', { block: ore, radius: 10 }).catch(() => null);
             for (const s of f?.found ?? []) {
               const key = `${s.x},${s.y},${s.z}`;
-              if (!visited.has(key) && dist(me, s) <= 11) {
+              // プレイヤーの作業圏 (3m 以内) は掘らない — 同じ鉱脈の奪い合い回避
+              if (!visited.has(key) && dist(me, s) <= 11 && dist(pl, s) >= 3) {
                 if (!target || dist(me, s) < dist(me, target)) target = { ...s, id: ore };
               }
             }
           }
           if (target) {
+            if (together) {
+              const short = target.id.split(':')[1]
+                .replace('deepslate_', '').replace('_ore', '');
+              await ctx.say(`あ、${short}見つけた。被らない方を掘ってくるね`)
+                .catch(() => {});
+            }
             await gotoNear(ctx, target);
             for (let n = 0; n < 6; n++) {
               const f = await ctx.call('obs.block', { block: target.id, radius: 3 }).catch(() => null);
-              const spot = (f?.found ?? [])[0];
-              if (!spot) break;
+              const spots = f?.found ?? [];
+              if (!spots.length) break;
+              // 選んだ鉱脈に一番近い塊から掘る (found[0] の盲信をやめる)
+              const spot = spots.reduce((a, b) =>
+                dist(target, a) <= dist(target, b) ? a : b);
+              // プレイヤーがこの塊を取りに来たら譲る
+              const plNow = ents(await ctx.call('obs.entity',
+                { name: player ?? pl.name }).catch(() => null))[0] ?? pl;
+              if (plNow && dist(plNow, spot) < 2.5) break;
               visited.add(`${spot.x},${spot.y},${spot.z}`);
               await ctx.call('dig', { x: spot.x, y: spot.y, z: spot.z }).catch(() => {});
               oresMined++;

@@ -16,7 +16,18 @@ export default {
       return { entities: [] };
     });
     ctx.stub('waypoint.set', () => ({ ok: true }));
-    await ctx.sleep(50_000);
+    // 鉱石スタブ: A はプレイヤー (2,64,0) の足元、B は離れた場所。
+    // dig された塊は found から消える。
+    const dugSpots = new Set();
+    const key3 = (x, y, z) => `${x},${y},${z}`;
+    const ORE_A = { x: 1, y: 64, z: 1 };
+    const ORE_B = { x: 0, y: 64, z: -4 };
+    ctx.stub('obs.block', (p) => {
+      if (p.block !== 'minecraft:iron_ore') return { found: [] };
+      return { found: [ORE_A, ORE_B].filter((s2) => !dugSpots.has(key3(s2.x, s2.y, s2.z))) };
+    });
+    ctx.stub('dig', (p) => { dugSpots.add(key3(p.x, p.y, p.z)); return { task_id: 'd' }; });
+    await ctx.sleep(75_000);
   },
   async assert(h) {
     await h.sleep(1000);
@@ -41,6 +52,25 @@ export default {
     const ca = await lastResult('cave_assist');
     if (!ca || ca.fights < 1) {
       throw new Error(`cave_assist wrong: ${JSON.stringify(ca)}`);
+    }
+    // 鉱脈の譲り合い: プレイヤーの足元の鉱脈 (script 側スタブの ORE_A) は
+    // 掘らず、離れた鉱脈だけを 1 個掘るはず (既存の work.end と混同しない
+    // よう、開始前の件数を数えて新しい end を待つ)
+    const caveEnds = async () => {
+      const j = await h.mcp('journal', { action: 'read', limit: 100 });
+      return (j.entries ?? []).filter(
+        (e) => e.kind === 'work.end' && e.skill === 'cave_assist');
+    };
+    const before = (await caveEnds()).length;
+    await h.mcp('cave_assist', { player: 'Daigo', seconds: 14, fight: false, torches: false });
+    let ca2 = null;
+    for (let i = 0; i < 40 && !ca2; i++) {
+      const ends = await caveEnds();
+      if (ends.length > before) ca2 = ends[ends.length - 1].result;
+      else await h.sleep(500);
+    }
+    if (!ca2 || ca2.ores_mined !== 1) {
+      throw new Error(`ore courtesy wrong: ${JSON.stringify(ca2)}`);
     }
   },
 };
