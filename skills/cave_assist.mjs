@@ -2,7 +2,7 @@
 // 鉱石を手伝って掘り、敵が近づいたら一緒に戦う。移動経路 (crumbs) を
 // data/cave-trail.json に残し、lead_back で入口まで案内できるようにする。
 // 敵対判定はバニラの既知リストのみ (mod 敵は v1 では自動で殴らない)。
-import { writeFile } from 'node:fs/promises';
+import { writeFile, readFile } from 'node:fs/promises';
 
 const HOSTILES = new Set([
   'minecraft:zombie', 'minecraft:drowned', 'minecraft:husk',
@@ -34,6 +34,26 @@ const NOTABLE = new Map([
   ['minecraft:ancient_debris', '古代の残骸'],
 ]);
 const TRAIL_URL = new URL('../data/cave-trail.json', import.meta.url);
+const PARTY_TOOLS_URL = new URL('../data/party-tools.json', import.meta.url);
+
+// プレイヤーの幸運: 手持ち観測 (今の手) と事前申告 (所持) を合算し
+// 大きい方を採る。手持ちで確認できた幸運は確定情報で、申告は
+// 「鞄/拠点に持っている」の申告として効く (腐る前提のキャッシュ)。
+function heldFortune(ent) {
+  if (!ent?.held) return null;
+  let best = 0;
+  for (const e of ent.held.ench ?? []) {
+    if (e.id === 'minecraft:fortune') best = Math.max(best, e.lvl ?? 1);
+  }
+  return best;
+}
+async function declaredFortune(name) {
+  try {
+    const d = JSON.parse(await readFile(PARTY_TOOLS_URL, 'utf8'));
+    const v = d?.players?.[name]?.fortune;
+    return typeof v === 'number' ? v : null;
+  } catch { return null; }
+}
 
 const ents = (r) => (Array.isArray(r) ? r : (r?.entities ?? r?.found ?? []));
 const eid = (e) => e.entity_id ?? e.id;
@@ -234,7 +254,14 @@ export default {
                 });
                 if (together) {
                   const fl = fortuneLevel(st);
-                  if (fl > 0) {
+                  const held = heldFortune(pl);
+                  const decl = pl.name ? await declaredFortune(pl.name) : null;
+                  const theirs = (held == null && decl == null)
+                    ? null : Math.max(held ?? 0, decl ?? 0);
+                  if (theirs != null && theirs > fl) {
+                    await ctx.say(`${NOTABLE.get(ore)}見つけた！${pl.name ?? 'そっち'}は幸運${theirs}あるね。掘って`)
+                      .catch(() => {});
+                  } else if (fl > 0) {
                     pendingVeins.push({ ore, x: s.x, y: s.y, z: s.z });
                     await ctx.say(`${NOTABLE.get(ore)}見つけた！凛は幸運${fl}あるよ。近くに来たら掘るね`)
                       .catch(() => {});

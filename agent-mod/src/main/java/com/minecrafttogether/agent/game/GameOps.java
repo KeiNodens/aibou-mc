@@ -2509,16 +2509,7 @@ public final class GameOps {
                 attrs.addProperty("enchanted", true);
                 // エンチャントの中身 (id + レベル) も返す — 幸運の有無で
                 // 「誰が掘るか」が変わるため、LLM 側が判別できるように
-                JsonArray ench = new JsonArray();
-                net.minecraft.world.item.enchantment.EnchantmentHelper
-                    .getEnchantments(s).forEach((e, lvl) -> {
-                        JsonObject eo = new JsonObject();
-                        var ek = BuiltInRegistries.ENCHANTMENT.getKey(e);
-                        eo.addProperty("id", ek != null ? ek.toString() : "unknown");
-                        eo.addProperty("lvl", lvl);
-                        ench.add(eo);
-                    });
-                attrs.add("ench", ench);
+                attrs.add("ench", enchJson(s));
             }
             if (s.hasTag()) {
                 // 同idバリアントの識別用にNBTキー一覧を添付 (mode/material等)
@@ -2583,6 +2574,22 @@ public final class GameOps {
      * エンティティ検索。name はプレイヤー名または "minecraft:rabbit" 等の
      * エンティティ種類。マッチするエンティティの座標・距離一覧を返す。
      */
+    /** アイテムスタックのエンチャント一覧 [{id, lvl}] (無ければ空配列)。 */
+    private static JsonArray enchJson(net.minecraft.world.item.ItemStack s) {
+        JsonArray ench = new JsonArray();
+        if (s.isEnchanted()) {
+            net.minecraft.world.item.enchantment.EnchantmentHelper
+                .getEnchantments(s).forEach((e, lvl) -> {
+                    JsonObject eo = new JsonObject();
+                    var ek = BuiltInRegistries.ENCHANTMENT.getKey(e);
+                    eo.addProperty("id", ek != null ? ek.toString() : "unknown");
+                    eo.addProperty("lvl", lvl);
+                    ench.add(eo);
+                });
+        }
+        return ench;
+    }
+
     private static JsonObject obsEntity(JsonObject params) throws ApiError {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer p = requirePlayer();
@@ -2600,7 +2607,19 @@ public final class GameOps {
                 JsonObject o = new JsonObject();
                 o.addProperty("entity_id", e.getId());
                 o.addProperty("id", BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString());
-                if (e instanceof Player pl) o.addProperty("name", pl.getGameProfile().getName());
+                if (e instanceof Player pl) {
+                    o.addProperty("name", pl.getGameProfile().getName());
+                    // 手持ち (他プレイヤーの手持ちはクライアント同期される):
+                    // 一緒に掘る場面の「誰が掘るか」判定に使う
+                    var heldStack = pl.getMainHandItem();
+                    if (!heldStack.isEmpty()) {
+                        JsonObject held = new JsonObject();
+                        var hk = BuiltInRegistries.ITEM.getKey(heldStack.getItem());
+                        held.addProperty("id", hk != null ? hk.toString() : "unknown");
+                        held.add("ench", enchJson(heldStack));
+                        o.add("held", held);
+                    }
+                }
                 o.addProperty("x", Math.round(e.getX() * 100.0) / 100.0);
                 o.addProperty("y", Math.round(e.getY() * 100.0) / 100.0);
                 o.addProperty("z", Math.round(e.getZ() * 100.0) / 100.0);
