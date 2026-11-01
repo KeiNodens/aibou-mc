@@ -2611,6 +2611,23 @@ public final class GameOps {
                     o.addProperty("name", pl.getGameProfile().getName());
                     // 手持ち (他プレイヤーの手持ちはクライアント同期される):
                     // 一緒に掘る場面の「誰が掘るか」判定に使う
+                    // 防具 (スーツ等の装備チェック用、見える範囲)
+                    JsonArray armor = new JsonArray();
+                    for (var slotE : new net.minecraft.world.entity.EquipmentSlot[]{
+                            net.minecraft.world.entity.EquipmentSlot.HEAD,
+                            net.minecraft.world.entity.EquipmentSlot.CHEST,
+                            net.minecraft.world.entity.EquipmentSlot.LEGS,
+                            net.minecraft.world.entity.EquipmentSlot.FEET}) {
+                        var aStack = pl.getItemBySlot(slotE);
+                        if (aStack.isEmpty()) continue;
+                        JsonObject ao = new JsonObject();
+                        ao.addProperty("slot", slotE.getName());
+                        var ak = BuiltInRegistries.ITEM.getKey(aStack.getItem());
+                        ao.addProperty("id", ak != null ? ak.toString() : "unknown");
+                        ao.add("ench", enchJson(aStack));
+                        armor.add(ao);
+                    }
+                    o.add("armor", armor);
                     var heldStack = pl.getMainHandItem();
                     if (!heldStack.isEmpty()) {
                         JsonObject held = new JsonObject();

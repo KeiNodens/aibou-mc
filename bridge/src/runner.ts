@@ -180,8 +180,10 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
     }
   };
 
+  let lastHumanChatAt = 0;
   state.onChat((c) => {
     if (c.from === botName) return;
+    lastHumanChatAt = Date.now();
     if (handleDot(c)) return;
     // 直パース: 明示コマンドはskill直接実行 (UNSUPPORTED等で動かなければ学習して以後LLMへ)
     const dm = opts.skills ? match(c.text, c.from) : null;
@@ -237,6 +239,24 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
   }
 
   async function run() {
+    // 同伴マナー (D36): プレイヤーが近くにいる間は自律ランを新規に
+    // 始めない。一緒に遊んでいる最中に勝手に目標へ走り出さないため。
+    // 人間の発言直後 (5分以内) のランは指示として通す。
+    if (opts.mod && Date.now() - lastHumanChatAt > 5 * 60_000) {
+      try {
+        const r = (await opts.mod.call('obs.entity', {
+          name: 'minecraft:player', radius: 32,
+        })) as { entities?: Array<{ name?: string }> };
+        const others = (r?.entities ?? []).filter((e) => e.name !== botName);
+        if (others.length) {
+          opts.journal?.append('runner_deferred', {
+            at: new Date().toISOString(),
+            near: others.map((e) => e.name ?? '?'),
+          });
+          return;
+        }
+      } catch { /* 観測できなければ通常通り開始する */ }
+    }
     const chatLog = state
       .chat(50)
       .map((c) => `[${c.from}] ${c.text}`);

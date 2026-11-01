@@ -21,9 +21,20 @@ export default {
     spur_every: { type: 'integer', required: false, description: 'dig side spurs every N blocks (0 = off, default 0)' },
     spur_length: { type: 'integer', required: false, description: 'spur length (default 3)' },
     torch_every: { type: 'integer', required: false, description: 'torch interval (default 8, 0 = off)' },
+    mode: { type: 'string', required: false, description: 'auto (default: together when a player is nearby) / together / solo' },
   },
-  async run(ctx, { length = 32, spur_every = 0, spur_length = 3, torch_every = 8 }) {
+  async run(ctx, { length = 32, spur_every = 0, spur_length = 3, torch_every = 8, mode = 'auto' }) {
     const st = await ctx.state();
+    // 同伴判定: 近くにプレイヤーがいたら一緒に掘る形 (D36)
+    const ents = (r) => (Array.isArray(r) ? r : (r?.entities ?? r?.found ?? []));
+    let mate = null;
+    if (mode !== 'solo') {
+      const all = ents(await ctx.call('obs.entity', { name: 'minecraft:player', radius: 32 }).catch(() => null));
+      mate = all.find((e) => e.name && e.name !== st?.name) ?? null;
+    }
+    const together = mode === 'together' || (mode === 'auto' && !!mate);
+    let waits = 0;
+    if (together) await ctx.say('一緒に掘るね。置いてかないから、ついてきて').catch(() => {});
     const start = { x: Math.floor(st.pos.x), y: Math.floor(st.pos.y), z: Math.floor(st.pos.z) };
     const yawRad = ((st.pos.yaw ?? 0) * Math.PI) / 180;
     let dx = -Math.sin(yawRad);
@@ -79,6 +90,20 @@ export default {
           }
         }
       }
+      // 同伴: プレイヤーが離れすぎたら合流を待つ (8 step ごと)
+      if (together && mate && step % 8 === 0 && !stopped) {
+        for (let w = 0; w < 60; w++) {
+          const plNow = ents(await ctx.call('obs.entity', { name: mate.name }).catch(() => null))[0];
+          if (!plNow) break;
+          const d = Math.hypot(plNow.x - cx, plNow.z - cz);
+          if (d <= 24) break;
+          if (w === 0) {
+            waits++;
+            await ctx.say('先行っちゃった。ここで待ってるね').catch(() => {});
+          }
+          await ctx.sleep(1500);
+        }
+      }
       if (torch_every > 0 && step % torch_every === 0 && !stopped) {
         const stNow = await ctx.state().catch(() => null);
         const slot = hotbarSlot(stNow, 'minecraft:torch');
@@ -92,6 +117,6 @@ export default {
     await ctx.say(stopped
       ? `${stopped === 'lava' ? '溶岩' : '岩盤'}に当たったから止まったよ。${dug}ブロック掘った`
       : `掘り終わった。${dug}ブロック掘ったよ`);
-    return { done: !stopped, dug, ores, torches, stopped, end: { x: cx, y: start.y, z: cz } };
+    return { done: !stopped, dug, ores, torches, stopped, waits, together, end: { x: cx, y: start.y, z: cz } };
   },
 };

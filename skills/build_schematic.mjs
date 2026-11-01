@@ -45,8 +45,18 @@ export default {
     z: { type: 'integer', required: true, description: 'origin Z' },
     rotation: { type: 'integer', required: false, description: '0/90/180/270 (clockwise from above, default 0)' },
     max_blocks: { type: 'integer', required: false, description: 'max placements this run (default 64)' },
+    mode: { type: 'string', required: false, description: 'auto (default) / together / solo — together: per-batch progress + material shortage lines' },
   },
-  async run(ctx, { file, x, y, z, rotation = 0, max_blocks = 64 }) {
+  async run(ctx, { file, x, y, z, rotation = 0, max_blocks = 64, mode = 'auto' }) {
+    // 同伴判定 (D36): 近くにプレイヤーがいたら進捗を逐次知らせる
+    let together = mode === 'together';
+    if (mode === 'auto') {
+      const stB = await ctx.state().catch(() => null);
+      const ents = (r) => (Array.isArray(r) ? r : (r?.entities ?? r?.found ?? []));
+      const all = ents(await ctx.call('obs.entity', { name: 'minecraft:player', radius: 32 }).catch(() => null));
+      together = all.some((e) => e.name && e.name !== stB?.name);
+    }
+    const announcedMissing = new Set();
     const plan = await ctx.schematicPlan(file);
     if (!plan?.blocks?.length) return { done: false, reason: 'empty_plan' };
     const rot = [0, 90, 180, 270].includes(rotation) ? rotation : 0;
@@ -87,6 +97,17 @@ export default {
       for (const m of r.mismatched_at ?? []) mismatchedAt.push(m);
       for (const mi of r.missing_items ?? []) missingItems.add(mi);
       ctx.journal?.checkpoint(`build_batch_${i / BATCH}`, { placed, skipped });
+      if (together) {
+        for (const mi of r.missing_items ?? []) {
+          if (!announcedMissing.has(mi)) {
+            announcedMissing.add(mi);
+            await ctx.say(`材料が無い: ${mi}`).catch(() => {});
+          }
+        }
+        if (i + BATCH < placements.length) {
+          await ctx.say(`建築 ${placed + skipped}/${placements.length}`).catch(() => {});
+        }
+      }
       if (doneEv?.state !== 'succeeded') break;
     }
     const remaining = plan.total - placed - skipped;

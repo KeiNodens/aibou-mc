@@ -105,8 +105,25 @@ export default {
     me_y: { type: 'integer', required: false },
     me_z: { type: 'integer', required: false },
     keep: { type: 'string', required: false, description: 'comma-separated item ids never deposited' },
+    mode: { type: 'string', required: false, description: 'auto (default) / together / solo — together: announce before withdrawing from shared storage' },
   },
   async run(ctx, args) {
+    // 同伴: 共有ストレージから出す前に一言 (D36)。単独は記録のみ
+    let announcedTake = false;
+    const announceTake = async (item, count) => {
+      if (announcedTake || args.mode === 'solo') return;
+      let together = args.mode === 'together';
+      if (!together && (args.mode ?? 'auto') === 'auto') {
+        const stT = await ctx.state().catch(() => null);
+        const ents = (r) => (Array.isArray(r) ? r : (r?.entities ?? r?.found ?? []));
+        const all = ents(await ctx.call('obs.entity', { name: 'minecraft:player', radius: 24 }).catch(() => null));
+        together = all.some((e) => e.name && e.name !== stT?.name);
+      }
+      if (together) {
+        announcedTake = true;
+        await ctx.say(`${item}を${count != null && count !== Infinity ? `${count}個` : ''}ストレージから出すね`).catch(() => {});
+      }
+    };
     if (args.action === 'fetch') {
       if (!args.item) return { done: false, reason: 'item_required' };
       const want = args.count ?? Infinity;
@@ -132,6 +149,7 @@ export default {
       for (const pos of chestPositions) {
         if (got >= want) break;
         ctx.throwIfCancelled();
+        await announceTake(args.item, args.count);
         await openAt(ctx, pos);
         try {
           const read = await ctx.call('container.read');
@@ -148,6 +166,7 @@ export default {
 
       if (got < want && args.me_x != null && args.me_y != null && args.me_z != null) {
         const pos = { x: args.me_x, y: args.me_y, z: args.me_z };
+        await announceTake(args.item, args.count);
         const n = await fetchFromME(ctx, pos, args.item, want - got);
         if (n > 0) sources.push({ type: 'me_terminal', pos, count: n });
         got += n;

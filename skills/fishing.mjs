@@ -26,9 +26,26 @@ export default {
   params: {
     catches: { type: 'integer', required: false, description: 'stop after this many catches (default 3)' },
     max_casts: { type: 'integer', required: false, description: 'give up after this many casts (default 10)' },
+    mode: { type: 'string', required: false, description: 'auto (default) / together / solo — together: set up next to a nearby player first' },
   },
-  async run(ctx, { catches = 3, max_casts = 10 }) {
+  async run(ctx, { catches = 3, max_casts = 10, mode = 'auto' }) {
     const st0 = await ctx.state();
+    // 同伴: 近くにプレイヤーがいたら、その隣に陣取ってから釣る (D36)
+    if (mode !== 'solo') {
+      const ents = (r) => (Array.isArray(r) ? r : (r?.entities ?? r?.found ?? []));
+      const all = ents(await ctx.call('obs.entity', { name: 'minecraft:player', radius: 24 }).catch(() => null));
+      const mate = all.find((e) => e.name && e.name !== st0?.name);
+      if (mate && (mode === 'together' || mode === 'auto')) {
+        const d0 = Math.hypot(mate.x - st0.pos.x, mate.z - st0.pos.z);
+        if (d0 > 3.5) {
+          const g = await ctx.call('baritone.goto', {
+            x: Math.floor(mate.x) + 2, y: Math.floor(mate.y), z: Math.floor(mate.z),
+          }).catch(() => null);
+          if (g?.task_id) await ctx.waitTask(g.task_id, 20_000).catch(() => null);
+          await ctx.say('隣で釣るね').catch(() => {});
+        }
+      }
+    }
     const rod = (st0.inventory_detail ?? []).find(
       (s) => s.id === 'minecraft:fishing_rod' && s.slot <= 8);
     if (!rod) {
