@@ -22,7 +22,7 @@ export default {
       if (!r.ok) throw new Error(`inject failed: ${r.status}`);
     };
     const holdsOf = async () =>
-      ((await h.mcp('loop_status', {})).holds ?? []).map((x) => x.kind);
+      ((await h.mcp('bots', { action: 'loop_status' })).holds ?? []).map((x) => x.kind);
 
     // 1. 「止まれ」→ owner_stop が立つ
     await inject({ from: 'Tester', text: '止まれ' });
@@ -51,7 +51,7 @@ export default {
     if (!k2.includes('dead')) throw new Error('dead should survive instruction');
 
     // 5. dead解除 → 次の指示でcodex起動
-    await h.mcp('loop_resume', { hold: 'dead' });
+    await h.mcp('bots', { action: 'loop_resume', hold: 'dead' });
     await inject({ from: 'Tester', text: 'また動いて' });
     const prompts = await h.waitFor(() => h.rawfile('prompts.md'), 15_000);
     if (!prompts.includes('また動いて')) throw new Error('codex did not run after resume');

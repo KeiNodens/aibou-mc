@@ -52,7 +52,7 @@ export default {
     if (!goals.goals?.some((x) => x.text === '石を64個集める')) {
       throw new Error('goal not restored after restart');
     }
-    const snap2 = await h.mcp('journal_snapshot', {});
+    const snap2 = await h.mcp('journal', { action: 'snapshot' });
     if (!snap2.episodes?.some((e) => e.action === 'skill:follow_player')) {
       throw new Error('episodes not restored');
     }

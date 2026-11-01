@@ -37,7 +37,7 @@ export default {
     await h.restartBridge();
 
     // 3. stale 回収: staleRecovered が立ち、external hold が追加される
-    const st = await h.mcp('loop_status', {});
+    const st = await h.mcp('bots', { action: 'loop_status' });
     if (!st.staleRecovered) {
       throw new Error(`stale not recovered: ${JSON.stringify(st)}`);
     }

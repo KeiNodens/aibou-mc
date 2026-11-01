@@ -40,14 +40,14 @@ export default {
     h.writefile('data/quest-graph.json', JSON.stringify(GRAPH));
 
     // 1. frontier: 石集めのみ (deps無し)
-    const f1 = await h.mcp('quest_frontier', {});
+    const f1 = await h.mcp('quest', { action: 'frontier' });
     const t1 = (f1.frontier ?? []).map((q) => q.title);
     if (!t1.includes('石集め') || t1.length !== 1) {
       throw new Error(`frontier wrong: ${JSON.stringify(f1)}`);
     }
 
     // 2. quest_plan: かまど作り → 石集め→木材集め→かまど作り の順
-    const p = await h.mcp('quest_plan', { goal: 'かまど作り' });
+    const p = await h.mcp('quest', { action: 'plan', goal: 'かまど作り' });
     const titles = (p.plan ?? []).map((q) => q.title);
     if (titles.join(',') !== '石集め,木材集め,かまど作り') {
       throw new Error(`plan wrong: ${JSON.stringify(titles)}`);

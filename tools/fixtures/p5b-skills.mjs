@@ -19,7 +19,7 @@ export default {
 
     // skill完了を work_journal の work.end で待つ
     const waitSkill = async (name) => h.waitFor(async () => {
-      const j = await h.mcp('work_journal', { limit: 100 });
+      const j = await h.mcp('journal', { action: 'read', limit: 100 });
       const es = (j.entries ?? []).filter(
         (e) => e.kind === 'work.end' && e.skill === name);
       return es.length ? es[es.length - 1] : null;

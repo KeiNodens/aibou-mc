@@ -16,12 +16,7 @@ export const MOD_GATES: Record<string, string> = {
   ride: 'create',
   train_drive: 'create',
   deck_walk: 'create',
-  quest_list: 'ftbquests',
-  quest_inspect: 'ftbquests',
-  quest_frontier: 'ftbquests',
-  quest_plan: 'ftbquests',
-  quest_claim: 'ftbquests',
-  quest_aside: 'ftbquests',
+  quest: 'ftbquests',
   jei_search: 'jei',
   warp: 'waystones',
 };
@@ -29,8 +24,7 @@ export const MOD_GATES: Record<string, string> = {
 export const DEFAULT_OFF: string[] = [
   'emi_search', 'emote', 'respawn', 'sign_write', 'item_info',
   'key_list', 'inventory_resync', 'mock_gather', 'reload_skills',
-  'loop_resume', 'bots_status', 'journal_snapshot', 'work_resume_plan',
-  'quest_frontier', 'debug_entity', 'waypoint_save', 'waypoint_list',
+  'debug_entity', 'waypoint_save', 'waypoint_list',
   'waypoint_delete', 'craft_menu',
 ];
 
@@ -39,11 +33,8 @@ export const GROUPS: Record<string, string[]> = {
     'build_schematic', 'build_prepare', 'schematic_create',
     'schematic_plan', 'schematic_inspect', 'block_search',
   ],
-  admin: [
-    'reload_skills', 'loop_resume', 'loop_status', 'bots_status',
-    'mock_gather',
-  ],
-  debug: ['debug_entity', 'item_info', 'journal_snapshot', 'key_list'],
+  admin: ['reload_skills', 'mock_gather', 'bots'],
+  debug: ['debug_entity', 'item_info', 'key_list'],
 };
 
 export interface ToolConfig {

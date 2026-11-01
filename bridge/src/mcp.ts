@@ -397,40 +397,15 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  reg(
-    'schematic_inspect',
-    {
-      description:
-        'Read a building blueprint file (.litematic or .schem) and return its ' +
-        'size, block count and material totals. No Litematica mod needed — ' +
-        'the NBT is parsed directly by the bridge.',
-      inputSchema: {
-        path: z.string().describe('absolute path to the schematic file'),
-      },
-    },
-    async ({ path }) => {
+  const h_schematic_inspect: (args: any) => Promise<any> = async ({ path }) => {
       try {
         return json(await inspectSchematic(path));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'schematic_plan',
-    {
-      description:
-        'Return the ordered block list (bottom-up) for a .litematic/.schem ' +
-        'file — the placement sequence for actually building it. Use ' +
-        'max_layers to preview a subset.',
-      inputSchema: {
-        path: z.string().describe('absolute path to the schematic file'),
-        max_layers: z.number().int().optional()
-          .describe('limit to first N layers (y<max_layers)'),
-      },
-    },
-    async ({ path, max_layers }) => {
+  const h_schematic_plan: (args: any) => Promise<any> = async ({ path, max_layers }) => {
       try {
         const r = await planSchematic(path, { max_layers });
         return json({ size: r.size, total: r.total, blocks: r.blocks.slice(0, 2000),
@@ -438,35 +413,9 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'schematic_create',
-    {
-      description:
-        'Create a .schem blueprint from building instructions (D23/S1): ' +
-        'primitive ops and/or an explicit block list, with optional ' +
-        'blockstate props per placement. The file is written to the bridge ' +
-        'schematic library and verified by reading it back. Works without ' +
-        'the game connected. Ops: {op:"block",x,y,z,block,props?} | ' +
-        '{op:"box",from:{x,y,z},to:{x,y,z},block,props?,hollow?} | ' +
-        '{op:"line",from:{x,y,z},to:{x,y,z},block,props?}. Setting ' +
-        'minecraft:air carves a cell out. Coords are relative; the result ' +
-        'is cropped to the occupied bounds.',
-      inputSchema: {
-        name: z.string().describe('file name (letters, digits, _ and -)'),
-        ops: z.array(z.any()).optional()
-          .describe('primitive ops (see description)'),
-        blocks: z.array(z.object({
-          x: z.number().int(), y: z.number().int(), z: z.number().int(),
-          block: z.string(),
-          props: z.record(z.string(), z.string()).optional(),
-        })).optional().describe('explicit placements, applied after ops'),
-        overwrite: z.boolean().optional(),
-      },
-    },
-    async ({ name, ops, blocks, overwrite }) => {
+  const h_schematic_create: (args: any) => Promise<any> = async ({ name, ops, blocks, overwrite }) => {
       try {
         const cat = await ensureCatalog();
         if (cat.size) {
@@ -490,6 +439,43 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
         }));
       } catch (e) {
         return err(e);
+      }
+    };
+
+  reg(
+    'schematic',
+    {
+      description:
+        'Building blueprint files (.litematic / .schem), parsed directly ' +
+        'by the bridge (no Litematica mod needed). action: inspect = size, ' +
+        'block count, material totals | plan = ordered block list ' +
+        '(bottom-up placement sequence; max_layers previews a subset) | ' +
+        'create = build a .schem from primitive ops and/or an explicit ' +
+        'block list (D23/S1; written to the schematic library and verified ' +
+        'by read-back; works without the game). create ops: ' +
+        '{op:"block",x,y,z,block,props?} | {op:"box",from,to,block,props?,hollow?} | ' +
+        '{op:"line",from,to,block,props?}; minecraft:air carves a cell.',
+      inputSchema: {
+        action: z.enum(['inspect', 'plan', 'create']),
+        path: z.string().optional().describe('absolute path to the schematic file (inspect/plan)'),
+        max_layers: z.number().int().optional().describe('limit to first N layers (plan)'),
+        name: z.string().optional().describe('file name for create (letters, digits, _ and -)'),
+        ops: z.array(z.any()).optional().describe('primitive ops (create; see description)'),
+        blocks: z.array(z.object({
+          x: z.number().int(), y: z.number().int(), z: z.number().int(),
+          block: z.string(),
+          props: z.record(z.string(), z.string()).optional(),
+        })).optional().describe('explicit placements, applied after ops (create)'),
+        overwrite: z.boolean().optional(),
+      },
+    },
+    async (args: any) => {
+      const { action, ...rest } = args ?? {};
+      switch (action) {
+        case 'inspect': return h_schematic_inspect(rest);
+        case 'plan': return h_schematic_plan(rest);
+        case 'create': return h_schematic_create(rest);
+        default: return err(new Error(`unknown schematic action: ${action}`));
       }
     },
   );
@@ -612,22 +598,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  reg(
-    'work_journal',
-    {
-      description:
-        'Read the persistent work journal (data/journal.jsonl) — generation- ' +
-        'independent work ids, checkpoints, task/reflex events. To resume ' +
-        'interrupted work, observe the real game state first and reconcile ' +
-        'against the last checkpoint; never blindly replay clicks.',
-      inputSchema: {
-        limit: z.number().int().optional().describe('entries to return (default 50)'),
-        work_id: z.string().optional().describe('filter to one work id'),
-        open_only: z.boolean().optional()
-          .describe('return only works started but not ended'),
-      },
-    },
-    async ({ limit, work_id, open_only }) => {
+  const h_work_journal: (args: any) => Promise<any> = async ({ limit, work_id, open_only }) => {
       try {
         if (!journal) return json({ entries: [], note: 'journal disabled' });
         if (open_only) return json({ open: journal.openWorks() });
@@ -635,24 +606,9 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'work_checkpoint',
-    {
-      description:
-        'Manually write a checkpoint entry into the work journal (e.g. for ' +
-        'multi-turn work driven by the MCP host rather than a skill). ' +
-        'Omit work_id to allocate a new work id for a new goal.',
-      inputSchema: {
-        work_id: z.string().optional().describe('existing work id, or omit for new'),
-        goal: z.string().optional().describe('goal text when starting a new work'),
-        step: z.string().describe('checkpoint label, e.g. "materials_inserted"'),
-        note: z.string().optional(),
-      },
-    },
-    async ({ work_id, goal, step, note }) => {
+  const h_work_checkpoint: (args: any) => Promise<any> = async ({ work_id, goal, step, note }) => {
       try {
         if (!journal) return json({ ok: false, note: 'journal disabled' });
         let work = work_id;
@@ -665,8 +621,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
   reg(
     'goal_set',
@@ -720,72 +675,32 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  reg(
-    'journal_snapshot',
-    {
-      description:
-        'Read the structured memory snapshot (data/agent-journal.json): goals, ' +
-        'workGraphs, facilities, reservations, knowledge, episodes. ' +
-        'These are recorded facts only — verify against live game state before use.',
-      inputSchema: {},
-    },
-    async () => {
+  const h_journal_snapshot: (args: any) => Promise<any> = async () => {
       try {
         if (!journal) return json({ note: 'journal disabled' });
         return json(journal.snapshot());
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'quest_list',
-    {
-      description:
-        'List FTB Quests chapters/quests with progress state (requires the ' +
-        'ftbquests mod on client+server and synced quest data). Empty when ' +
-        'the pack defines no quests.',
-      inputSchema: {},
-    },
-    async () => {
+  const h_quest_list: (args: any) => Promise<any> = async () => {
       try {
         return json(await mod.call('quest.list', {}));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'quest_inspect',
-    {
-      description:
-        'Inspect one quest by name or id: tasks, rewards, started/completed ' +
-        'state. Get names from quest_list.',
-      inputSchema: {
-        name: z.string().describe('quest title or numeric id'),
-      },
-    },
-    async ({ name }) => {
+  const h_quest_inspect: (args: any) => Promise<any> = async ({ name }) => {
       try {
         return json(await mod.call('quest.inspect', { name }));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'quest_frontier',
-    {
-      description:
-        'List quests whose dependencies are all completed but which are not ' +
-        'done yet — the actionable frontier. Requires data/quest-graph.json ' +
-        '(tools/build-quest-graph.mjs) and live quest progress via quest_list.',
-      inputSchema: {},
-    },
-    async () => {
+  const h_quest_frontier: (args: any) => Promise<any> = async () => {
       try {
         if (!questGraph?.loaded()) {
           return json({ frontier: [], note: 'quest-graph.json not built (tools/build-quest-graph.mjs)' });
@@ -801,18 +716,9 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'quest_plan',
-    {
-      description:
-        'Return the dependency-resolved path to a goal quest (topological ' +
-        'order). The last entry is the goal itself.',
-      inputSchema: { goal: z.string().describe('quest title or id') },
-    },
-    async ({ goal }) => {
+  const h_quest_plan: (args: any) => Promise<any> = async ({ goal }) => {
       try {
         if (!questGraph?.loaded()) {
           return json({ note: 'quest-graph.json not built' });
@@ -829,8 +735,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
   reg(
     'jei_search',
@@ -873,26 +778,13 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  reg(
-    'quest_claim',
-    {
-      description:
-        'Claim FTB Quests rewards server-side. With reward_id claims that ' +
-        'reward (ids from quest_inspect); without it claims all pending ' +
-        'rewards (ClaimAllRewards).',
-      inputSchema: {
-        reward_id: z.number().optional()
-          .describe('reward id from quest_inspect rewards[].id'),
-      },
-    },
-    async (p) => {
+  const h_quest_claim: (args: any) => Promise<any> = async (p) => {
       try {
         return json(await mod.call('quest.claim', p));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
   reg(
     'container_close',
@@ -981,61 +873,54 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  reg(
-    'screen_read',
-    {
-      description:
-        'List widgets of the currently open Screen (non-container GUIs ' +
-        'like FTB Quests, CuriosScreen, mod config screens). Returns ' +
-        'index/class/text/position per widget.',
-      inputSchema: {},
-    },
-    async () => {
+  const h_screen_read: (args: any) => Promise<any> = async () => {
       try {
         return json(await mod.call('screen.read', {}));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'screen_click',
-    {
-      description:
-        'Click a widget in the open Screen by index (from screen_read), ' +
-        'text substring match, or raw x/y coordinates (for custom-drawn ' +
-        'clickable regions not in the widget tree, e.g. FTB sidebar icons).',
-      inputSchema: {
-        index: z.number().optional().describe('widget index from screen_read'),
-        text: z.string().optional()
-          .describe('substring match on widget text/label'),
-        x: z.number().optional().describe('raw screen x coordinate (with y)'),
-        y: z.number().optional().describe('raw screen y coordinate (with x)'),
-        sidebar: z.string().optional()
-          .describe('FTB Library sidebar button id substring (e.g. "ftbquests")'),
-      },
-    },
-    async (p) => {
+  const h_screen_click: (args: any) => Promise<any> = async (p) => {
       try {
         return json(await mod.call('screen.click', p));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'screen_close',
-    {
-      description: 'Force-close the currently open Screen.',
-      inputSchema: {},
-    },
-    async () => {
+  const h_screen_close: (args: any) => Promise<any> = async () => {
       try {
         return json(await mod.call('screen.close', {}));
       } catch (e) {
         return err(e);
+      }
+    };
+
+  reg(
+    'screen',
+    {
+      description:
+        'Non-container Screen GUIs (FTB Quests, Curios, mod configs). ' +
+        'action: read = list widgets (index/class/text/position) | click = ' +
+        'click by widget index, text substring, raw x/y, or FTB sidebar id | ' +
+        'close = force-close the open Screen.',
+      inputSchema: {
+        action: z.enum(['read', 'click', 'close']),
+        index: z.number().optional(),
+        text: z.string().optional(),
+        x: z.number().optional(),
+        y: z.number().optional(),
+        sidebar: z.string().optional(),
+      },
+    },
+    async (args: any) => {
+      const { action, ...rest } = args ?? {};
+      switch (action) {
+        case 'read': return h_screen_read(rest);
+        case 'click': return h_screen_click(rest);
+        case 'close': return h_screen_close(rest);
+        default: return err(new Error(`unknown screen action: ${action}`));
       }
     },
   );
@@ -1584,45 +1469,23 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  reg(
-    'task_status',
-    {
-      description: 'Query execution state of a task (queued/running/succeeded/failed/cancelling/cancelled).',
-      inputSchema: { task_id: z.string() },
-    },
-    async ({ task_id }) => {
+  const h_task_status: (args: any) => Promise<any> = async ({ task_id }) => {
       try {
         return json(await mod.call('task.status', { task_id }));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'task_result',
-    {
-      description: 'Get final result of a finished task.',
-      inputSchema: { task_id: z.string() },
-    },
-    async ({ task_id }) => {
+  const h_task_result: (args: any) => Promise<any> = async ({ task_id }) => {
       try {
         return json(await mod.call('task.result', { task_id }));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'cancel_current',
-    {
-      description:
-        'Cancel the running skill and all tasks. Completion is reported via ' +
-        'task.done(state=cancelled) / skill.done(cancelled).',
-      inputSchema: {},
-    },
-    async () => {
+  const h_cancel_current: (args: any) => Promise<any> = async () => {
       const cancelledSkill = skills.cancel().cancelled;
       try {
         const r = (await mod.call('task.cancel_all')) as Record<string, unknown>;
@@ -1630,6 +1493,29 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
         return json({ ...r, cancelled_skill: cancelledSkill });
       } catch (e) {
         return err(e);
+      }
+    };
+
+  reg(
+    'task',
+    {
+      description:
+        'Async task control. action: status = execution state of a task ' +
+        '(queued/running/succeeded/failed/cancelling/cancelled) | result = ' +
+        'final result of a finished task | cancel_all = cancel the running ' +
+        'skill and all tasks.',
+      inputSchema: {
+        action: z.enum(['status', 'result', 'cancel_all']),
+        task_id: z.string().optional(),
+      },
+    },
+    async (args: any) => {
+      const { action, ...rest } = args ?? {};
+      switch (action) {
+        case 'status': return h_task_status(rest);
+        case 'result': return h_task_result(rest);
+        case 'cancel_all': return h_cancel_current(rest);
+        default: return err(new Error(`unknown task action: ${action}`));
       }
     },
   );
@@ -1664,38 +1550,13 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  reg(
-    'bot_status',
-    {
-      description: 'Bridge/bot status: WS connectivity to the agent, generation id.',
-      inputSchema: {},
-    },
-    async () => json({ connected: mod.connected, generation: state.generation }),
-  );
+  const h_bot_status: (args: any) => Promise<any> = async () => json({ connected: mod.connected, generation: state.generation });
 
-  reg(
-    'loop_status',
-    {
-      description:
-        'Execution loop status (read-only): whether a codex run is active, ' +
-        'queued, held, and why. holds[] shows the reasons the loop is paused ' +
-        '(dead/external/owner_stop/blocked/failed).',
-      inputSchema: {},
-    },
-    async () => json(runhold
+  const h_loop_status: (args: any) => Promise<any> = async () => json(runhold
       ? { ...runhold.status(), connected: mod.connected, generation: state.generation }
-      : { note: 'runner disabled', connected: mod.connected, generation: state.generation }),
-  );
+      : { note: 'runner disabled', connected: mod.connected, generation: state.generation });
 
-  reg(
-    'loop_resume',
-    {
-      description:
-        'Release execution-loop holds. Specify hold to release one kind ' +
-        '(dead/external/owner_stop/blocked/failed), or omit to release all.',
-      inputSchema: { hold: z.string().optional() },
-    },
-    async ({ hold }) => {
+  const h_loop_resume: (args: any) => Promise<any> = async ({ hold }) => {
       try {
         if (!runhold) return json({ ok: false, note: 'runner disabled' });
         if (hold) runhold.release(hold as HoldKind);
@@ -1704,18 +1565,9 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'approve',
-    {
-      description:
-        'Approve a pending dangerous action (autonomy gate). Omit id to approve ' +
-        'the newest pending request. Approval opens the method for 5 minutes.',
-      inputSchema: { id: z.string().optional() },
-    },
-    async ({ id }) => {
+  const h_approve: (args: any) => Promise<any> = async ({ id }) => {
       try {
         if (!autonomy) return json({ ok: false, note: 'autonomy disabled' });
         const r = autonomy.approve(id);
@@ -1723,16 +1575,9 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'deny',
-    {
-      description: 'Deny a pending dangerous action (autonomy gate).',
-      inputSchema: { id: z.string().optional() },
-    },
-    async ({ id }) => {
+  const h_deny: (args: any) => Promise<any> = async ({ id }) => {
       try {
         if (!autonomy) return json({ ok: false, note: 'autonomy disabled' });
         const r = autonomy.deny(id);
@@ -1740,73 +1585,93 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'pending_approvals',
-    {
-      description: 'List actions waiting for approval under the autonomy gate.',
-      inputSchema: {},
-    },
-    async () => json({
+  const h_pending_approvals: (args: any) => Promise<any> = async () => json({
       level: autonomy?.level(),
       pending: autonomy?.list() ?? [],
-    }),
-  );
+    });
 
   reg(
-    'session_summary',
+    'approvals',
     {
       description:
-        'Mechanical summary of the play session since the last summary: ' +
-        'episode counts by action, success/failure, goals completed/active. ' +
-        'record=true stores it as the session-end summary (advances the marker).',
-      inputSchema: { record: z.boolean().optional() },
+        'Autonomy-gate approvals for dangerous actions. action: list = ' +
+        'pending requests + current level | approve = approve one (id; ' +
+        'omit for the newest; opens the method for 5 minutes) | deny = ' +
+        'deny one (id; omit for the newest).',
+      inputSchema: {
+        action: z.enum(['list', 'approve', 'deny']),
+        id: z.string().optional(),
+      },
     },
-    async ({ record }) => {
+    async (args: any) => {
+      const { action, ...rest } = args ?? {};
+      switch (action) {
+        case 'list': return h_pending_approvals(rest);
+        case 'approve': return h_approve(rest);
+        case 'deny': return h_deny(rest);
+        default: return err(new Error(`unknown approvals action: ${action}`));
+      }
+    },
+  );
+
+  const h_session_summary: (args: any) => Promise<any> = async ({ record }) => {
       try {
         if (!journal) return json({ note: 'journal disabled' });
         return json(journal.sessionSummary(record ?? false));
       } catch (e) {
         return err(e);
       }
-    },
-  );
+    };
 
-  reg(
-    'work_resume_plan',
-    {
-      description:
-        'Suffix-repair plan for failed work: for each recently failed work id, ' +
-        'the checkpoints already completed and the error that stopped it. ' +
-        'Resume by redoing only the steps AFTER the last completed checkpoint.',
-      inputSchema: { limit: z.number().int().min(1).max(10).optional() },
-    },
-    async ({ limit }) => {
+  const h_work_resume_plan: (args: any) => Promise<any> = async ({ limit }) => {
       try {
         if (!journal) return json({ failed: [], note: 'journal disabled' });
         return json({ failed: journal.failedWorks(limit ?? 3) });
       } catch (e) {
         return err(e);
       }
+    };
+
+  reg(
+    'journal',
+    {
+      description:
+        'Persistent work journal and structured memory. action: read = ' +
+        'work journal entries (limit, work_id, open_only for unfinished ' +
+        'works) | checkpoint = write a checkpoint (work_id to continue, ' +
+        'goal+omit work_id to start a new work; step is the label) | ' +
+        'snapshot = structured memory (goals, facilities, episodes — ' +
+        'recorded facts; verify against live state) | session_summary = ' +
+        'mechanical summary since the last one (record=true stores it and ' +
+        'advances the marker) | resume_plan = suffix-repair plan for ' +
+        'recently failed works (redo only steps after the last checkpoint).',
+      inputSchema: {
+        action: z.enum(['read', 'checkpoint', 'snapshot', 'session_summary', 'resume_plan']),
+        limit: z.number().int().optional(),
+        work_id: z.string().optional(),
+        open_only: z.boolean().optional(),
+        goal: z.string().optional(),
+        step: z.string().optional(),
+        note: z.string().optional(),
+        record: z.boolean().optional(),
+      },
+    },
+    async (args: any) => {
+      const { action, ...rest } = args ?? {};
+      switch (action) {
+        case 'read': return h_work_journal(rest);
+        case 'checkpoint': return h_work_checkpoint(rest);
+        case 'snapshot': return h_journal_snapshot(rest);
+        case 'session_summary': return h_session_summary(rest);
+        case 'resume_plan': return h_work_resume_plan(rest);
+        default: return err(new Error(`unknown journal action: ${action}`));
+      }
     },
   );
 
-  reg(
-    'quest_aside',
-    {
-      description:
-        'Manage quest set-aside: quests that fail repeatedly (3x) are removed ' +
-        'from quest_frontier automatically. action=list shows asides and ' +
-        'failure counts; aside/unaside move a quest manually; fail records ' +
-        'one failure for a quest.',
-      inputSchema: {
-        action: z.enum(['list', 'aside', 'unaside', 'fail']),
-        quest: z.string().optional().describe('quest title or id (not needed for list)'),
-      },
-    },
-    async ({ action, quest }) => {
+  const h_quest_aside: (args: any) => Promise<any> = async ({ action, quest }) => {
       try {
         if (!questGraph?.loaded()) return json({ note: 'quest-graph.json not built' });
         if (action === 'list') {
@@ -1826,22 +1691,73 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       } catch (e) {
         return err(e);
       }
+    };
+
+  reg(
+    'quest',
+    {
+      description:
+        'FTB Quests tools (requires the ftbquests mod). action: list = ' +
+        'chapters/quests with progress | inspect = one quest by name/id ' +
+        '(tasks, rewards, state; name from list) | frontier = actionable ' +
+        'quests whose dependencies are done | plan = dependency-resolved ' +
+        'path to a goal quest | claim = claim rewards (reward_id from ' +
+        'inspect; omit to claim all) | aside = manage set-aside for ' +
+        'repeatedly failing quests (mode: list|aside|unaside|fail).',
+      inputSchema: {
+        action: z.enum(['list', 'inspect', 'frontier', 'plan', 'claim', 'aside']),
+        name: z.string().optional().describe('quest title or id (inspect)'),
+        goal: z.string().optional().describe('quest title or id (plan)'),
+        reward_id: z.number().optional().describe('reward id (claim)'),
+        quest: z.string().optional().describe('quest title or id (aside)'),
+        mode: z.enum(['list', 'aside', 'unaside', 'fail']).optional()
+          .describe('aside sub-action (default list)'),
+      },
+    },
+    async (args: any) => {
+      const { action, ...rest } = args ?? {};
+      switch (action) {
+        case 'list': return h_quest_list(rest);
+        case 'inspect': return h_quest_inspect(rest);
+        case 'frontier': return h_quest_frontier(rest);
+        case 'plan': return h_quest_plan(rest);
+        case 'claim': return h_quest_claim(rest);
+        case 'aside': return h_quest_aside({ action: (rest as any).mode ?? 'list', quest: (rest as any).quest });
+        default: return err(new Error(`unknown quest action: ${action}`));
+      }
     },
   );
 
-  reg(
-    'bots_status',
-    {
-      description:
-        'Multi-bot status: the primary bot plus any observer bots registered ' +
-        'via BOTS_JSON (name, connection state, generation).',
-      inputSchema: {},
-    },
-    async () => json({
+  const h_bots_status: (args: any) => Promise<any> = async () => json({
       bots: bots?.status() ?? [
         { name: 'primary', connected: mod.connected, generation: state.generation, role: 'primary' },
       ],
-    }),
+    });
+
+  reg(
+    'bots',
+    {
+      description:
+        'Bot / execution-loop status. action: status = bridge WS ' +
+        'connectivity + generation | multi = primary + observer bots ' +
+        '(BOTS_JSON) | loop_status = execution loop state and holds ' +
+        '(read-only) | loop_resume = release loop holds (hold = one kind; ' +
+        'omit to release all).',
+      inputSchema: {
+        action: z.enum(['status', 'multi', 'loop_status', 'loop_resume']),
+        hold: z.string().optional(),
+      },
+    },
+    async (args: any) => {
+      const { action, ...rest } = args ?? {};
+      switch (action) {
+        case 'status': return h_bot_status(rest);
+        case 'multi': return h_bots_status(rest);
+        case 'loop_status': return h_loop_status(rest);
+        case 'loop_resume': return h_loop_resume(rest);
+        default: return err(new Error(`unknown bots action: ${action}`));
+      }
+    },
   );
 
   void applyGate();

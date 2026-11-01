@@ -20,7 +20,7 @@ export default {
       throw new Error(`dangerous call not gated: ${JSON.stringify(r1)}`);
     }
     // 2. pending_approvalsに載る
-    const p = await h.mcp('pending_approvals', {});
+    const p = await h.mcp('approvals', { action: 'list' });
     if (!p.pending?.length || p.pending[0].method !== 'chat.command') {
       throw new Error(`approval not pending: ${JSON.stringify(p)}`);
     }

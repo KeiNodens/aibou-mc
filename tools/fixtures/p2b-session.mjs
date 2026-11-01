@@ -21,14 +21,14 @@ export default {
   async assert(h) {
     await h.sleep(2000);
     // 1. 成功episodeが要約対象になる
-    const s1 = await h.mcp('session_summary', {});
+    const s1 = await h.mcp('journal', { action: 'session_summary' });
     if (!(s1.episodes >= 1 && s1.ok >= 1)) {
       throw new Error(`summary should count episodes: ${JSON.stringify(s1)}`);
     }
     // 2. record=true でマーカーが進み、直後の要約は0件になる
-    const s2 = await h.mcp('session_summary', { record: true });
+    const s2 = await h.mcp('journal', { action: 'session_summary', record: true });
     if (!(s2.episodes >= 1)) throw new Error('record summary lost episodes');
-    const s3 = await h.mcp('session_summary', {});
+    const s3 = await h.mcp('journal', { action: 'session_summary' });
     if (s3.episodes !== 0) {
       throw new Error(`marker did not advance: ${JSON.stringify(s3)}`);
     }
@@ -40,7 +40,7 @@ export default {
     // 4. 失敗作業: gather を起動 (baritone.mine未stub→失敗)
     await h.mcp('gather', { block: 'minecraft:stone', count: 1 });
     const plan = await h.waitFor(async () => {
-      const r = await h.mcp('work_resume_plan', {});
+      const r = await h.mcp('journal', { action: 'resume_plan' });
       return r.failed?.length ? r : null;
     }, 15_000);
     const f = plan.failed[0];

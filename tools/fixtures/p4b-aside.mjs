@@ -33,7 +33,7 @@ export default {
     h.writefile('data/quest-graph.json', JSON.stringify(GRAPH));
 
     const frontierTitles = async () =>
-      ((await h.mcp('quest_frontier', {})).frontier ?? []).map((q) => q.title);
+      ((await h.mcp('quest', { action: 'frontier' })).frontier ?? []).map((q) => q.title);
 
     // 1. 最初は石集めが frontier
     if (!(await frontierTitles()).includes('石集め')) {
@@ -42,7 +42,7 @@ export default {
     // 2. 失敗3回 → 自動で棚上げされ frontier から消える
     let last = null;
     for (let i = 0; i < 3; i++) {
-      last = await h.mcp('quest_aside', { action: 'fail', quest: '石集め' });
+      last = await h.mcp('quest', { action: 'aside', mode: 'fail', quest: '石集め' });
     }
     if (!last.result?.aside) {
       throw new Error(`not aside after 3 failures: ${JSON.stringify(last)}`);
@@ -51,7 +51,7 @@ export default {
       throw new Error('aside quest still in frontier');
     }
     // 3. list に失敗回数つきで載る
-    const list = await h.mcp('quest_aside', { action: 'list' });
+    const list = await h.mcp('quest', { action: 'aside', mode: 'list' });
     const entry = (list.aside ?? []).find((q) => q.title === '石集め');
     if (!entry || entry.failures !== 3) {
       throw new Error(`aside list wrong: ${JSON.stringify(list)}`);
@@ -65,7 +65,7 @@ export default {
       throw new Error(`goal hook wrong: ${JSON.stringify(end)}`);
     }
     // 5. unaside で frontier に戻る
-    await h.mcp('quest_aside', { action: 'unaside', quest: '石集め' });
+    await h.mcp('quest', { action: 'aside', mode: 'unaside', quest: '石集め' });
     if (!(await frontierTitles()).includes('石集め')) {
       throw new Error('unaside did not restore frontier');
     }

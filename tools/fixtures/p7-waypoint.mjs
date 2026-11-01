@@ -21,7 +21,7 @@ export default {
     const runSkill = async (params) => {
       await h.mcp('waypoint', params);
       const end = await h.waitFor(async () => {
-        const j = await h.mcp('work_journal', { limit: 100 });
+        const j = await h.mcp('journal', { action: 'read', limit: 100 });
         const es = (j.entries ?? []).filter(
           (e) => e.kind === 'work.end' && e.skill === 'waypoint');
         return es.length > seen ? es[es.length - 1] : null;
