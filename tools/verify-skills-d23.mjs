@@ -37,7 +37,7 @@ function makeCtx(handlers, opts = {}) {
     async schematicPlan() { return opts.plan; },
     async sleep() {},
     async say() {},
-    async waitTask() { return { state: 'succeeded' }; },
+    async waitTask(id) { return opts.waitTask ? opts.waitTask(id) : { state: 'succeeded' }; },
     throwIfCancelled() {},
     signal: new AbortController().signal,
     journal: {
@@ -122,70 +122,81 @@ const chestRead = (chestSlots) => ({
   check('T2 missing empty', r.missing?.length === 0);
 }
 
-// ---------- T3: build_schematic v2 (props不一致 + 回転 + 補充) ----------
+// ---------- T3: build_schematic v3 (BuildTask 連携: 回転 + 結果集計) ----------
 {
-  // (a) facing 不一致を mismatched として報告する
+  // BuildTask のエミュレーション: fake world に対して結果を計算する
+  const emulateBuild = (world) => (p) => {
+    let placed = 0, skipped = 0, mismatched = 0, failed = 0;
+    const mismatched_at = [];
+    for (const b of p.blocks) {
+      const k = `${b.x},${b.y},${b.z}`;
+      const cur = world[k];
+      const propsOk = (props, entry) => !props ||
+        Object.entries(props).every(([kk, v]) => String(entry?.props?.[kk]) === String(v));
+      if (cur && cur.id === b.id && propsOk(b.props, cur)) { skipped++; continue; }
+      if (cur && cur.id === b.id && b.props) {
+        mismatched++;
+        mismatched_at.push({ x: b.x, y: b.y, z: b.z, id: b.id, actual: cur.id });
+        continue;
+      }
+      if (cur && cur.id !== 'minecraft:air') { failed++; continue; }
+      // 設置: 階段は配置文脈で facing が south になってしまう世界を再現
+      const entry = {
+        id: b.id,
+        props: b.id === 'minecraft:oak_stairs' ? { facing: 'south' } : (b.props ?? {}),
+      };
+      world[k] = entry;
+      if (b.props && !propsOk(b.props, entry)) {
+        mismatched++;
+        mismatched_at.push({ x: b.x, y: b.y, z: b.z, id: b.id, actual: b.id });
+      } else placed++;
+    }
+    return { task_id: 'bt', _r: { placed, skipped, mismatched, failed,
+      remaining: 0, missing_items: [], mismatched_at } };
+  };
+
+  // (a) 設置・スキップ・props 不一致が集計される
   const planA = {
-    size: { x: 2, y: 1, z: 1 }, total: 2,
+    size: { x: 3, y: 1, z: 1 }, total: 3,
     blocks: [
       { x: 0, y: 0, z: 0, id: 'minecraft:oak_stairs', props: { facing: 'north' } },
       { x: 1, y: 0, z: 0, id: 'minecraft:stone' },
+      { x: 2, y: 0, z: 0, id: 'minecraft:oak_log' },
     ],
   };
-  let placedA = false;
+  const worldA = { '101,64,100': { id: 'minecraft:stone', props: {} } };
+  let lastA = null;
   const ctxA = makeCtx({
-    'obs.block_state': (p) => {
-      if (p.x === 100 && p.y === 63) return { block: 'minecraft:stone' }; // 支持
-      if (p.x === 100 && p.y === 64)
-        return placedA
-          ? { block: 'minecraft:oak_stairs', properties: { facing: 'south' } }
-          : { block: 'minecraft:air' };
-      if (p.x === 101) return { block: 'minecraft:stone' };
-      return { block: 'minecraft:air' };
-    },
-    'baritone.goto': { task_id: 't' },
-    'equip': {},
-    'look_at': {},
-    'use_item': () => { placedA = true; return { ok: true }; },
+    'build.place': (p) => { const r = emulateBuild(worldA)(p); lastA = r._r; return { task_id: r.task_id }; },
   }, {
     plan: planA,
-    state: { inventory_detail: [{ slot: 3, id: 'minecraft:oak_stairs', count: 4 }] },
+    waitTask: () => ({ state: 'succeeded', result: lastA }),
   });
   const ra = await buildSchematic.run(ctxA, { file: 'x', x: 100, y: 64, z: 100 });
   check('T3a placed 1 / skipped 1', ra.placed === 1 && ra.skipped === 1, JSON.stringify(ra));
   check('T3a mismatched reported', ra.mismatched_count === 1 &&
-    ra.mismatched[0].want.facing === 'north', JSON.stringify(ra.mismatched));
+    ra.mismatched[0].id === 'minecraft:oak_stairs', JSON.stringify(ra.mismatched));
 
-  // (b) rotation=90 で座標が変換される + 在庫から補充 (swap) する
+  // (b) rotation=90 で配置座標が変換されて build.place に渡る
   const planB = {
     size: { x: 2, y: 1, z: 2 }, total: 1,
     blocks: [{ x: 0, y: 0, z: 0, id: 'minecraft:stone' }],
   };
-  let placedB = false;
-  const useItemTargets = [];
+  const worldB = {};
+  let lastB = null;
   const ctxB = makeCtx({
-    'obs.block_state': (p) => {
-      if (p.y === 63) return { block: 'minecraft:stone' };
-      if (p.x === 201 && p.z === 200 && placedB) return { block: 'minecraft:stone' };
-      return { block: 'minecraft:air' };
-    },
-    'baritone.goto': { task_id: 't' },
-    'equip': {},
-    'look_at': {},
-    'use_item': (p) => { useItemTargets.push(p); placedB = true; return { ok: true }; },
-    'container.read': { menu_id: 'player_inventory', container_sizes: { 0: 36 }, slots: [] },
-    'container.click': {},
+    'build.place': (p) => { const r = emulateBuild(worldB)(p); lastB = r._r; return { task_id: r.task_id }; },
   }, {
     plan: planB,
-    state: { inventory_detail: [{ slot: 20, id: 'minecraft:stone', count: 10 }] },
+    waitTask: () => ({ state: 'succeeded', result: lastB }),
   });
   const rb = await buildSchematic.run(ctxB, { file: 'x', x: 200, y: 64, z: 200, rotation: 90 });
-  // rot90: (0,0) → (x: size.z-1-0 = 1, z: 0) → world (201, 64, 200); 支持は真下 (201,63,200)
+  // rot90: (0,0) → (x: size.z-1-0 = 1, z: 0) → world (201, 64, 200)
+  const placeCall = ctxB.calls.find((c) => c.method === 'build.place');
   check('T3b rotated placement target',
-    useItemTargets.some((p) => p.x === 201 && p.y === 63 && p.z === 200),
-    JSON.stringify(useItemTargets));
-  check('T3b restock swap happened',
-    ctxB.calls.some((c) => c.method === 'container.click' && c.params.action === 'swap' && c.params.slot === 20));
+    !!placeCall && placeCall.params.blocks[0].x === 201 &&
+    placeCall.params.blocks[0].y === 64 && placeCall.params.blocks[0].z === 200,
+    JSON.stringify(placeCall?.params));
   check('T3b placed 1', rb.placed === 1, JSON.stringify(rb));
 }
 

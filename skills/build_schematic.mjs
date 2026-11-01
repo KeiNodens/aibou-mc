@@ -1,22 +1,9 @@
-// schematic実建築 v2 (D23/S4): .litematic/.schem の計画列に沿って置く。
-// 冪等 (正しいブロック+state の位置はスキップ)。v2 の追加:
-// - rotation (0/90/180/270): 座標と facing/axis props を回転させる
-// - props 検証: id が合っても state が違う場合は mismatched として報告
-// - facing 付きブロックは、向きが合うよう bot の立ち位置を合わせてから置く
-// - ホットバー自動補充: 在庫 (9-35) から swap でホットバーへ回す
-const FACES = [
-  { dx: 0, dy: -1, dz: 0, face: 'up' },     // 下のブロックの上面に置く (基本)
-  { dx: 1, dy: 0, dz: 0, face: 'west' },
-  { dx: -1, dy: 0, dz: 0, face: 'east' },
-  { dx: 0, dy: 0, dz: 1, face: 'north' },
-  { dx: 0, dy: 0, dz: -1, face: 'south' },
-  { dx: 0, dy: 1, dz: 0, face: 'down' },
-];
+// schematic実建築 v3 (D32): 計画と回転は bridge、配置ループは
+// mod 側 BuildTask が消化する (D23/S4 の v2 から移行)。
+// - rotation (0/90/180/270): 座標と facing/axis props を回転 (bridge)
+// - 配置・在庫内移動・facing の立ち位置・設置後検証は BuildTask
+// - 冪等 (設置済みは skip)、占有セルは壊さない (どちらもタスク側)
 const FACING_ORDER = ['north', 'east', 'south', 'west'];
-const FACING_VEC = {
-  north: { x: 0, z: -1 }, south: { x: 0, z: 1 },
-  east: { x: 1, z: 0 }, west: { x: -1, z: 0 },
-};
 const AIRS = new Set(['minecraft:air', 'minecraft:cave_air', 'minecraft:void_air']);
 
 function rotatePoint(x, z, size, rot) {
@@ -39,33 +26,6 @@ function rotateProps(props, rot) {
   if ((rot === 90 || rot === 270) && (out.axis === 'x' || out.axis === 'z'))
     out.axis = out.axis === 'x' ? 'z' : 'x';
   return out;
-}
-
-function propsMatch(want, got) {
-  if (!want) return true;
-  if (!got) return false;
-  return Object.entries(want).every(([k, v]) => String(got[k]) === String(v));
-}
-
-/** item をホットバーへ用意する。在庫にあれば swap で回す。無ければ null */
-async function ensureHotbar(ctx, itemId) {
-  const st = await ctx.state().catch(() => null);
-  const detail = st?.inventory_detail ?? [];
-  const hot = detail.find((s) => s.id === itemId && s.slot <= 8 && !s.empty);
-  if (hot) return hot.slot;
-  const inv = detail.find((s) => s.id === itemId && s.slot > 8 && !s.empty);
-  if (!inv) return null;
-  const usedHot = new Set(
-    detail.filter((s) => s.slot <= 8 && !s.empty).map((s) => s.slot));
-  let target = 8;
-  for (let i = 0; i <= 8; i++) if (!usedHot.has(i)) { target = i; break; }
-  const read = await ctx.call('container.read').catch(() => null);
-  if (read?.menu_id !== 'player_inventory') return null;
-  await ctx.call('container.click', {
-    slot: inv.slot, action: 'swap', button: target, menu_id: read.menu_id,
-  });
-  await ctx.sleep(200);
-  return target;
 }
 
 export default {
@@ -95,76 +55,50 @@ export default {
       const p = rotatePoint(b.x, b.z, plan.size, rot);
       return { ...b, x: p.x, z: p.z, props: rotateProps(b.props, rot) };
     });
+    const placements = blocks
+      .filter((b) => !AIRS.has(b.id))
+      .slice(0, max_blocks)
+      .map((b) => ({
+        x: x + b.x, y: y + b.y, z: z + b.z, id: b.id,
+        ...(b.props ? { props: b.props } : {}),
+      }));
     let placed = 0;
     let skipped = 0;
-    let missing = 0;
     let failed = 0;
-    const mismatched = [];
-    for (const b of blocks) {
-      if (placed >= max_blocks) break;
+    let mismatchedCount = 0;
+    const mismatchedAt = [];
+    const missingItems = new Set();
+    const BATCH = 96;
+    for (let i = 0; i < placements.length; i += BATCH) {
       ctx.throwIfCancelled();
-      const wx = x + b.x, wy = y + b.y, wz = z + b.z;
-      const cur = await ctx.call('obs.block_state', { x: wx, y: wy, z: wz })
+      const batch = placements.slice(i, i + BATCH);
+      const t = await ctx.call('build.place', { blocks: batch })
         .catch(() => null);
-      if (cur?.block === b.id) {
-        if (b.props && !propsMatch(b.props, cur.properties)) {
-          mismatched.push({ id: b.id, x: wx, y: wy, z: wz, want: b.props, got: cur.properties });
-        } else skipped++;
-        continue;
+      if (!t?.task_id) {
+        return { done: false, reason: 'build_op_unavailable', placed, skipped };
       }
-      if (cur && !AIRS.has(cur.block)) {
-        failed++; // 別のブロックが占有している — 勝手に壊さない
-        continue;
-      }
-      const slot = await ensureHotbar(ctx, b.id);
-      if (slot == null) { missing++; continue; }
-
-      // facing 指定があるブロックは、bot が「向きの反対側」に立って
-      // 目標を見て置くと向きが合いやすい (バニラの配置規則)
-      const fv = b.props?.facing ? FACING_VEC[b.props.facing] : null;
-      const stand = fv
-        ? { x: wx - fv.x, y: wy, z: wz - fv.z }
-        : { x: wx, y: wy, z: wz };
-      const g = await ctx.call('baritone.goto', stand).catch(() => null);
-      if (g?.task_id) await ctx.waitTask(g.task_id, 30_000);
-      await ctx.call('equip', { slot });
-      await ctx.call('look_at', { x: wx, y: wy, z: wz }).catch(() => {});
-
-      let ok = false;
-      for (const f of FACES) {
-        const sx = wx + f.dx, sy = wy + f.dy, sz = wz + f.dz;
-        const sup = await ctx.call('obs.block_state', { x: sx, y: sy, z: sz })
-          .catch(() => null);
-        if (!sup || AIRS.has(sup.block)) continue;
-        const r = await ctx.call('use_item', {
-          x: sx, y: sy, z: sz, face: f.face,
-        }).catch(() => null);
-        if (!r) continue;
-        const after = await ctx.call('obs.block_state', { x: wx, y: wy, z: wz })
-          .catch(() => null);
-        if (after?.block === b.id) {
-          ok = true;
-          if (b.props && !propsMatch(b.props, after.properties))
-            mismatched.push({ id: b.id, x: wx, y: wy, z: wz, want: b.props, got: after.properties });
-          break;
-        }
-      }
-      if (ok) {
-        placed++;
-        ctx.journal?.checkpoint(`placed_${placed}`, { id: b.id, x: wx, y: wy, z: wz });
-      } else {
-        failed++;
-      }
+      const doneEv = await ctx.waitTask(
+        t.task_id, batch.length * 20_000 + 120_000).catch(() => null);
+      const r = doneEv?.result ?? {};
+      placed += r.placed ?? 0;
+      skipped += r.skipped ?? 0;
+      failed += r.failed ?? 0;
+      mismatchedCount += r.mismatched ?? 0;
+      for (const m of r.mismatched_at ?? []) mismatchedAt.push(m);
+      for (const mi of r.missing_items ?? []) missingItems.add(mi);
+      ctx.journal?.checkpoint(`build_batch_${i / BATCH}`, { placed, skipped });
+      if (doneEv?.state !== 'succeeded') break;
     }
     const remaining = plan.total - placed - skipped;
     await ctx.say(
       `建築: ${placed}個置いた (既設${skipped} / 残り約${remaining})` +
-      (missing ? ` 材料が無いものが${missing}箇所` : '') +
-      (mismatched.length ? ` 向き違いが${mismatched.length}箇所` : ''));
+      (missingItems.size ? ` 材料が無いもの: ${[...missingItems].join(', ')}` : '') +
+      (mismatchedCount ? ` 向き違いが${mismatchedCount}箇所` : ''));
     return {
-      done: remaining <= 0, placed, skipped, missing, failed,
-      mismatched: mismatched.slice(0, 20), mismatched_count: mismatched.length,
-      remaining, total: plan.total,
+      done: remaining <= 0, placed, skipped, failed,
+      missing: missingItems.size, missing_items: [...missingItems],
+      mismatched: mismatchedAt.slice(0, 20), mismatched_count: mismatchedCount,
+      remaining, total: plan.total, via: 'build_task',
     };
   },
 };

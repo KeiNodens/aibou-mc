@@ -5,6 +5,8 @@ import com.google.gson.JsonObject;
 import com.minecrafttogether.agent.AgentMod;
 import com.minecrafttogether.agent.task.AgentTask;
 import com.minecrafttogether.agent.task.CombatTask;
+import com.minecrafttogether.agent.task.BuildTask;
+import com.minecrafttogether.agent.task.WaitConditionTask;
 import com.minecrafttogether.agent.task.CraftTask;
 import com.minecrafttogether.agent.task.DigTask;
 import com.minecrafttogether.agent.task.EmoteTask;
@@ -76,6 +78,8 @@ public final class GameOps {
             case "interact" -> interact(params);
             case "entity.attack" -> entityAttack(params);
             case "combat.engage" -> combatEngage(params);
+            case "wait.condition" -> waitCondition(params);
+            case "build.place" -> buildPlace(params);
             case "use_item" -> useItem(params);
             case "container.read" -> containerRead();
             case "container.click" -> containerClick(params);
@@ -1907,6 +1911,57 @@ public final class GameOps {
         TaskManager.get().register(t);
         JsonObject r = new JsonObject();
         r.addProperty("task_id", t.id);
+        return r;
+    }
+
+    /**
+     * wait.condition (D32): 条件待ちタスク。conditions は
+     * WaitConditionTask の javadoc 参照。timeout でも SUCCEEDED で
+     * reason=timeout を返す (待つこと自体は失敗ではない)。
+     */
+    private static JsonObject waitCondition(JsonObject params) throws ApiError {
+        requirePlayer();
+        if (!params.has("conditions")) {
+            throw new ApiError("BAD_REQUEST", "wait.condition needs conditions");
+        }
+        String mode = params.has("mode") ? params.get("mode").getAsString() : "all";
+        int timeout = params.has("timeout_seconds") ? params.get("timeout_seconds").getAsInt() : 60;
+        WaitConditionTask t = new WaitConditionTask(TaskManager.get().newId("wait"),
+            params.getAsJsonArray("conditions"), mode, timeout);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
+        return r;
+    }
+
+    /**
+     * build.place (D32): ブロック列を BuildTask で設置する。
+     * blocks: [{x,y,z,id,props?}] (絶対座標)。
+     */
+    private static JsonObject buildPlace(JsonObject params) throws ApiError {
+        requirePlayer();
+        if (!params.has("blocks")) {
+            throw new ApiError("BAD_REQUEST", "build.place needs blocks");
+        }
+        java.util.List<BuildTask.Placement> list = new java.util.ArrayList<>();
+        for (var el : params.getAsJsonArray("blocks")) {
+            var o = el.getAsJsonObject();
+            java.util.Map<String, String> props = new java.util.HashMap<>();
+            if (o.has("props")) {
+                for (var pe : o.getAsJsonObject("props").entrySet()) {
+                    props.put(pe.getKey(), pe.getValue().getAsString());
+                }
+            }
+            list.add(new BuildTask.Placement(
+                o.get("x").getAsInt(), o.get("y").getAsInt(), o.get("z").getAsInt(),
+                o.get("id").getAsString(), props));
+        }
+        int maxSeconds = params.has("max_seconds") ? params.get("max_seconds").getAsInt() : 0;
+        BuildTask t = new BuildTask(TaskManager.get().newId("build"), list, maxSeconds);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
+        r.addProperty("blocks", list.size());
         return r;
     }
 

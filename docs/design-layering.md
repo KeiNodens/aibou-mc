@@ -53,7 +53,7 @@ aibou-mc の実行を mod / bridge / LLM の3層で割り直す。
   リーシュ・HP中断)。cave_assist の JS ループ (550ms) を置換する。
   「何を敵とみなすか」は方針パラメータとして外から受ける (力学と
   判断の分離)。postcondition = 対象の死亡確認
-- **P1 条件待ちタスク (wait.condition)**: block state / entity 数 /
+- **P1 条件待ちタスク (wait.condition)** ✅ 実装済み (D32): block state / entity 数 /
   inventory 内容などの条件が満たされるまで mod 側で待つ汎用タスク。
   world_craft の wait_transform、cook の再オープンポーリング、
   process の完了待ちなど、bridge のポーリング群をまとめて置換
@@ -61,7 +61,7 @@ aibou-mc の実行を mod / bridge / LLM の3層で割り直す。
 - **P2 contraption 追従タスク**: deck_walk の 350ms 再照準ループを
   「移動体上のローカル座標へ移動する」mod タスクに (座標変換は
   mod 側の知識なので相性が良い)
-- **P2 BuildTask**: build_schematic の配置ループ (1ブロックごとに
+- **P2 BuildTask** ✅ 実装済み (D32): build_schematic の配置ループ (1ブロックごとに
   WS 往復) を、ブロック列を mod が消化する形に。大規模建築・
   工場で効く。大きいので段階導入
 - **P3 FishingTask**: 浮きの沈み込みを tick で監視 (アタリの窓は短い)
@@ -78,6 +78,6 @@ aibou-mc の実行を mod / bridge / LLM の3層で割り直す。
 
 ## 実施順序
 
-CombatTask ✅ → wait.condition → contraption 追従 → BuildTask 検討。
+CombatTask ✅ → wait.condition ✅ → BuildTask ✅ → contraption 追従 → Fishing/Drive/Glide (P3)。
 各タスクは「開始 op + task.done (理由と戦績) + cancel 可」の形に
 統一し、LLM が節目を見て介入できる粒度を保つ。

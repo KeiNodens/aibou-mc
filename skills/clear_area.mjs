@@ -3,7 +3,7 @@
 export default {
   name: 'clear_area',
   description:
-    'Clear/flatten an area: dig every block above the bot\\'s current ' +
+    'Clear/flatten an area: dig every block above the current ' +
     'feet level within a radius, column by column from the top. ' +
     'Filling low spots is not supported yet.',
   params: {

@@ -224,3 +224,20 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - 降ろす候補の残り: 条件待ちタスク (P1)、contraption 追従 (P2)、
   BuildTask (P2)、Fishing/Drive/Glide (P3)。実機検証は従来どおり
   まとめて行う
+
+## D32 条件待ちタスクと BuildTask (2026-11-01)
+
+- `wait.condition` + WaitConditionTask: 条件 (block / entity_count /
+  inventory / menu_slots、cmp gte|lte|eq|ne、mode all|any) を mod 側
+  で評価して待つ汎用タスク。timeout でも SUCCEEDED + reason=timeout
+- 配線: world_craft の wait_transform (entity_count ne) と
+  wait_block_state (block)、process_in_machine の出力待ち
+  (menu_slots) を置換。旧ポーリングはフォールバックとして残置
+- `build.place` + BuildTask: 絶対座標のブロック列を mod 側で消化。
+  冪等 skip、占有セルは壊さない、同 id・props 不一致は mismatched
+  として報告、在庫内移動 (hotbar 選択 / main から swap) と facing
+  の立ち位置もタスク側。build_schematic は計画+回転 (bridge) と
+  バッチ集計だけに
+- 副産物: D30 の clear_area.mjs に潜在的な構文エラー (description の
+  apostrophe) がありスキルが読み込まれていなかったのを発見・修正。
+  全スキルの構文スイープも実施 (他は正常)

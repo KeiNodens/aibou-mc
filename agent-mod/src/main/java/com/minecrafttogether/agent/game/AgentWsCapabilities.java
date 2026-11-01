@@ -22,6 +22,8 @@ public final class AgentWsCapabilities {
             "interact",
             "entity.attack",
             "combat.engage",
+            "wait.condition",
+            "build.place",
             "use_item",
             "container.read",
             "container.click",

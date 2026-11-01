@@ -148,15 +148,14 @@ export default {
     }
     await ctx.say(`${short(input)} を${short(machine ?? menu.menu_id)}に入れたよ`);
 
-    // 4. output slotに成果が出るまでpollして回収
-    const deadline = Date.now() + timeout_s * 1000;
+    // 4. output slotに成果が出るまで待って回収 (D32: 待ちは mod 側
+    //    wait.condition、回収だけ bridge で行う)
+    const outs = roles.output.length ? roles.output : roles.input;
     let produced = 0;
     const seen = {};
-    while (Date.now() < deadline) {
-      await ctx.sleep(1000);
+    const collectPass = async () => {
       const m = await ctx.call('container.read');
-      const outs = roles.output.length ? roles.output : roles.input;
-      let done = false;
+      let gotAny = false;
       for (const s of m.slots) {
         if (!outs.includes(s.slot) || s.empty) continue;
         // mod統合で出力が別modのIDになることがあるので、output指定は
@@ -169,9 +168,29 @@ export default {
         });
         produced += s.count;
         seen[s.id] = (seen[s.id] ?? 0) + s.count;
-        done = true;
+        gotAny = true;
       }
-      if (done) break;
+      return gotAny;
+    };
+    const w = await ctx.call('wait.condition', {
+      conditions: [{ type: 'menu_slots', slots: outs }],
+      timeout_seconds: timeout_s,
+    }).catch(() => null);
+    if (w?.task_id) {
+      const done = await ctx.waitTask(w.task_id, (timeout_s + 5) * 1000)
+        .catch(() => null);
+      if (done?.result?.reason === 'met') {
+        await collectPass();
+        await ctx.sleep(300);
+        await collectPass();
+      }
+    } else {
+      // wait.condition が使えない環境では従来のポーリングに落ちる
+      const deadline = Date.now() + timeout_s * 1000;
+      while (Date.now() < deadline) {
+        await ctx.sleep(1000);
+        if (await collectPass()) break;
+      }
     }
 
     if (produced === 0) {

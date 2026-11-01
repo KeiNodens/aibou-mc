@@ -161,6 +161,24 @@ wss.on('connection', (ws) => {
         tasks.set(taskId, { state: 'succeeded', result });
         send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
       }, 500);
+    } else if (m === 'wait.condition') {
+      const taskId = `wait-t${++taskSeq}`;
+      tasks.set(taskId, { state: 'running' });
+      reply(ws, msg, { task_id: taskId });
+      setTimeout(() => {
+        const result = { reason: 'met', elapsed_ticks: 8, met: (p.conditions ?? []).map(() => true) };
+        tasks.set(taskId, { state: 'succeeded', result });
+        send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
+      }, 400);
+    } else if (m === 'build.place') {
+      const taskId = `build-t${++taskSeq}`;
+      tasks.set(taskId, { state: 'running' });
+      reply(ws, msg, { task_id: taskId, blocks: (p.blocks ?? []).length });
+      setTimeout(() => {
+        const result = { reason: 'done', placed: (p.blocks ?? []).length, skipped: 0, mismatched: 0, failed: 0, remaining: 0, missing_items: [], mismatched_at: [] };
+        tasks.set(taskId, { state: 'succeeded', result });
+        send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
+      }, 600);
     } else if (m === 'task.status' || m === 'task.result') {
       const t = tasks.get(p.task_id);
       if (t) reply(ws, msg, { task_id: p.task_id, generation: 1, ...t });

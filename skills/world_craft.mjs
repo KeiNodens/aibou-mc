@@ -219,33 +219,58 @@ export default {
           break;
         }
         case 'wait_transform': {
-          const timeoutMs = (step.timeout_s ?? def.timeout_s ?? 60) * 1000;
+          const timeoutS = step.timeout_s ?? def.timeout_s ?? 60;
           const baseline = (await itemEntitiesNear(ctx, pos)).length;
-          const start = Date.now();
           transformSeen = false;
-          while (Date.now() - start < timeoutMs) {
-            ctx.throwIfCancelled();
-            await ctx.sleep(2500);
-            const now = (await itemEntitiesNear(ctx, pos)).length;
-            if (now !== baseline) { transformSeen = true; break; }
+          // D32: 条件待ちは mod 側タスクで (個数が変わるまで)
+          const w = await ctx.call('wait.condition', {
+            conditions: [{ type: 'entity_count', entity: 'minecraft:item',
+              center: { x: pos.x, y: pos.y, z: pos.z }, radius: 3,
+              cmp: 'ne', count: baseline }],
+            timeout_seconds: timeoutS,
+          }).catch(() => null);
+          if (w?.task_id) {
+            const done = await ctx.waitTask(w.task_id, (timeoutS + 5) * 1000)
+              .catch(() => null);
+            transformSeen = done?.result?.reason === 'met';
+          } else {
+            const start = Date.now();
+            while (Date.now() - start < timeoutS * 1000) {
+              ctx.throwIfCancelled();
+              await ctx.sleep(2500);
+              const now = (await itemEntitiesNear(ctx, pos)).length;
+              if (now !== baseline) { transformSeen = true; break; }
+            }
           }
           log.push(`wait_transform:${transformSeen ? 'changed' : 'timeout'}`);
           break;
         }
         case 'wait_block_state': {
-          const timeoutMs = (step.timeout_s ?? 60) * 1000;
-          const start = Date.now();
+          const timeoutS = step.timeout_s ?? 60;
           let ok = false;
-          while (Date.now() - start < timeoutMs) {
-            ctx.throwIfCancelled();
-            const cur = await ctx.call('obs.block_state', pos).catch(() => null);
-            if (step.block && cur?.block === step.block) { ok = true; break; }
-            if (step.match && cur?.properties &&
-              Object.entries(step.match)
-                .every(([k, v]) => String(cur.properties[k]) === String(v))) {
-              ok = true; break;
+          // D32: block id の一致待ちは mod 側タスクで
+          const w = step.block ? await ctx.call('wait.condition', {
+            conditions: [{ type: 'block', x: pos.x, y: pos.y, z: pos.z,
+              is: step.block }],
+            timeout_seconds: timeoutS,
+          }).catch(() => null) : null;
+          if (w?.task_id) {
+            const done = await ctx.waitTask(w.task_id, (timeoutS + 5) * 1000)
+              .catch(() => null);
+            ok = done?.result?.reason === 'met';
+          } else {
+            const start = Date.now();
+            while (Date.now() - start < timeoutS * 1000) {
+              ctx.throwIfCancelled();
+              const cur = await ctx.call('obs.block_state', pos).catch(() => null);
+              if (step.block && cur?.block === step.block) { ok = true; break; }
+              if (step.match && cur?.properties &&
+                Object.entries(step.match)
+                  .every(([k, v]) => String(cur.properties[k]) === String(v))) {
+                ok = true; break;
+              }
+              await ctx.sleep(2000);
             }
-            await ctx.sleep(2000);
           }
           log.push(`wait_block_state:${ok ? 'ok' : 'timeout'}`);
           break;
