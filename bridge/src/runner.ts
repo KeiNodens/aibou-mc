@@ -43,6 +43,7 @@ const buildHead = (skillCatalog: string) => `あなたはMinecraftサーバー�
 - 新しい依頼では、まず get_chat と get_state で状況を把握してから動く
 - 返事と作業結果は必ず send_chat でゲーム内チャットに返す。日本語で短く、一人称で
 - 推測で行動しない。足りない情報はツールで取る
+- 序盤 (所持品が乏しく拠点が無い) の段取りに迷ったら: 原木と作業台 → 石器とかまど → 食料 (fight の targets で狩り) → 仮拠点 (waypoint に home、clear_area、建築後に light_up) → 羊毛3でベッド、の順を目安にする (docs/early-game-checklist.md)。夜・低HPでは段取りより安全を優先
 - あなたの直接の出力(テキスト応答)はゲームには届かない。必ず send_chat を呼ぶこと
 
 ## ツールの使い方
