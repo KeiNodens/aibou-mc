@@ -1,10 +1,12 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { readFile } from 'node:fs/promises';
+import * as path from 'node:path';
 import { z } from 'zod';
 import { State } from './state.js';
 import { ModClient } from './modclient.js';
 import { Skills } from './skills.js';
-import { inspectSchematic, planSchematic } from './schematic.js';
+import { createSchematicFile, inspectSchematic, planSchematic } from './schematic.js';
+import type { SchemOp } from './schematic.js';
 import { Journal } from './journal.js';
 import { RunHold, HoldKind } from './runhold.js';
 import { QuestGraph } from './questgraph.js';
@@ -378,6 +380,47 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
         const r = await planSchematic(path, { max_layers });
         return json({ size: r.size, total: r.total, blocks: r.blocks.slice(0, 2000),
           truncated: r.total > 2000 });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'schematic_create',
+    {
+      description:
+        'Create a .schem blueprint from building instructions (D23/S1): ' +
+        'primitive ops and/or an explicit block list, with optional ' +
+        'blockstate props per placement. The file is written to the bridge ' +
+        'schematic library and verified by reading it back. Works without ' +
+        'the game connected. Ops: {op:"block",x,y,z,block,props?} | ' +
+        '{op:"box",from:{x,y,z},to:{x,y,z},block,props?,hollow?} | ' +
+        '{op:"line",from:{x,y,z},to:{x,y,z},block,props?}. Setting ' +
+        'minecraft:air carves a cell out. Coords are relative; the result ' +
+        'is cropped to the occupied bounds.',
+      inputSchema: {
+        name: z.string().describe('file name (letters, digits, _ and -)'),
+        ops: z.array(z.any()).optional()
+          .describe('primitive ops (see description)'),
+        blocks: z.array(z.object({
+          x: z.number().int(), y: z.number().int(), z: z.number().int(),
+          block: z.string(),
+          props: z.record(z.string(), z.string()).optional(),
+        })).optional().describe('explicit placements, applied after ops'),
+        overwrite: z.boolean().optional(),
+      },
+    },
+    async ({ name, ops, blocks, overwrite }) => {
+      try {
+        return json(await createSchematicFile({
+          name,
+          ops: ops as SchemOp[] | undefined,
+          blocks,
+          dir: process.env.SCHEMATICS_DIR ??
+            path.resolve(process.cwd(), 'data', 'schematics'),
+          overwrite,
+        }));
       } catch (e) {
         return err(e);
       }

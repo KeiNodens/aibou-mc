@@ -1,5 +1,7 @@
-import { readFile } from 'node:fs/promises';
-import { gunzipSync } from 'node:zlib';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import * as fsPath from 'node:path';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import nbt from 'prismarine-nbt';
 
 /**
@@ -28,6 +30,29 @@ export interface SchematicInfo {
 // NBTタグ値の簡易アクセス
 const v = (t: any): any => (t && typeof t === 'object' && 'value' in t ? t.value : t);
 const num = (t: any): number => Number(v(t) ?? 0);
+
+/** "minecraft:oak_stairs[facing=north,half=bottom]" → {id, props} に分離 */
+export function parseBlockState(name: string):
+  { id: string; props?: Record<string, string> } {
+  const i = name.indexOf('[');
+  if (i < 0 || !name.endsWith(']')) return { id: name };
+  const props: Record<string, string> = {};
+  for (const part of name.slice(i + 1, -1).split(',')) {
+    const eq = part.indexOf('=');
+    if (eq > 0) props[part.slice(0, eq).trim()] = part.slice(eq + 1).trim();
+  }
+  return { id: name.slice(0, i),
+    props: Object.keys(props).length ? props : undefined };
+}
+
+/** id + props → 正規形の blockstate 文字列 (props はキー昇順) */
+export function blockStateString(id: string,
+  props?: Record<string, string>): string {
+  if (!props || !Object.keys(props).length) return id;
+  const inner = Object.keys(props).sort()
+    .map(k => `${k}=${props[k]}`).join(',');
+  return `${id}[${inner}]`;
+}
 
 async function loadNbt(path: string): Promise<any> {
   let buf = await readFile(path);
@@ -62,11 +87,12 @@ function readSchem(root: any): { size: Vec3; blocks: SchematicBlock[] } {
       if (!(b & 0x80)) break;
       shift += 7;
     }
-    const id = palette[val] ?? 'minecraft:air';
-    if (id !== 'minecraft:air') {
+    const stateName = palette[val] ?? 'minecraft:air';
+    if (stateName !== 'minecraft:air') {
       const x = i % size.x, z = Math.floor(i / size.x) % size.z,
         y = Math.floor(i / (size.x * size.z));
-      blocks.push({ x, y, z, id });
+      const { id, props } = parseBlockState(stateName);
+      blocks.push({ x, y, z, id, props });
     }
     i++;
   }
@@ -147,4 +173,267 @@ export async function planSchematic(path: string, opts?: {
   const max = opts?.max_layers;
   const filtered = max != null ? blocks.filter(b => b.y < max) : blocks;
   return { size, total: filtered.length, blocks: filtered };
+}
+
+// ---------- 生成側 (D23/S1a): プリミティブ蓄積 → Sponge .schem v3 ----------
+
+export interface SchemBlockInput {
+  x: number; y: number; z: number;
+  block: string; props?: Record<string, string>;
+}
+export type SchemOp =
+  | ({ op: 'block' } & SchemBlockInput)
+  | { op: 'box'; from: Vec3; to: Vec3; block: string;
+      props?: Record<string, string>; hollow?: boolean }
+  | { op: 'line'; from: Vec3; to: Vec3; block: string;
+      props?: Record<string, string> };
+
+const BLOCK_ID_RE = /^[a-z0-9_.-]+:[a-z0-9_./-]+$/;
+const PROP_KEY_RE = /^[a-z0-9_]+$/;
+const PROP_VAL_RE = /^[a-z0-9_.-]+$/;
+const MAX_AXIS = 256, MAX_BLOCKS = 500_000, MAX_BOX_CELLS = 8_000_000;
+
+function checkedState(block: string, props?: Record<string, string>): string {
+  if (!BLOCK_ID_RE.test(block)) throw new Error(`invalid block id: ${block}`);
+  if (props) for (const [k, val] of Object.entries(props)) {
+    if (!PROP_KEY_RE.test(k) || !PROP_VAL_RE.test(val))
+      throw new Error(`invalid blockstate property: ${k}=${val}`);
+  }
+  return blockStateString(block, props);
+}
+
+const key3 = (x: number, y: number, z: number) => `${x},${y},${z}`;
+
+class SchemGrid {
+  cells = new Map<string, string>();
+  set(x: number, y: number, z: number, state: string): void {
+    if (state === 'minecraft:air') this.cells.delete(key3(x, y, z));
+    else this.cells.set(key3(x, y, z), state);
+  }
+  box(a: Vec3, b: Vec3, state: string, hollow?: boolean): void {
+    const lo = { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y),
+      z: Math.min(a.z, b.z) };
+    const hi = { x: Math.max(a.x, b.x), y: Math.max(a.y, b.y),
+      z: Math.max(a.z, b.z) };
+    const vol = (hi.x - lo.x + 1) * (hi.y - lo.y + 1) * (hi.z - lo.z + 1);
+    if (vol > MAX_BOX_CELLS) throw new Error(`box too large: ${vol} cells`);
+    for (let y = lo.y; y <= hi.y; y++)
+      for (let z = lo.z; z <= hi.z; z++)
+        for (let x = lo.x; x <= hi.x; x++) {
+          if (hollow && x > lo.x && x < hi.x && y > lo.y && y < hi.y &&
+            z > lo.z && z < hi.z) continue;
+          this.set(x, y, z, state);
+        }
+  }
+  line(a: Vec3, b: Vec3, state: string): void {
+    // 3D Bresenham (主軸駆動)
+    let [x, y, z] = [a.x, a.y, a.z];
+    const dx = Math.abs(b.x - a.x), dy = Math.abs(b.y - a.y),
+      dz = Math.abs(b.z - a.z);
+    const sx = a.x < b.x ? 1 : -1, sy = a.y < b.y ? 1 : -1,
+      sz = a.z < b.z ? 1 : -1;
+    this.set(x, y, z, state);
+    if (dx >= dy && dx >= dz) {
+      let e1 = 2 * dy - dx, e2 = 2 * dz - dx;
+      while (x !== b.x) {
+        x += sx;
+        if (e1 > 0) { y += sy; e1 -= 2 * dx; }
+        if (e2 > 0) { z += sz; e2 -= 2 * dx; }
+        e1 += 2 * dy; e2 += 2 * dz;
+        this.set(x, y, z, state);
+      }
+    } else if (dy >= dx && dy >= dz) {
+      let e1 = 2 * dx - dy, e2 = 2 * dz - dy;
+      while (y !== b.y) {
+        y += sy;
+        if (e1 > 0) { x += sx; e1 -= 2 * dy; }
+        if (e2 > 0) { z += sz; e2 -= 2 * dy; }
+        e1 += 2 * dx; e2 += 2 * dz;
+        this.set(x, y, z, state);
+      }
+    } else {
+      let e1 = 2 * dx - dz, e2 = 2 * dy - dz;
+      while (z !== b.z) {
+        z += sz;
+        if (e1 > 0) { x += sx; e1 -= 2 * dz; }
+        if (e2 > 0) { y += sy; e2 -= 2 * dz; }
+        e1 += 2 * dx; e2 += 2 * dy;
+        this.set(x, y, z, state);
+      }
+    }
+  }
+}
+
+// 最小 NBT ライタ (big-endian)。Sponge v3 に必要なタグだけを書く。
+type NbtNode =
+  | { t: 'short' | 'int'; v: number }
+  | { t: 'string'; v: string }
+  | { t: 'byteArray'; v: Uint8Array }
+  | { t: 'intArray'; v: number[] }
+  | { t: 'list'; item: number; v: NbtNode[] }
+  | { t: 'compound'; v: [string, NbtNode][] };
+const NBT_TAG: Record<NbtNode['t'], number> = {
+  short: 2, int: 3, byteArray: 7, string: 8, list: 9, compound: 10,
+  intArray: 11,
+};
+
+class NbtBuf {
+  parts: Buffer[] = [];
+  u8(n: number): void { this.parts.push(Buffer.from([n & 0xff])); }
+  i16(n: number): void {
+    const b = Buffer.alloc(2); b.writeInt16BE(n); this.parts.push(b);
+  }
+  i32(n: number): void {
+    const b = Buffer.alloc(4); b.writeInt32BE(n); this.parts.push(b);
+  }
+  utf(s: string): void {
+    const b = Buffer.from(s, 'utf8');
+    this.i16(b.length); this.parts.push(b);
+  }
+  bytes(b: Uint8Array): void { this.parts.push(Buffer.from(b)); }
+  done(): Buffer { return Buffer.concat(this.parts); }
+}
+
+function nbtPayload(buf: NbtBuf, node: NbtNode): void {
+  switch (node.t) {
+    case 'short': buf.i16(node.v); break;
+    case 'int': buf.i32(node.v); break;
+    case 'string': buf.utf(node.v); break;
+    case 'byteArray': buf.i32(node.v.length); buf.bytes(node.v); break;
+    case 'intArray':
+      buf.i32(node.v.length);
+      for (const n of node.v) buf.i32(n);
+      break;
+    case 'list':
+      buf.u8(node.item); buf.i32(node.v.length);
+      for (const child of node.v) nbtPayload(buf, child);
+      break;
+    case 'compound':
+      for (const [name, child] of node.v) nbtNamed(buf, name, child);
+      buf.u8(0);
+      break;
+  }
+}
+function nbtNamed(buf: NbtBuf, name: string, node: NbtNode): void {
+  buf.u8(NBT_TAG[node.t]); buf.utf(name); nbtPayload(buf, node);
+}
+
+function encodeVarint(out: number[], val: number): void {
+  let n = val >>> 0;
+  do {
+    let b = n & 0x7f;
+    n >>>= 7;
+    if (n) b |= 0x80;
+    out.push(b);
+  } while (n);
+}
+
+/** 占有セルのグリッド (原点へ平行移動済み) → gzip 済み Sponge v3 NBT */
+function buildSchemBuffer(cells: Map<string, string>, size: Vec3): Buffer {
+  const palette = new Map<string, number>([['minecraft:air', 0]]);
+  const data: number[] = [];
+  for (let y = 0; y < size.y; y++)
+    for (let z = 0; z < size.z; z++)
+      for (let x = 0; x < size.x; x++) {
+        const state = cells.get(key3(x, y, z)) ?? 'minecraft:air';
+        let idx = palette.get(state);
+        if (idx === undefined) {
+          idx = palette.size; palette.set(state, idx);
+        }
+        encodeVarint(data, idx);
+      }
+  const palNode: NbtNode = {
+    t: 'compound',
+    v: [...palette.entries()].map(([name, idx]): [string, NbtNode] =>
+      [name, { t: 'int', v: idx }]),
+  };
+  const root: NbtNode = {
+    t: 'compound',
+    v: [['Schematic', {
+      t: 'compound',
+      v: [
+        ['Version', { t: 'int', v: 3 }],
+        ['DataVersion', { t: 'int', v: 3465 }],  // Minecraft 1.20.1
+        ['Width', { t: 'short', v: size.x }],
+        ['Height', { t: 'short', v: size.y }],
+        ['Length', { t: 'short', v: size.z }],
+        ['Offset', { t: 'intArray', v: [0, 0, 0] }],
+        ['Blocks', {
+          t: 'compound',
+          v: [
+            ['PaletteMax', { t: 'int', v: palette.size }],
+            ['Palette', palNode],
+            ['Data', { t: 'byteArray', v: Uint8Array.from(data) }],
+            ['BlockEntities', { t: 'list', item: 10, v: [] }],
+          ],
+        }],
+        ['Entities', { t: 'list', item: 10, v: [] }],
+      ],
+    }]],
+  };
+  const buf = new NbtBuf();
+  nbtNamed(buf, '', root);
+  return gzipSync(buf.done());
+}
+
+/**
+ * プリミティブ列と生ブロック列から .schem を生成する。
+ * 書き出し後に inspectSchematic で読み戻して自己検証する。
+ */
+export async function createSchematicFile(opts: {
+  name: string; ops?: SchemOp[]; blocks?: SchemBlockInput[];
+  dir: string; overwrite?: boolean;
+}): Promise<{
+  path: string; size: Vec3; solid_blocks: number;
+  materials: { id: string; count: number }[];
+}> {
+  if (!/^[a-zA-Z0-9_-]{1,64}$/.test(opts.name))
+    throw new Error(`invalid schematic name: ${opts.name}`);
+  const grid = new SchemGrid();
+  for (const op of opts.ops ?? []) {
+    if (op.op === 'block')
+      grid.set(op.x, op.y, op.z, checkedState(op.block, op.props));
+    else if (op.op === 'box')
+      grid.box(op.from, op.to, checkedState(op.block, op.props), op.hollow);
+    else if (op.op === 'line')
+      grid.line(op.from, op.to, checkedState(op.block, op.props));
+    else throw new Error(`unknown schematic op: ${(op as any).op}`);
+  }
+  for (const b of opts.blocks ?? [])
+    grid.set(b.x, b.y, b.z, checkedState(b.block, b.props));
+  if (!grid.cells.size) throw new Error('schematic would be empty');
+  if (grid.cells.size > MAX_BLOCKS)
+    throw new Error(`too many blocks: ${grid.cells.size} (cap ${MAX_BLOCKS})`);
+  let min = { x: Infinity, y: Infinity, z: Infinity };
+  let max = { x: -Infinity, y: -Infinity, z: -Infinity };
+  for (const k of grid.cells.keys()) {
+    const [x, y, z] = k.split(',').map(Number);
+    min = { x: Math.min(min.x, x), y: Math.min(min.y, y),
+      z: Math.min(min.z, z) };
+    max = { x: Math.max(max.x, x), y: Math.max(max.y, y),
+      z: Math.max(max.z, z) };
+  }
+  const size = { x: max.x - min.x + 1, y: max.y - min.y + 1,
+    z: max.z - min.z + 1 };
+  if (size.x > MAX_AXIS || size.y > MAX_AXIS || size.z > MAX_AXIS)
+    throw new Error(`schematic too large: ${size.x}x${size.y}x${size.z} ` +
+      `(cap ${MAX_AXIS} per axis)`);
+  const shifted = new Map<string, string>();
+  for (const [k, state] of grid.cells) {
+    const [x, y, z] = k.split(',').map(Number);
+    shifted.set(key3(x - min.x, y - min.y, z - min.z), state);
+  }
+  await mkdir(opts.dir, { recursive: true });
+  const file = fsPath.join(opts.dir, `${opts.name}.schem`);
+  if (!opts.overwrite && existsSync(file))
+    throw new Error(`schematic already exists: ${opts.name} ` +
+      '(pass overwrite to replace)');
+  await writeFile(file, buildSchemBuffer(shifted, size));
+  const info = await inspectSchematic(file);
+  if (info.solid_blocks !== grid.cells.size) {
+    await unlink(file).catch(() => {});
+    throw new Error('round-trip verification failed: block count mismatch');
+  }
+  return { path: file, size: info.size, solid_blocks: info.solid_blocks,
+    materials: info.materials };
 }
