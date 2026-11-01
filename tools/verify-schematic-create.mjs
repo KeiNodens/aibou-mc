@@ -67,9 +67,6 @@ await expectThrow('overwrite guard', () => createSchematicFile({ name: 'hut', di
 const ow = await createSchematicFile({ name: 'hut', dir, overwrite: true, blocks: [{ x: 0, y: 0, z: 0, block: 'minecraft:stone' }] });
 check('overwrite works', ow.solid_blocks === 1);
 
-console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
-process.exit(fails ? 1 : 0);
-
 // Case: semantic ops (D34) — machine_row / cable_run / power_spine
 {
   const fac = await createSchematicFile({
@@ -113,3 +110,23 @@ process.exit(fails ? 1 : 0);
   check('power_spine tap placed (2,2,1)',
     fat(2, 2, 1)?.id === 'minecraft:gold_block');
 }
+
+// Case: fractional coordinates are rejected (D59/P1-6 regression —
+// cable_run with to.x=2.5 used to hang the whole bridge in a sync loop).
+await expectThrow('fractional cable_run rejected', () => createSchematicFile({
+  name: 'frac1', dir,
+  ops: [{ op: 'cable_run', from: { x: 0, y: 0, z: 0 },
+    to: { x: 2.5, y: 0, z: 0 }, cable: 'minecraft:stone' }],
+}));
+await expectThrow('fractional line rejected', () => createSchematicFile({
+  name: 'frac2', dir,
+  ops: [{ op: 'line', from: { x: 0, y: 0, z: 0 },
+    to: { x: 0, y: 3.5, z: 0 }, block: 'minecraft:stone' }],
+}));
+await expectThrow('fractional block rejected', () => createSchematicFile({
+  name: 'frac3', dir,
+  blocks: [{ x: 0.5, y: 0, z: 0, block: 'minecraft:stone' }],
+}));
+
+console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
+process.exit(fails ? 1 : 0);

@@ -11,14 +11,29 @@
 // scriptだけのfixtureは export default async (ctx)=>{} の関数でもよい。
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, existsSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const MOCK_PORT = Number(process.env.FIXTURE_MOCK_PORT ?? 25687);
-const MCP_PORT = Number(process.env.FIXTURE_MCP_PORT ?? 25689);
+// D59/P2-24: 既定はエフェメラルポート。旧実装は固定ポート (25687/25689)
+// で、前回実行の bridge が kill 失敗で残っていると、その旧プロセスに
+// 対して assert が走って現行コードが壊れていても PASS になり得た
+let MOCK_PORT = Number(process.env.FIXTURE_MOCK_PORT ?? 0);
+let MCP_PORT = Number(process.env.FIXTURE_MCP_PORT ?? 0);
 const STARTUP_TIMEOUT = 15_000;
+
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const s = createServer();
+    s.once('error', reject);
+    s.listen(0, '127.0.0.1', () => {
+      const p = s.address().port;
+      s.close(() => resolve(p));
+    });
+  });
+}
 
 const fixtureFile = process.argv[2];
 if (!fixtureFile) {
@@ -40,6 +55,10 @@ function spawnProc(name, command, args, opts = {}) {
   });
   p.stdout.on('data', (d) => process.stdout.write(`[${name}] ${d}`));
   p.stderr.on('data', (d) => process.stderr.write(`[${name}!] ${d}`));
+  // D59/P2-24: 子プロセスの終了を監視する (起動失敗の未検知防止)
+  p.__name = name;
+  p.__exited = null;
+  p.on('exit', (code, sig) => { p.__exited = { code, sig }; });
   procs.push(p);
   return p;
 }
@@ -48,7 +67,12 @@ function spawnProc(name, command, args, opts = {}) {
 function killTree(p) {
   try {
     if (process.platform === 'win32') {
-      spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' });
+      const r = spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' });
+      // D59/P2-24: kill の成否を確認する (失敗した残存プロセスが
+      // 次回実行のポートを握るのが固定ポート問題の元だった)
+      if (r.status !== 0 && !p.__exited) {
+        console.log(`[fixture] WARN: taskkill failed for ${p.__name ?? 'proc'} pid=${p.pid} status=${r.status}`);
+      }
     } else {
       process.kill(-p.pid, 'SIGKILL');
     }
@@ -95,11 +119,13 @@ async function mcp(tool, args = {}) {
 }
 
 let bridgeProc = null;
+let fixtureEnv = {};
 function startBridge() {
   bridgeProc = spawnProc('bridge', 'npx', ['tsx', path.join(ROOT, 'bridge/src/index.ts')], {
     cwd: work,
     env: {
       ...process.env,
+      ...fixtureEnv,
       MOD_URL: `ws://127.0.0.1:${MOCK_PORT}`,
       MCP_PORT: String(MCP_PORT),
       BOT_NAME: 'Rin',
@@ -131,6 +157,13 @@ const helpers = {
     return f;
   },
   log,
+  // 生の HTTP (認証境界など MCP ヘルパーを通さない検証用)
+  async fetch(p, opts = {}) {
+    const r = await fetch(`http://127.0.0.1:${MCP_PORT}${p}`, opts);
+    let json = null;
+    try { json = await r.json(); } catch { /* 本文なし */ }
+    return { status: r.status, json };
+  },
   sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   // 条件が真になるまでpoll (timeoutで例外)
   async waitFor(fn, timeoutMs = 15_000, interval = 300) {
@@ -143,6 +176,8 @@ const helpers = {
     throw new Error('waitFor timeout');
   },
   workdir: work,
+  get mcpPort() { return MCP_PORT; },
+  get mockPort() { return MOCK_PORT; },
   promptLog: path.join(work, 'prompts.md'),
   // bridgeをkillして再起動 (restart永続化の検証用)。mockは生かしたまま。
   async restartBridge() {
@@ -158,8 +193,16 @@ async function main() {
   const mod = (await import(pathToFileURL(path.resolve(fixtureFile)).href)).default;
   const scriptFn = typeof mod === 'function' ? mod : mod.script;
   const assertFn = typeof mod === 'object' ? mod.assert : null;
+  fixtureEnv = (typeof mod === 'object' && mod.env) || {};
+  if (!MOCK_PORT) MOCK_PORT = await freePort();
+  if (!MCP_PORT) MCP_PORT = await freePort();
+  // 起動前に何も応答しないことを確認 (残存プロセスの同一性チェック)
+  const pre = await fetch(`http://127.0.0.1:${MCP_PORT}/healthz`).catch(() => null);
+  if (pre && pre.ok) {
+    throw new Error(`port ${MCP_PORT} is already serving a bridge; refusing to test against a stale process`);
+  }
 
-  log(`workdir=${work}`);
+  log(`workdir=${work} mock=${MOCK_PORT} mcp=${MCP_PORT}`);
   spawnProc('mock', 'node', [
     path.join(ROOT, 'tools/mock-mod/mock-mod.mjs'),
     '--script', path.resolve(fixtureFile),
@@ -168,6 +211,9 @@ async function main() {
   await new Promise((r) => setTimeout(r, 800));
   startBridge();
   await waitHealthz(`http://127.0.0.1:${MCP_PORT}`, STARTUP_TIMEOUT);
+  if (bridgeProc?.__exited) {
+    throw new Error(`bridge exited during startup: ${JSON.stringify(bridgeProc.__exited)}`);
+  }
   log('bridge up');
 
   if (assertFn) {

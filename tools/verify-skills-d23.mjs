@@ -59,18 +59,28 @@ const chestRead = (chestSlots) => ({
 
 // ---------- T1: logistics fetch が複数ソースを回る ----------
 {
-  const reads = [
-    chestRead([{ id: 'minecraft:iron_ingot', count: 20 }]),
-    chestRead([{ id: 'minecraft:iron_ingot', count: 50 }]),
+  // D59: 状態を持つモック (click が read に反映される)。旧モックは
+  // read のたびに次のチェストを返していたため、quick_move 後の再読で
+  // 実移動を検証する実装 (P2-13) が別チェストの在庫を「残量」と誤認した
+  const chests = [
+    [{ id: 'minecraft:iron_ingot', count: 20 }],
+    [{ id: 'minecraft:iron_ingot', count: 50 }],
   ];
+  let chestIdx = 0;
   const ctx = makeCtx({
     'obs.block': { found: [{ x: 1, y: 64, z: 1 }] },
     'baritone.goto': { task_id: 't' },
     'look_at': {},
     'use_item': {},
-    'container.read': () => reads.shift(),
-    'container.click': {},
-    'container.close': {},
+    'container.read': () => chestRead(chests[Math.min(chestIdx, chests.length - 1)]),
+    'container.click': (params) => {
+      if (params.action === 'quick_move') {
+        const chest = chests[Math.min(chestIdx, chests.length - 1)];
+        chest.splice(params.slot, 1);
+      }
+      return {};
+    },
+    'container.close': () => { chestIdx++; return {}; },
   }, {
     state: { inventory_detail: [], player: { x: 0, y: 64, z: 0 } },
     facilities: [{ kind: 'chest', pos: { x: 10, y: 64, z: 10 } }],
@@ -354,7 +364,70 @@ const chestRead = (chestSlots) => ({
       { slot: 31, container_idx: 1, id: 'minecraft:carrot', count: 2 },
     ],
   });
-  const reads = [potRead(false), potRead(false), potRead(false), potRead(true)];
+  // D59: 状態を持つモックにする。旧モックは read を固定スクリプトで
+  // 返していたため、投入を再読検証する実装 (P2-12/13) と両立しなかった
+  // (click が read に反映されず、検証側が常に「変化なし」を見てしまう)。
+  const potState = new Map([
+    [30, { id: 'minecraft:beef', count: 2 }],
+    [31, { id: 'minecraft:carrot', count: 2 }],
+  ]);
+  let potCarried = null;
+  let resultSpawned = false;
+  const potSnapshot = () => {
+    const hasBeef = [...potState.entries()].some(([s, v]) => s < 8 && v.id === 'minecraft:beef');
+    const hasCarrot = [...potState.entries()].some(([s, v]) => s < 8 && v.id === 'minecraft:carrot');
+    // 成果物は1回だけ出現する (回収後の再読で復活させない)
+    if (hasBeef && hasCarrot && !resultSpawned) {
+      resultSpawned = true;
+      potState.set(8, { id: 'farmersdelight:beef_stew', count: 1 });
+    }
+    return {
+      menu_id: 'farmersdelight:cooking_pot',
+      container_sizes: { 0: 9, 1: 36 },
+      carried: potCarried ? { ...potCarried } : null,
+      slots: [
+        ...Array.from({ length: 9 }, (_, i) => {
+          const v = potState.get(i);
+          return v
+            ? { slot: i, container_idx: 0, empty: false, id: v.id, count: v.count }
+            : { slot: i, container_idx: 0, empty: true };
+        }),
+        ...[30, 31].map((i) => {
+          const v = potState.get(i);
+          return v
+            ? { slot: i, container_idx: 1, empty: false, id: v.id, count: v.count }
+            : { slot: i, container_idx: 1, empty: true };
+        }),
+      ],
+    };
+  };
+  const potClick = (params) => {
+    const cur = potState.get(params.slot);
+    if (params.action === 'quick_move') {
+      if (cur) potState.delete(params.slot);
+      return {};
+    }
+    if (params.action !== 'pickup') return {};
+    if (params.button === 1) {
+      // 右クリック: カーソルから1個置く
+      if (potCarried && (!cur || cur.id === potCarried.id)) {
+        potState.set(params.slot, {
+          id: potCarried.id, count: (cur?.count ?? 0) + 1,
+        });
+        potCarried.count--;
+        if (potCarried.count <= 0) potCarried = null;
+      }
+      return {};
+    }
+    if (!potCarried && cur) {
+      potCarried = { ...cur };
+      potState.delete(params.slot);
+    } else if (potCarried && !cur) {
+      potState.set(params.slot, { ...potCarried });
+      potCarried = null;
+    }
+    return {};
+  };
   const ctxD = makeCtx({
     'recipe.lookup': { recipes: [{
       id: 'farmersdelight:cooking/beef_stew', type: 'farmersdelight:cooking',
@@ -368,8 +441,8 @@ const chestRead = (chestSlots) => ({
     'baritone.goto': { task_id: 't' },
     'look_at': {},
     'use_item': {},
-    'container.read': () => reads.shift() ?? potRead(true),
-    'container.click': {},
+    'container.read': () => potSnapshot(),
+    'container.click': (params) => potClick(params),
     'container.close': {},
   }, {
     state: { inventory_detail: [
