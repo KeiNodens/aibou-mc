@@ -45,12 +45,23 @@ export default {
     ctx.stub('container.click', (p) => {
       if (p.action === 'pickup' && p.slot === 39 && state.inv39 && !state.carried) {
         state.carried = state.inv39; state.inv39 = null;
+      } else if (p.action === 'pickup' && p.slot === 39 && state.carried) {
+        // 余りを元の slot へ戻す (F2 の実数投入フロー)
+        state.inv39 = state.carried; state.carried = null;
+      } else if (p.action === 'pickup' && p.slot === 2 && p.button === 1 && state.carried) {
+        // 右クリック = 1 個だけ置く (バニラの実挙動)
+        state.inSlot = { id: state.carried.id, count: (state.inSlot?.count ?? 0) + 1 };
+        state.carried = { ...state.carried, count: state.carried.count - 1 };
+        if (state.carried.count <= 0) state.carried = null;
       } else if (p.action === 'pickup' && p.slot === 2 && state.carried) {
         state.inSlot = state.carried; state.carried = null;
-        state.outSlot = TRANSFORM[state.machine](state.inSlot);
-        state.inSlot = null;
       } else if (p.action === 'quick_move' && p.slot === 3 && state.outSlot) {
         state.inv39 = state.outSlot; state.outSlot = null;
+      }
+      // 投入が終わったら (カーソルが空) 変換が走る
+      if (!state.carried && state.inSlot) {
+        state.outSlot = TRANSFORM[state.machine](state.inSlot);
+        state.inSlot = null;
       }
       return { ok: true };
     });

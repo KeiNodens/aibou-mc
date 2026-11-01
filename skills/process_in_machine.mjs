@@ -116,30 +116,45 @@ export default {
       input2 != null ? { item: input2, dst: roles.input[1] ?? roles.input[0] } : null,
       fuel != null && roles.fuel.length ? { item: fuel, dst: roles.fuel[0] } : null,
     ].filter(Boolean);
+    // Review F2: move EXACTLY the requested count and report what
+    // actually moved. A left click places the whole carried stack, so:
+    // pick the source stack up, place with right clicks (one item per
+    // click), return the remainder, then measure the player-side delta.
+    const playerCount = (it) => playerSlots()
+      .filter((s) => !s.empty && s.id === it)
+      .reduce((a, s) => a + (s.count ?? 0), 0);
     let inserted = 0;
     for (const { item, dst } of items) {
       if (dst === undefined) continue;
       let moved = 0;
       const cap = count ?? 64;
       while (moved < cap) {
+        const dstSlot = menu.slots.find((s) => s.slot === dst);
+        if (dstSlot && !dstSlot.empty && dstSlot.id !== item) break;
         const src = findPlayerSlot(item);
         if (!src) break;
+        const before = playerCount(item);
         const want = Math.min(cap - moved, src.count);
         await ctx.call('container.click', {
           slot: src.slot, action: 'pickup', menu_id: menu.menu_id,
         });
-        await ctx.call('container.click', {
-          slot: dst, action: 'pickup', menu_id: menu.menu_id,
-        });
-        const read = await ctx.call('container.read');
+        for (let i = 0; i < want; i++) {
+          await ctx.call('container.click', {
+            slot: dst, action: 'pickup', button: 1, menu_id: menu.menu_id,
+          });
+        }
+        let read = await ctx.call('container.read');
         if (read.carried) {
           await ctx.call('container.click', {
             slot: src.slot, action: 'pickup', menu_id: menu.menu_id,
           });
+          read = await ctx.call('container.read');
         }
         menu = read;
-        moved += want;
-        inserted += want;
+        const actual = Math.max(0, before - playerCount(item));
+        if (actual <= 0) break;
+        moved += actual;
+        inserted += actual;
       }
     }
     if (inserted === 0) {

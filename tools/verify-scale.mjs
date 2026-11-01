@@ -35,23 +35,32 @@ function baseCtx(handlers, opts = {}) {
 {
   let menu = null; // 'enrich' | 'smelter'
   let ironStock = 2;
+  // F2 以降: クリックの実挙動をモデル化 (右クリック=1個配置、
+  // 実数計測)。playerSlot=プレイヤー側、inSlot/outSlot=機械側。
+  const playerSlot = { 'minecraft:raw_iron': 64, 'mekanism:dust_iron': 0, 'minecraft:iron_ingot': 0 };
+  let carried = null, inSlot = null, outSlot = null;
+  const TRANSFORM = {
+    enrich: (it) => ({ id: 'mekanism:dust_iron', count: it.count * 2 }),
+    smelter: (it) => ({ id: 'minecraft:iron_ingot', count: it.count }),
+  };
   const menuFor = (m) => {
-    const product = m === 'enrich' ? 'mekanism:dust_iron' : 'minecraft:iron_ingot';
-    const raw = m === 'enrich' ? 'minecraft:raw_iron' : 'mekanism:dust_iron';
     const slots = [
       { slot: 0, container_idx: 0, empty: true },
       { slot: 1, container_idx: 0, empty: true },
-      { slot: 2, container_idx: 0, empty: true },
-      { slot: 3, container_idx: 0, empty: false, id: product, count: 8 },
+      { slot: 2, container_idx: 0, empty: !inSlot, ...(inSlot ?? {}) },
+      { slot: 3, container_idx: 0, empty: !outSlot, ...(outSlot ?? {}) },
     ];
-    for (let i = 4; i < 40; i++) {
-      slots.push(i === 4
-        ? { slot: i, container_idx: 1, empty: false, id: raw, count: 64 }
-        : { slot: i, container_idx: 1, empty: true });
-    }
+    const pItems = ['minecraft:raw_iron', 'mekanism:dust_iron', 'minecraft:iron_ingot'];
+    pItems.forEach((id, i) => {
+      const c = playerSlot[id] ?? 0;
+      slots.push(c > 0
+        ? { slot: 4 + i, container_idx: 1, empty: false, id, count: c }
+        : { slot: 4 + i, container_idx: 1, empty: true });
+    });
+    for (let i = 7; i < 40; i++) slots.push({ slot: i, container_idx: 1, empty: true });
     return {
       menu_id: m === 'enrich' ? 'mekanism:enrichment_chamber' : 'mekanism:energized_smelter',
-      slots,
+      carried, slots,
     };
   };
   const ctx = baseCtx({
@@ -59,10 +68,33 @@ function baseCtx(handlers, opts = {}) {
       ? { found: [{ x: 5, y: 64, z: 0, dist: 5 }] }
       : { found: [{ x: 9, y: 64, z: 0, dist: 9 }] },
     'baritone.goto': { task_id: 'g' },
-    'use_item': (p) => { menu = p.x === 5 ? 'enrich' : 'smelter'; return { ok: true }; },
+    'use_item': (p) => {
+      menu = p.x === 5 ? 'enrich' : 'smelter';
+      inSlot = null; outSlot = null; carried = null;
+      return { ok: true };
+    },
     'container.read': () => menuFor(menu),
     'container.click': (p) => {
-      if (p.slot === 3 && p.action === 'quick_move' && menu === 'smelter') ironStock = 10;
+      const pItems = { 4: 'minecraft:raw_iron', 5: 'mekanism:dust_iron', 6: 'minecraft:iron_ingot' };
+      if (p.action === 'pickup' && pItems[p.slot] !== undefined) {
+        const id = pItems[p.slot];
+        if (!carried && playerSlot[id] > 0) {
+          carried = { id, count: playerSlot[id] }; playerSlot[id] = 0;
+        } else if (carried && carried.id === id) {
+          playerSlot[id] = carried.count; carried = null;
+        }
+      } else if (p.action === 'pickup' && p.slot === 2 && p.button === 1 && carried) {
+        inSlot = { id: carried.id, count: (inSlot?.count ?? 0) + 1 };
+        carried = { ...carried, count: carried.count - 1 };
+        if (carried.count <= 0) carried = null;
+      } else if (p.action === 'pickup' && p.slot === 2 && carried) {
+        inSlot = carried; carried = null;
+      } else if (p.action === 'quick_move' && p.slot === 3 && outSlot) {
+        playerSlot[outSlot.id] = (playerSlot[outSlot.id] ?? 0) + outSlot.count;
+        if (menu === 'smelter') ironStock = 2 + outSlot.count;
+        outSlot = null;
+      }
+      if (!carried && inSlot) { outSlot = TRANSFORM[menu](inSlot); inSlot = null; }
       return {};
     },
     'wait.condition': { task_id: 'w' },
