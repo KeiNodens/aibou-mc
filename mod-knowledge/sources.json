@@ -114,6 +114,10 @@
                  "industrialforegoing":  {
                                              "repo":  "https://github.com/Buuz135/Industrial-Foregoing",
                                              "note":  "branch 1.20 tip = 3.5.22 release-day state (Modrinth date match; version assembled in build.gradle)"
-                                         }
+                                         },
+                 "energizedpower":  {
+                                        "repo":  "https://github.com/JDDev0/EnergizedPower",
+                                        "note":  "exact tag 1.20.1-2.15.22-forge"
+                                    }
              }
 }
