@@ -48,7 +48,7 @@ export default {
       }
       return { entities: [] };
     });
-    ctx.stub('obs.block_state', () => ({ id: 'minecraft:stone' }));
+    ctx.stub('obs.block_state', () => ({ block: 'minecraft:stone' }));
     ctx.stub('dig', () => ({ task_id: 'd' }));
     ctx.stub('waypoint.set', () => ({ ok: true }));
     await ctx.sleep(120_000);

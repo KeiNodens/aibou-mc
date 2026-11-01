@@ -30,8 +30,8 @@ export default {
     });
     // 残骸の隣 (7,64,8) だけ空気 = 露出あり。それ以外は岩。
     ctx.stub('obs.block_state', (p) => {
-      if (p.x === 7 && p.y === 64 && p.z === 8) return { id: 'minecraft:air' };
-      return { id: 'minecraft:netherrack' };
+      if (p.x === 7 && p.y === 64 && p.z === 8) return { block: 'minecraft:air' };
+      return { block: 'minecraft:netherrack' };
     });
     ctx.stub('dig', (p) => {
       dugAt.push(`${p.x},${p.y},${p.z}`);

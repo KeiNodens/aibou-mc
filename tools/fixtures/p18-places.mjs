@@ -20,7 +20,7 @@ export default {
       if (p.block === 'minecraft:diamond_ore') return { found: [GEM] };
       return { found: [] };
     });
-    ctx.stub('obs.block_state', () => ({ id: 'minecraft:stone' }));
+    ctx.stub('obs.block_state', () => ({ block: 'minecraft:stone' }));
     ctx.stub('dig', () => ({ task_id: 'd' }));
     ctx.stub('waypoint.set', () => ({ ok: true }));
     await ctx.sleep(90_000);

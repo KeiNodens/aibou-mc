@@ -30,7 +30,7 @@ export default {
         const targets = [];
         for (let y = level + 6; y > level; y--) {
           const bs = await ctx.call('obs.block_state', { x, y, z }).catch(() => null);
-          if (bs?.id && bs.id !== 'minecraft:air' && bs.id !== 'minecraft:water') {
+          if (bs?.block && bs.block !== 'minecraft:air' && bs.block !== 'minecraft:water') {
             targets.push({ x, y, z, id: bs.id });
           }
         }
@@ -66,7 +66,7 @@ export default {
           let wet = false;
           for (let y = level - 1; y >= level - 6; y--) {
             const bs = await ctx.call('obs.block_state', { x, y, z }).catch(() => null);
-            const id = bs?.id;
+            const id = bs?.block;
             if (id === 'minecraft:water') { wet = true; break; }
             if (id && id !== 'minecraft:air') { top = y; break; }
             if (y === level - 6) top = level - 7;

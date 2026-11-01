@@ -2,7 +2,7 @@
 // 経由で inline plan を実行できること。
 export default {
   async script(ctx) {
-    ctx.stub('obs.block_state', () => ({ id: 'mekanism:enrichment_chamber' }));
+    ctx.stub('obs.block_state', () => ({ block: 'mekanism:enrichment_chamber' }));
     ctx.stub('container.button', () => ({ ok: true }));
     await ctx.sleep(30_000);
   },

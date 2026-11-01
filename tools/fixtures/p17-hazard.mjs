@@ -11,8 +11,8 @@ export default {
     }));
     ctx.stub('obs.entity', () => ({ entities: [] }));
     ctx.stub('obs.block_state', (p) => {
-      if (p.x === 0 && p.y === 64 && p.z === 4) return { id: 'minecraft:lava' };
-      return { id: 'minecraft:stone' };
+      if (p.x === 0 && p.y === 64 && p.z === 4) return { block: 'minecraft:lava' };
+      return { block: 'minecraft:stone' };
     });
     ctx.stub('dig', () => ({ task_id: 'd' }));
     await ctx.sleep(60_000);

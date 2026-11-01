@@ -96,7 +96,7 @@ async function completePlace(ore, pos) {
 async function nearLava(ctx, s2) {
   for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
     const b = await ctx.call('obs.block_state', { x: s2.x + nx, y: s2.y, z: s2.z + nz }).catch(() => null);
-    if (b?.id?.includes('lava')) return true;
+    if (b?.block?.includes('lava')) return true;
   }
   return false;
 }
@@ -293,7 +293,7 @@ export default {
             const bx = Math.floor(me.x), by = Math.floor(me.y), bz = Math.floor(me.z);
             await ctx.call('use_item', { x: bx, y: by - 1, z: bz, face: 'up' }).catch(() => {});
             const chk = await ctx.call('obs.block_state', { x: bx, y: by, z: bz }).catch(() => null);
-            if (chk?.id === 'minecraft:torch' || chk?.id === 'minecraft:wall_torch') {
+            if (chk?.block === 'minecraft:torch' || chk?.block === 'minecraft:wall_torch') {
               torchesPlaced++;
               lastTorch = { ...me };
             }
@@ -410,7 +410,7 @@ export default {
                   const b = await ctx.call('obs.block_state', {
                     x: spot.x + nx, y: spot.y + ny, z: spot.z + nz,
                   }).catch(() => null);
-                  if (b?.id === 'minecraft:air' || b?.id === 'minecraft:cave_air') {
+                  if (b?.block === 'minecraft:air' || b?.block === 'minecraft:cave_air') {
                     exposed = true; break;
                   }
                 }

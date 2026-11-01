@@ -11,11 +11,11 @@ export default {
     }));
     // 地形: y=63 が地面。(2,0) だけ y=63 が欠けた窪地
     ctx.stub('obs.block_state', (p) => {
-      if (p.y >= 64) return { id: 'minecraft:air' };
+      if (p.y >= 64) return { block: 'minecraft:air' };
       if (p.y === 63) {
-        return { id: (p.x === 2 && p.z === 0) ? 'minecraft:air' : 'minecraft:stone' };
+        return { block: (p.x === 2 && p.z === 0) ? 'minecraft:air' : 'minecraft:stone' };
       }
-      return { id: 'minecraft:stone' };
+      return { block: 'minecraft:stone' };
     });
     ctx.stub('dig', () => ({ task_id: 'd' }));
     await ctx.sleep(60_000);

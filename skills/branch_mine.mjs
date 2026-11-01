@@ -46,7 +46,7 @@ export default {
     let stopped = null;
 
     const bsAt = async (x, y, z) =>
-      (await ctx.call('obs.block_state', { x, y, z }).catch(() => null))?.id;
+      (await ctx.call('obs.block_state', { x, y, z }).catch(() => null))?.block;
     const digCell = async (x, y, z, dirx, dirz) => {
       // 掘る対象を先に確定 (上段→下段)
       const targets = [];

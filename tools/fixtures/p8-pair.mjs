@@ -12,7 +12,7 @@ export default {
       ],
     }));
     ctx.stub('obs.block_state', (p) => ({
-      id: (p.x === 0 && p.y === 64 && p.z === -3)
+      block: (p.x === 0 && p.y === 64 && p.z === -3)
         ? 'minecraft:iron_ore' : 'minecraft:stone',
     }));
     ctx.stub('obs.entity', (p) => {
