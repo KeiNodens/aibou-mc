@@ -21,6 +21,10 @@ const GRAPH = {
 
 export default {
   async script(ctx) {
+    // D59: toolgate が meta.mods で quest 系を制御する。実機では
+    // ftbquests 導入済みのため、スタブもそれを写す (未スタブだと
+    // quest ツール自体が無効化され、fixture が空転/失敗する)
+    ctx.stub('meta.mods', () => ({ mods: ['ftbquests'] }));
     let completed = [];
     ctx.stub('quest.list', () => ({
       quests: GRAPH.quests.map((q) => ({

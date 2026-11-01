@@ -124,14 +124,27 @@ const requireAdmin: express.RequestHandler = (req, res, next) => {
 const isAdminCaller = (req: express.Request) =>
   (!BRIDGE_TOKEN && !ADMIN_TOKEN) ||
   (!!ADMIN_TOKEN && bearerOf(req) === ADMIN_TOKEN);
-/** 管理系 MCP ツール: これらの tools/call は admin 呼び出し元でのみ許可 */
-const ADMIN_TOOLS = new Set(['approve', 'deny', 'loop_resume']);
+/** 管理系 MCP 操作: これらの tools/call は admin 呼び出し元でのみ許可。
+ * 実ツールは approvals (action=approve/deny) と bots (action=
+ * loop_resume) に集約されているため、名前だけでなく action も見る。
+ * (初版は存在しないツール名 approve/deny/loop_resume を見ており、
+ * ゲートが空転していた — p56 fixture の検証で発覚) */
+const ADMIN_ACTIONS: Record<string, Set<string>> = {
+  approvals: new Set(['approve', 'deny']),
+  bots: new Set(['loop_resume']),
+};
 const adminToolInBody = (body: unknown): string | null => {
   const msgs = Array.isArray(body) ? body : [body];
   for (const m of msgs) {
-    const r = m as { method?: string; params?: { name?: string } };
-    if (r?.method === 'tools/call' && r.params?.name && ADMIN_TOOLS.has(r.params.name)) {
-      return r.params.name;
+    const r = m as {
+      method?: string;
+      params?: { name?: string; arguments?: { action?: string } };
+    };
+    if (r?.method !== 'tools/call' || !r.params?.name) continue;
+    const actions = ADMIN_ACTIONS[r.params.name];
+    const action = r.params.arguments?.action;
+    if (actions && action && actions.has(action)) {
+      return `${r.params.name}:${action}`;
     }
   }
   return null;

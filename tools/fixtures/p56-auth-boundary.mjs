@@ -45,7 +45,8 @@ export default {
     });
     if (decideAdmin.status !== 200) throw new Error(`admin-token decision should be 200, got ${decideAdmin.status}`);
 
-    // 4) MCP tools/call: 通常トークンで approve は 403、管理トークンでは通る
+    // 4) MCP tools/call: 管理系は approvals(action=approve/deny) と
+    // bots(action=loop_resume)。通常トークンでは 403、管理トークンでは通る
     const callRaw = async (token, name, args) => {
       const r = await fetch(`http://127.0.0.1:${h.mcpPort}/mcp`, {
         method: 'POST',
@@ -58,14 +59,18 @@ export default {
       });
       return r.status;
     };
-    const approveUser = await callRaw(USER, 'approve', {});
-    if (approveUser !== 403) throw new Error(`user-token approve tool should be 403, got ${approveUser}`);
-    const approveAdmin = await callRaw(ADMIN, 'approve', {});
+    const approveUser = await callRaw(USER, 'approvals', { action: 'approve' });
+    if (approveUser !== 403) throw new Error(`user-token approvals:approve should be 403, got ${approveUser}`);
+    const approveAdmin = await callRaw(ADMIN, 'approvals', { action: 'approve' });
     if (approveAdmin === 403 || approveAdmin === 401) {
-      throw new Error(`admin-token approve tool should pass the gate, got ${approveAdmin}`);
+      throw new Error(`admin-token approvals:approve should pass the gate, got ${approveAdmin}`);
     }
-    // 5) 通常ツールは通常トークンで通る (bot_status は読み取り系)
-    const statusUser = await callRaw(USER, 'bot_status', {});
-    if (statusUser !== 200) throw new Error(`user-token bot_status should be 200, got ${statusUser}`);
+    const resumeUser = await callRaw(USER, 'bots', { action: 'loop_resume' });
+    if (resumeUser !== 403) throw new Error(`user-token bots:loop_resume should be 403, got ${resumeUser}`);
+    // 5) 読み取り系は通常トークンで通る (approvals list / bots status)
+    const listUser = await callRaw(USER, 'approvals', { action: 'list' });
+    if (listUser !== 200) throw new Error(`user-token approvals:list should be 200, got ${listUser}`);
+    const statusUser = await callRaw(USER, 'bots', { action: 'status' });
+    if (statusUser !== 200) throw new Error(`user-token bots:status should be 200, got ${statusUser}`);
   },
 };

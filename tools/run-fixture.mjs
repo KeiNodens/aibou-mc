@@ -49,6 +49,9 @@ function spawnProc(name, command, args, opts = {}) {
   const p = spawn(command, args, {
     shell: true,
     stdio: ['ignore', 'pipe', 'pipe'],
+    // D59: bridge/mock は shell:false で直接 spawn できる (下記)。
+    // ラッパー (cmd/npx) を挟むとプロセスツリーになり、権限制限の
+    // ある環境で kill が届かず残存プロセス化する
     // POSIXではdetachedでグループkillを有効化 (Windowsはtaskkill /Tで対処)
     detached: process.platform !== 'win32',
     ...opts,
@@ -69,9 +72,24 @@ function killTree(p) {
     if (process.platform === 'win32') {
       const r = spawnSync('taskkill', ['/PID', String(p.pid), '/T', '/F'], { stdio: 'ignore' });
       // D59/P2-24: kill の成否を確認する (失敗した残存プロセスが
-      // 次回実行のポートを握るのが固定ポート問題の元だった)
-      if (r.status !== 0 && !p.__exited) {
-        console.log(`[fixture] WARN: taskkill failed for ${p.__name ?? 'proc'} pid=${p.pid} status=${r.status}`);
+      // 次回実行のポートを握るのが固定ポート問題の元だった)。
+      // taskkill /T が権限で失敗する環境 (rin) では、WMI で子孫を
+      // 列挙して Stop-Process で個別に止める (深い順)。
+      if (r.status !== 0) {
+        const script =
+          `$root=${p.pid}; $all=Get-CimInstance Win32_Process; ` +
+          '$desc=@(); $front=@($root); ' +
+          'while($front.Count){ $next=@(); foreach($f in $front){ ' +
+          '$kids=@($all | Where-Object { $_.ParentProcessId -eq $f } ' +
+          '| ForEach-Object { $_.ProcessId }); $desc += $kids; $next += $kids }; ' +
+          '$front=$next }; [array]::Reverse($desc); ' +
+          'foreach($d in $desc){ Stop-Process -Id $d -Force -ErrorAction SilentlyContinue }; ' +
+          'Stop-Process -Id $root -Force -ErrorAction SilentlyContinue';
+        const ps = spawnSync('powershell', ['-NoProfile', '-Command', script],
+          { stdio: 'ignore' });
+        if (ps.status !== 0) {
+          console.log(`[fixture] WARN: kill fallback failed for ${p.__name ?? 'proc'} pid=${p.pid}`);
+        }
       }
     } else {
       process.kill(-p.pid, 'SIGKILL');
@@ -121,10 +139,20 @@ async function mcp(tool, args = {}) {
 let bridgeProc = null;
 let fixtureEnv = {};
 function startBridge() {
-  bridgeProc = spawnProc('bridge', 'npx', ['tsx', path.join(ROOT, 'bridge/src/index.ts')], {
+  // npx tsx の代わりに tsx の cli を node で直接起動する (単一
+  // プロセス化し、kill を確実にする)
+  bridgeProc = spawnProc('bridge', 'node', [
+    path.join(ROOT, 'bridge/node_modules/tsx/dist/cli.mjs'),
+    path.join(ROOT, 'bridge/src/index.ts'),
+  ], {
+    shell: false,
     cwd: work,
     env: {
       ...process.env,
+      // fixture は全ツール有効が前提 (toolgate の DEFAULT_OFF /
+      // mod ゲートは実運用向け)。D59 で発覚: これが無いと
+      // reload_skills や deck_walk 等が無効化され fixture が空転する
+      AIBOU_TOOL_PROFILE: 'full',
       ...fixtureEnv,
       MOD_URL: `ws://127.0.0.1:${MOCK_PORT}`,
       MCP_PORT: String(MCP_PORT),
@@ -182,7 +210,21 @@ const helpers = {
   // bridgeをkillして再起動 (restart永続化の検証用)。mockは生かしたまま。
   async restartBridge() {
     if (bridgeProc) killTree(bridgeProc);
-    await new Promise((r) => setTimeout(r, 500));
+    // 旧 bridge がポートを離すまで待つ (kill が遅い/一部失敗する
+    // 環境で新 bridge が EADDRINUSE になるのを防ぐ)。制限内に
+    // 離さない場合は、旧プロセスに対して検証を続けるより正直に
+    // 失敗させる (誤った対象を測って PASS/FAIL するのが最悪)
+    const deadline = Date.now() + 30_000;
+    let released = false;
+    while (Date.now() < deadline) {
+      const alive = await fetch(`http://127.0.0.1:${MCP_PORT}/healthz`)
+        .then((r) => r.ok).catch(() => false);
+      if (!alive) { released = true; break; }
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    if (!released) {
+      throw new Error('restartBridge: old bridge did not stop within 30s (kill failed in this environment)');
+    }
     startBridge();
     await waitHealthz(`http://127.0.0.1:${MCP_PORT}`, STARTUP_TIMEOUT);
     log('bridge restarted');
@@ -196,6 +238,10 @@ async function main() {
   fixtureEnv = (typeof mod === 'object' && mod.env) || {};
   if (!MOCK_PORT) MOCK_PORT = await freePort();
   if (!MCP_PORT) MCP_PORT = await freePort();
+  // fixture 本体が process.env.FIXTURE_*_PORT を読む場合がある
+  // (p3/p6 の /inject 先など)。確定したポートを env にも反映する
+  process.env.FIXTURE_MOCK_PORT = String(MOCK_PORT);
+  process.env.FIXTURE_MCP_PORT = String(MCP_PORT);
   // 起動前に何も応答しないことを確認 (残存プロセスの同一性チェック)
   const pre = await fetch(`http://127.0.0.1:${MCP_PORT}/healthz`).catch(() => null);
   if (pre && pre.ok) {
@@ -206,7 +252,7 @@ async function main() {
   spawnProc('mock', 'node', [
     path.join(ROOT, 'tools/mock-mod/mock-mod.mjs'),
     '--script', path.resolve(fixtureFile),
-  ], { env: { ...process.env, MOCK_MOD_PORT: String(MOCK_PORT), FIXTURE_ROLE: 'mock' } });
+  ], { shell: false, env: { ...process.env, MOCK_MOD_PORT: String(MOCK_PORT), FIXTURE_ROLE: 'mock' } });
 
   await new Promise((r) => setTimeout(r, 800));
   startBridge();
@@ -233,4 +279,9 @@ try {
   process.exitCode = 1;
 } finally {
   for (const p of procs) killTree(p);
+  // 子プロセスの pipe ハンドルが残ると node が終了できない環境がある
+  // (kill が権限制限で失敗する場合)。結果は確定済みなので、猶予の
+  // 後で明示的に終了する。ポートはエフェメラル化済みのため、
+  // 万一の残存プロセスも次回実行と衝突しない
+  setTimeout(() => process.exit(process.exitCode ?? 0), 3000).unref();
 }
