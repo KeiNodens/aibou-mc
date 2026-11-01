@@ -927,3 +927,11 @@ plan-d19 の未実装・一部実装分をまとめて実装。詳細と実機�
 - 要実機: 実パックでの registry.blocks dump とカタログ生成、
   block_search → schematic_create → build_schematic の通し、
   生成 .schem の外部ツール互換 (任意)
+
+## D23 S2-S4 / D21 / D22 (2026-11-01)
+
+- コード検証済み: verify-skills-d23 ALL PASS、fixture p5b PASS、tsc OK、
+  gradle build OK (配置先ミスの複製ファイルを game/ へ統合済み)
+- 要実機: build_schematic v2 の facing/回転/補充、build_prepare と
+  logistics fetch の実調達、world_craft の実変換 (mana infusion / fluix)、
+  projecte.status の実応答

@@ -32,7 +32,7 @@ mod 側へ取り込まれる。
 - 検証: fixture で「skill で remember → MCP waypoint_list に見える」
   「MCP で保存 → skill の goto が解決する」を確認する。
 
-## 2. world_craft 実行器（D21）
+## 2. world_craft 実行器（D21）— ✅ 枠組み + 定義9件 実装済み (2026-11-01、skills/world_craft.mjs + stations/*.json、fake-ctx 検証 PASS。実機での choreography 確認は実機バッチ)
 
 GUI を持たず「ワールド内操作」で加工する系を、1 つの実行器で受ける。
 
@@ -94,6 +94,8 @@ right_click_station（杖・蛇口等）/ wait_transform / wait_block_state / co
    EMC 残高と学習済み一覧を返す `projecte.status` op を新設する
    （Jade / AE2 と同じ soft dependency + リフレクション方式）。
    画面テキストの OCR には依存しない。
+   → ✅ op + MCP tool `projecte_status` 実装済み (2026-11-01、gradle OK)。
+   実 ProjectE での応答は実機バッチで確認する。
 3. **操作は GUI 駆動の skill `transmute`**: withdraw（学習済みを取り出す）/
    deposit（アイテムを EMC 化する）を、調査で得た slot 配置で実装する。
 4. 知識と EMC は bot プレイヤー自身のものとして扱う

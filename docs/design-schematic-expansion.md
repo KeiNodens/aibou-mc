@@ -44,7 +44,7 @@
 - **配置検証の下準備は既存だった**: obs.block_state は properties を
   既に返している（確認済み）。S4 ではスキル側がそれを使う。
 
-## S2. build_prepare（材料集め）
+## S2. build_prepare（材料集め）— ✅ 実装済み (2026-11-01, verify-skills-d23)
 
 schematic の材料集計を起点に、手持ち・施設記憶のチェスト・AE2 ME を
 照合し、不足分を組み立てるスキル。
@@ -54,7 +54,7 @@ schematic の材料集計を起点に、手持ち・施設記憶のチェスト�
 - どうにもならないもの: 不足リストとして報告（プレイヤーの仕事を残す）
 - 建材置き場として現場近くのチェストを staging に使う
 
-## S3. チェスト / ME からの取り出し
+## S3. チェスト / ME からの取り出し — ✅ 実装済み (2026-11-01, logistics fetch 拡張)
 
 logistics の fetch を「アイテム指定・個数指定」に拡張する。
 
@@ -62,7 +62,7 @@ logistics の fetch を「アイテム指定・個数指定」に拡張する。
 - 必要数だけ引き出し、余剰は元の場所へ戻す（deposit 流用）
 - 見つからないアイテムは S2 の不足リストへ
 
-## S4. build_schematic v2（配置層）
+## S4. build_schematic v2（配置層）— ✅ 実装済み (2026-11-01, verify-skills-d23。配置コンテキストの実挙動は実機バッチ)
 
 - **props 検証**: 配置後に block_state の properties まで照合し、
   向き違いを failed ではなく mismatched として報告する
