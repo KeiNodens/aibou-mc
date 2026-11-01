@@ -69,3 +69,47 @@ check('overwrite works', ow.solid_blocks === 1);
 
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
 process.exit(fails ? 1 : 0);
+
+// Case: semantic ops (D34) — machine_row / cable_run / power_spine
+{
+  const fac = await createSchematicFile({
+    name: 'factory', dir,
+    ops: [
+      { op: 'machine_row', at: { x: 0, y: 0, z: 0 },
+        machine: 'minecraft:furnace', count: 3, along: 'x', spacing: 2,
+        facing: 'south',
+        faces: { input: 'top', output: 'front', power: 'back' } },
+      { op: 'cable_run', from: { x: 0, y: 0, z: 2 }, to: { x: 4, y: 1, z: 2 },
+        cable: 'minecraft:redstone_block' },
+      { op: 'power_spine', at: { x: 0, y: 2, z: 0 }, along: 'x', length: 5,
+        cable: 'minecraft:gold_block', tap_every: 2, tap_dir: 'south',
+        tap_len: 1 },
+    ],
+  });
+  check('factory solid = 17 (3 machines + 6 run + 8 spine)',
+    fac.solid_blocks === 17, `got ${fac.solid_blocks}`);
+  const mf = fac.manifest;
+  check('manifest machines = 3', mf.machines.length === 3,
+    JSON.stringify(mf.machines));
+  check('manifest machine[0] faces resolved (top/front/back of south)',
+    mf.machines[0].faces?.input === 'up' &&
+    mf.machines[0].faces?.output === 'south' &&
+    mf.machines[0].faces?.power === 'north',
+    JSON.stringify(mf.machines[0]));
+  check('manifest machine[2] at x=4', mf.machines[2].x === 4);
+  check('manifest cables counted',
+    mf.cables['minecraft:redstone_block'] === 6 &&
+    mf.cables['minecraft:gold_block'] === 8,
+    JSON.stringify(mf.cables));
+  const { readFileSync, existsSync } = await import('node:fs');
+  check('manifest sidecar written',
+    existsSync(fac.manifest_path) &&
+    JSON.parse(readFileSync(fac.manifest_path, 'utf8')).machines.length === 3);
+  const fplan = await planSchematic(fac.path);
+  const fat = (x, y, z) => fplan.blocks.find(
+    (b) => b.x === x && b.y === y && b.z === z);
+  check('machine_row block has facing prop',
+    fat(0, 0, 0)?.props?.facing === 'south');
+  check('power_spine tap placed (2,2,1)',
+    fat(2, 2, 1)?.id === 'minecraft:gold_block');
+}

@@ -420,7 +420,11 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
         const cat = await ensureCatalog();
         if (cat.size) {
           const ids = new Set<string>();
-          for (const op of (ops as any[]) ?? []) if (op?.block) ids.add(op.block);
+          for (const op of (ops as any[]) ?? []) {
+            if (op?.block) ids.add(op.block);
+            if (op?.machine) ids.add(op.machine);
+            if (op?.cable) ids.add(op.cable);
+          }
           for (const b of blocks ?? []) ids.add(b.block);
           const unknown = [...ids].filter(
             id => id !== 'minecraft:air' && !cat.has(id));
@@ -454,7 +458,15 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
         'block list (D23/S1; written to the schematic library and verified ' +
         'by read-back; works without the game). create ops: ' +
         '{op:"block",x,y,z,block,props?} | {op:"box",from,to,block,props?,hollow?} | ' +
-        '{op:"line",from,to,block,props?}; minecraft:air carves a cell.',
+        '{op:"line",from,to,block,props?}; minecraft:air carves a cell. ' +
+        'Semantic ops (D34, expanded deterministically, returned as a ' +
+        'manifest + <name>.manifest.json sidecar): ' +
+        '{op:"machine_row",at,machine,count,along?,spacing?,facing?,faces?' +
+        '{input,output,power: front|back|left|right|top|bottom}} | ' +
+        '{op:"cable_run",from,to,cable} (rectilinear x,z,y path) | ' +
+        '{op:"power_spine",at,along,length,cable,tap_every?,tap_dir?,tap_len?}. ' +
+        'faces in the manifest are DECLARED intent resolved to absolute ' +
+        'directions, not sensed machine state.',
       inputSchema: {
         action: z.enum(['inspect', 'plan', 'create']),
         path: z.string().optional().describe('absolute path to the schematic file (inspect/plan)'),

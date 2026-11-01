@@ -186,7 +186,75 @@ export type SchemOp =
   | { op: 'box'; from: Vec3; to: Vec3; block: string;
       props?: Record<string, string>; hollow?: boolean }
   | { op: 'line'; from: Vec3; to: Vec3; block: string;
-      props?: Record<string, string> };
+      props?: Record<string, string> }
+  // 意味プリミティブ (D34): 工場の意味の塊を決定的に展開する。
+  // faces は機械の facing 基準の相対面 (front/back/left/right/top/
+  // bottom) で宣言し、manifest では絶対方向に解決して返す。
+  // あくまで「宣言」であって、実機の面設定の読み取りではない。
+  | { op: 'machine_row'; at: Vec3; machine: string; count: number;
+      along?: 'x' | 'z' | '-x' | '-z'; spacing?: number;
+      facing?: string; props?: Record<string, string>;
+      faces?: { input?: RelFace; output?: RelFace; power?: RelFace } }
+  | { op: 'cable_run'; from: Vec3; to: Vec3; cable: string;
+      props?: Record<string, string> }
+  | { op: 'power_spine'; at: Vec3; along?: 'x' | 'z' | '-x' | '-z';
+      length: number; cable: string; props?: Record<string, string>;
+      tap_every?: number;
+      tap_dir?: 'north' | 'south' | 'east' | 'west' | 'up' | 'down';
+      tap_len?: number };
+
+export type RelFace = 'front' | 'back' | 'left' | 'right' | 'top' | 'bottom';
+
+export interface ManifestMachine {
+  x: number; y: number; z: number; id: string;
+  facing?: string;
+  /** 相対面宣言を絶対方向 (north/south/east/west/up/down) に解決したもの */
+  faces?: Record<string, string>;
+}
+
+export interface SchemManifest {
+  machines: ManifestMachine[];
+  /** cable 系 op が置いた本数 (id ごと) */
+  cables: Record<string, number>;
+  /** machines/*.json に commission 計画がある機械だけ、座標つきで */
+  commission: { x: number; y: number; z: number; machine: string; plan: unknown[] }[];
+}
+
+const DIR_VEC: Record<string, Vec3> = {
+  north: { x: 0, y: 0, z: -1 }, south: { x: 0, y: 0, z: 1 },
+  east: { x: 1, y: 0, z: 0 }, west: { x: -1, y: 0, z: 0 },
+  up: { x: 0, y: 1, z: 0 }, down: { x: 0, y: -1, z: 0 },
+};
+const OPPOSITE: Record<string, string> = {
+  north: 'south', south: 'north', east: 'west', west: 'east',
+  up: 'down', down: 'up',
+};
+const LEFT_OF: Record<string, string> = {
+  north: 'west', west: 'south', south: 'east', east: 'north',
+};
+const RIGHT_OF: Record<string, string> = {
+  north: 'east', east: 'south', south: 'west', west: 'north',
+};
+
+function resolveFace(facing: string, rel: RelFace): string {
+  switch (rel) {
+    case 'front': return facing;
+    case 'back': return OPPOSITE[facing] ?? facing;
+    case 'left': return LEFT_OF[facing] ?? facing;
+    case 'right': return RIGHT_OF[facing] ?? facing;
+    case 'top': return 'up';
+    case 'bottom': return 'down';
+  }
+}
+
+function alongVec(along?: string): Vec3 {
+  switch (along) {
+    case 'z': return { x: 0, y: 0, z: 1 };
+    case '-x': return { x: -1, y: 0, z: 0 };
+    case '-z': return { x: 0, y: 0, z: -1 };
+    default: return { x: 1, y: 0, z: 0 };
+  }
+}
 
 const BLOCK_ID_RE = /^[a-z0-9_.-]+:[a-z0-9_./-]+$/;
 const PROP_KEY_RE = /^[a-z0-9_]+$/;
@@ -386,10 +454,18 @@ export async function createSchematicFile(opts: {
 }): Promise<{
   path: string; size: Vec3; solid_blocks: number;
   materials: { id: string; count: number }[];
+  manifest: SchemManifest; manifest_path: string;
 }> {
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(opts.name))
     throw new Error(`invalid schematic name: ${opts.name}`);
   const grid = new SchemGrid();
+  const rawMachines: { pos: Vec3; id: string; facing?: string;
+    faces?: { input?: RelFace; output?: RelFace; power?: RelFace } }[] = [];
+  const cableCounts: Record<string, number> = {};
+  const addCable = (x: number, y: number, z: number, op: { cable: string; props?: Record<string, string> }) => {
+    grid.set(x, y, z, checkedState(op.cable, op.props));
+    cableCounts[op.cable] = (cableCounts[op.cable] ?? 0) + 1;
+  };
   for (const op of opts.ops ?? []) {
     if (op.op === 'block')
       grid.set(op.x, op.y, op.z, checkedState(op.block, op.props));
@@ -397,6 +473,46 @@ export async function createSchematicFile(opts: {
       grid.box(op.from, op.to, checkedState(op.block, op.props), op.hollow);
     else if (op.op === 'line')
       grid.line(op.from, op.to, checkedState(op.block, op.props));
+    else if (op.op === 'machine_row') {
+      const v = alongVec(op.along);
+      const spacing = Math.max(1, op.spacing ?? 1);
+      const count = Math.max(1, Math.min(op.count, 256));
+      const props = { ...(op.props ?? {}),
+        ...(op.facing ? { facing: op.facing } : {}) };
+      for (let i = 0; i < count; i++) {
+        const pos = { x: op.at.x + v.x * i * spacing,
+          y: op.at.y, z: op.at.z + v.z * i * spacing };
+        grid.set(pos.x, pos.y, pos.z, checkedState(op.machine, props));
+        rawMachines.push({ pos, id: op.machine,
+          facing: op.facing, faces: op.faces });
+      }
+    } else if (op.op === 'cable_run') {
+      // 直角経路: x → z → y の順に1軸ずつ進む
+      const cur = { ...op.from };
+      addCable(cur.x, cur.y, cur.z, op);
+      for (const axis of ['x', 'z', 'y'] as const) {
+        while (cur[axis] !== op.to[axis]) {
+          cur[axis] += Math.sign(op.to[axis] - cur[axis]);
+          addCable(cur.x, cur.y, cur.z, op);
+        }
+      }
+    } else if (op.op === 'power_spine') {
+      const v = alongVec(op.along);
+      const length = Math.max(1, Math.min(op.length, 512));
+      const tapVec = op.tap_dir ? DIR_VEC[op.tap_dir] : null;
+      const tapLen = Math.max(1, op.tap_len ?? 1);
+      for (let i = 0; i < length; i++) {
+        const pos = { x: op.at.x + v.x * i, y: op.at.y,
+          z: op.at.z + v.z * i };
+        addCable(pos.x, pos.y, pos.z, op);
+        if (tapVec && op.tap_every && i % op.tap_every === 0) {
+          for (let j = 1; j <= tapLen; j++) {
+            addCable(pos.x + tapVec.x * j, pos.y + tapVec.y * j,
+              pos.z + tapVec.z * j, op);
+          }
+        }
+      }
+    }
     else throw new Error(`unknown schematic op: ${(op as any).op}`);
   }
   for (const b of opts.blocks ?? [])
@@ -434,6 +550,44 @@ export async function createSchematicFile(opts: {
     await unlink(file).catch(() => {});
     throw new Error('round-trip verification failed: block count mismatch');
   }
+  // manifest: 座標は .schem と同じく切り出し後のローカル座標に揃える
+  const machines: ManifestMachine[] = rawMachines.map((m) => {
+    const facing = m.facing ?? 'north';
+    const faces: Record<string, string> = {};
+    if (m.faces) {
+      for (const [k, rel] of Object.entries(m.faces)) {
+        if (rel) faces[k] = resolveFace(facing, rel);
+      }
+    }
+    return {
+      x: m.pos.x - min.x, y: m.pos.y - min.y, z: m.pos.z - min.z,
+      id: m.id,
+      ...(m.facing ? { facing: m.facing } : {}),
+      ...(Object.keys(faces).length ? { faces } : {}),
+    };
+  });
+  const commission: SchemManifest['commission'] = [];
+  try {
+    const { readFileSync, existsSync } = await import('node:fs');
+    const dirs = [fsPath.resolve(process.cwd(), 'machines'),
+      fsPath.resolve(process.cwd(), '..', 'machines')];
+    for (const m of machines) {
+      for (const d of dirs) {
+        const f = fsPath.join(d, `${m.id.replace(':', '_')}.json`);
+        if (!existsSync(f)) continue;
+        const def = JSON.parse(readFileSync(f, 'utf8'));
+        if (Array.isArray(def.commission) && def.commission.length) {
+          commission.push({ x: m.x, y: m.y, z: m.z,
+            machine: m.id, plan: def.commission });
+        }
+        break;
+      }
+    }
+  } catch { /* defs は任意: 無ければ commission は空 */ }
+  const manifest: SchemManifest = { machines,
+    cables: cableCounts, commission };
+  const manifestPath = fsPath.join(opts.dir, `${opts.name}.manifest.json`);
+  await writeFile(manifestPath, JSON.stringify(manifest, null, 2));
   return { path: file, size: info.size, solid_blocks: info.solid_blocks,
-    materials: info.materials };
+    materials: info.materials, manifest, manifest_path: manifestPath };
 }

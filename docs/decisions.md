@@ -256,3 +256,18 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - 対応スキル (deck_walk / fishing / train_drive / fly_elytra) は
   起動と結果の翻訳だけに。これで design-layering の降下候補は全て
   消化した
+
+## D34 schematic 意味プリミティブ (2026-11-01)
+
+- schematic_create に意味 op を追加: machine_row / cable_run /
+  power_spine。幾何 op と混ぜて使え、展開は決定的
+- 生成物は .schem + manifest (戻り値と <name>.manifest.json
+  サイドカー): 機械の座標・facing・面の宣言 (絶対方向に解決)、
+  ケーブル本数、commission 計画 (machines/*.json に計画がある
+  機械のみ、現状は未登録なので空)
+- 面と電力の扱い (大晃の確認への回答として明記): 面は「宣言」で
+  あって実機の読み取りではない。GUI スロットは defs で分かるが、
+  ワールド面の設定・通電・残量を読む op は無い。v1 は宣言 →
+  (計画が用意できれば) commission で寄せる方針。デフォルト面
+  テーブルの整備は実機データ待ち
+- cable_run の経路は x → z → y の直角経路 (決定的)
