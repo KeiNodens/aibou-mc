@@ -6,6 +6,7 @@ import { State } from './state.js';
 import { ModClient } from './modclient.js';
 import { Journal } from './journal.js';
 import { planSchematic } from './schematic.js';
+import { runCommission } from './commission.js';
 
 /**
  * 技能層 (design §2.1-2): skills/ 配下の .mjs を動的importし、
@@ -28,6 +29,8 @@ export interface SkillCtx {
   /** 直近のゲーム内チャット (locateコマンドの結果読み取り等に使う) */
   chatLog(n?: number): { from: string; text: string; ts: number }[];
   /** schematicファイルの建築計画 (y下から順のブロック列) */
+  /** 配置済み機械の commission を実行 (定義の plan を使用) */
+  commission(x: number, y: number, z: number): Promise<Record<string, unknown>>;
   schematicPlan(file: string, maxLayers?: number): Promise<{
     size: { x: number; y: number; z: number }; total: number;
     blocks: { x: number; y: number; z: number; id: string }[];
@@ -219,6 +222,14 @@ export class Skills {
       chatLog: (n = 50) => state.chat(n),
       schematicPlan: (file, maxLayers) =>
         planSchematic(file, { max_layers: maxLayers }),
+      commission: async (x, y, z) => {
+        try {
+          return await runCommission(mod, { x, y, z });
+        } catch (e) {
+          return { ok: false,
+            error: e instanceof Error ? e.message : String(e) };
+        }
+      },
       journal: {
         work: work ?? 'none',
         checkpoint: (step, data) =>

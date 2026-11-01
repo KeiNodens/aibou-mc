@@ -1,3 +1,47 @@
+// schematic実建築 v3 (D32/D39): 計画と回転は bridge、配置ループは
+// mod 側 BuildTask。mirror は回転の前に適用。建築後は定義に
+// commission plan を持つ機械へ自動で commission を実行する。
+import { readFileSync, readdirSync, existsSync } from 'node:fs';
+
+const MACHINES_DIR = new URL('../machines/', import.meta.url);
+let commissionBlocksCache = null;
+function commissionBlocks() {
+  if (commissionBlocksCache) return commissionBlocksCache;
+  const set = new Set();
+  try {
+    for (const f of readdirSync(MACHINES_DIR)) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const d = JSON.parse(readFileSync(new URL(f, MACHINES_DIR), 'utf8'));
+        if (d?.block && Array.isArray(d.commission) && d.commission.length) {
+          set.add(d.block);
+        }
+      } catch { /* skip broken def */ }
+    }
+  } catch { /* machines dir unreadable: no auto-commission */ }
+  commissionBlocksCache = set;
+  return set;
+}
+
+function mirrorPoint(x, z, size, mirror) {
+  if (mirror === 'x') return { x: size.x - 1 - x, z };
+  if (mirror === 'z') return { x, z: size.z - 1 - z };
+  return { x, z };
+}
+function mirrorProps(props, mirror) {
+  if (!props) return props;
+  const out = { ...props };
+  if (out.facing) {
+    if (mirror === 'x') {
+      out.facing = { east: 'west', west: 'east' }[out.facing] ?? out.facing;
+    }
+    if (mirror === 'z') {
+      out.facing = { north: 'south', south: 'north' }[out.facing] ?? out.facing;
+    }
+  }
+  return out;
+}
+
 // schematic実建築 v3 (D32): 計画と回転は bridge、配置ループは
 // mod 側 BuildTask が消化する (D23/S4 の v2 から移行)。
 // - rotation (0/90/180/270): 座標と facing/axis props を回転 (bridge)
@@ -44,10 +88,12 @@ export default {
     y: { type: 'integer', required: true, description: 'origin Y' },
     z: { type: 'integer', required: true, description: 'origin Z' },
     rotation: { type: 'integer', required: false, description: '0/90/180/270 (clockwise from above, default 0)' },
+    mirror: { type: 'string', required: false, description: 'mirror axis before rotation: x | z (default none)' },
+    commission: { type: 'boolean', required: false, description: 'after building, run commission plans for placed machines whose definitions have one (default true)' },
     max_blocks: { type: 'integer', required: false, description: 'max placements this run (default 64)' },
     mode: { type: 'string', required: false, description: 'auto (default) / together / solo — together: per-batch progress + material shortage lines' },
   },
-  async run(ctx, { file, x, y, z, rotation = 0, max_blocks = 64, mode = 'auto' }) {
+  async run(ctx, { file, x, y, z, rotation = 0, max_blocks = 64, mode = 'auto', mirror, commission = true }) {
     // 同伴判定 (D36): 近くにプレイヤーがいたら進捗を逐次知らせる
     let together = mode === 'together';
     if (mode === 'auto') {
@@ -61,9 +107,14 @@ export default {
     if (!plan?.blocks?.length) return { done: false, reason: 'empty_plan' };
     const rot = [0, 90, 180, 270].includes(rotation) ? rotation : 0;
     const blocks = plan.blocks.map((b) => {
-      if (!rot) return b;
-      const p = rotatePoint(b.x, b.z, plan.size, rot);
-      return { ...b, x: p.x, z: p.z, props: rotateProps(b.props, rot) };
+      let out = b;
+      if (mirror === 'x' || mirror === 'z') {
+        const mp = mirrorPoint(b.x, b.z, plan.size, mirror);
+        out = { ...out, x: mp.x, z: mp.z, props: mirrorProps(b.props, mirror) };
+      }
+      if (!rot) return out;
+      const p = rotatePoint(out.x, out.z, plan.size, rot);
+      return { ...out, x: p.x, z: p.z, props: rotateProps(out.props, rot) };
     });
     const placements = blocks
       .filter((b) => !AIRS.has(b.id))
@@ -110,6 +161,27 @@ export default {
       }
       if (doneEv?.state !== 'succeeded') break;
     }
+    // 建築後 commission (D39): 定義に plan を持つ機械が置かれて
+    // いたら、その場で初期設定まで済ませる
+    const commissioned = [];
+    if (commission && (placed + skipped) > 0 && ctx.commission) {
+      const targets = commissionBlocks();
+      if (targets.size) {
+        const seenPos = new Set();
+        for (const pl of placements) {
+          if (!targets.has(pl.id)) continue;
+          const key = `${pl.x},${pl.y},${pl.z}`;
+          if (seenPos.has(key)) continue;
+          seenPos.add(key);
+          if (commissioned.length >= 16) break;
+          const r = await ctx.commission(pl.x, pl.y, pl.z).catch(() => null);
+          commissioned.push({ x: pl.x, y: pl.y, z: pl.z, block: pl.id, ok: !!r?.ok });
+        }
+        if (commissioned.length && commissioned.every((c) => c.ok)) {
+          await ctx.say('置いた機械の設定も済ませたよ').catch(() => {});
+        }
+      }
+    }
     const remaining = plan.total - placed - skipped;
     await ctx.say(
       `建築: ${placed}個置いた (既設${skipped} / 残り約${remaining})` +
@@ -120,6 +192,7 @@ export default {
       missing: missingItems.size, missing_items: [...missingItems],
       mismatched: mismatchedAt.slice(0, 20), mismatched_count: mismatchedCount,
       remaining, total: plan.total, via: 'build_task',
+      commissioned,
     };
   },
 };

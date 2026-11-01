@@ -8,6 +8,7 @@ import { Skills } from './skills.js';
 import { createSchematicFile, inspectSchematic, planSchematic } from './schematic.js';
 import type { SchemOp } from './schematic.js';
 import { Journal } from './journal.js';
+import { runCommission } from './commission.js';
 import { RunHold, HoldKind } from './runhold.js';
 import { QuestGraph } from './questgraph.js';
 import { Autonomy } from './autonomy.js';
@@ -1867,27 +1868,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  // ---- D30: commission (配置後の機械設定) ----
-  let machineDefsCache: Array<Record<string, unknown>> | null = null;
-  const loadMachineDefs = async () => {
-    if (machineDefsCache) return machineDefsCache;
-    const defs: Array<Record<string, unknown>> = [];
-    for (const dir of [path.resolve(process.cwd(), 'machines'),
-      path.resolve(process.cwd(), '..', 'machines')]) {
-      try {
-        const { readdir } = await import('node:fs/promises');
-        for (const f of await readdir(dir)) {
-          if (!f.endsWith('.json')) continue;
-          try {
-            defs.push(JSON.parse(await readFile(path.join(dir, f), 'utf8')));
-          } catch { /* skip broken def */ }
-        }
-        if (defs.length) break;
-      } catch { /* try next dir */ }
-    }
-    machineDefsCache = defs;
-    return defs;
-  };
+  // ---- D30: commission (配置後の機械設定、実行器は commission.ts) ----
   reg(
     'commission',
     {
@@ -1907,55 +1888,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
     async ({ x, y, z, plan }) => {
       try {
-        let block: string | undefined;
-        let def: Record<string, unknown> | undefined;
-        if (x !== undefined && y !== undefined && z !== undefined) {
-          const bs = (await mod.call('obs.block_state', { x, y, z })) as
-            { id?: string; block?: string };
-          block = bs?.id ?? bs?.block;
-          const defs = await loadMachineDefs();
-          def = defs.find((d) => d.block === block);
-        }
-        const steps = (plan ?? (def?.commission as unknown[] | undefined)) as
-          Array<Record<string, unknown>> | undefined;
-        if (!steps?.length) {
-          return json({ ok: false, block,
-            note: 'no commission plan (definition has none and no inline plan given)' });
-        }
-        const results: Array<Record<string, unknown>> = [];
-        for (const step of steps) {
-          const doWhat = String(step.do ?? '');
-          try {
-            let r: unknown = 'ok';
-            if (doWhat === 'open') {
-              r = await mod.call('use_item', { x, y, z });
-            } else if (doWhat === 'button') {
-              r = await mod.call('container.button', { button_id: step.id });
-            } else if (doWhat === 'click_slot') {
-              r = await mod.call('container.click', {
-                slot: step.slot, button: step.button ?? 0,
-                action: step.action ?? 'pickup' });
-            } else if (doWhat === 'screen_click') {
-              const p: Record<string, unknown> = {};
-              for (const k of ['index', 'text', 'x', 'y', 'sidebar']) {
-                if (step[k] !== undefined) p[k] = step[k];
-              }
-              r = await mod.call('screen.click', p);
-            } else if (doWhat === 'wait') {
-              await new Promise((res) => setTimeout(res, Number(step.ms ?? 500)));
-            } else if (doWhat === 'close') {
-              r = await mod.call('container.close');
-            } else {
-              throw new Error(`unknown step: ${doWhat}`);
-            }
-            results.push({ do: doWhat, ok: true, result: r });
-          } catch (e) {
-            results.push({ do: doWhat, ok: false,
-              error: e instanceof Error ? e.message : String(e) });
-            return json({ ok: false, block, steps: results });
-          }
-        }
-        return json({ ok: true, block, steps: results });
+        return json(await runCommission(mod, { x, y, z, plan }));
       } catch (e) {
         return err(e);
       }
