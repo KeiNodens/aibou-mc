@@ -1,0 +1,18 @@
+{
+  "id": "create_press_depot",
+  "recipeTypes": ["create:pressing"],
+  "station": { "block": "create:depot" },
+  "collect_block": "create:depot",
+  "inputs": [
+    { "item": "minecraft:iron_ingot", "per": 1 }
+  ],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "place_on" },
+    { "do": "wait_transform", "timeout_s": 45 },
+    { "do": "collect" }
+  ],
+  "draft": true,
+  "hint": "上にプレス (mechanical press) があり、動力が来ているか",
+  "note": "depot に置くとプレスが自動で加工する想定。回収は depot を右クリック"
+}

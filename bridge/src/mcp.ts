@@ -489,6 +489,26 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'projecte_status',
+    {
+      description:
+        'Read the bot player\'s own ProjectE state via the knowledge ' +
+        'provider (reflection, soft dependency): EMC balance and learned ' +
+        'items. Errors with UNSUPPORTED when ProjectE is absent. The ' +
+        'knowledge and EMC belong to the bot player, separate from the ' +
+        'human player\'s progression (D22).',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('projecte.status', {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'work_journal',
     {
       description:

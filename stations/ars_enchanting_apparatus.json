@@ -1,0 +1,16 @@
+{
+  "id": "ars_enchanting_apparatus",
+  "recipeTypes": ["ars_nouveau:enchanting_apparatus"],
+  "station": { "block": "ars_nouveau:enchanting_apparatus" },
+  "inputs": [
+    { "item": "minecraft:book", "per": 1 }
+  ],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "place_on" },
+    { "do": "wait_transform", "timeout_s": 45 },
+    { "do": "collect" }
+  ],
+  "hint": "周囲の台座 (arcane pedestal) に材料が置かれているか、ソース供給があるか",
+  "note": "台座への材料配置はプレイヤー担当 (v1)。中央に置く試薬だけ bot が置く"
+}

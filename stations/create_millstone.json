@@ -1,0 +1,18 @@
+{
+  "id": "create_millstone",
+  "recipeTypes": ["create:milling"],
+  "station": { "block": "create:millstone" },
+  "inputs": [
+    { "item": "minecraft:wheat", "per": 1 }
+  ],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "toss_inputs" },
+    { "do": "wait_transform", "timeout_s": 60 },
+    { "do": "right_click_station" },
+    { "do": "collect" }
+  ],
+  "draft": true,
+  "hint": "石臼が回っているか (動力の接続と回転方向)",
+  "note": "生成物は右クリックで取り出す想定。input は差し替え可"
+}

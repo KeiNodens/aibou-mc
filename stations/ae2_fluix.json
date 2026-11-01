@@ -1,0 +1,18 @@
+{
+  "id": "ae2_fluix",
+  "recipeTypes": [],
+  "station": { "block": "minecraft:water", "radius": 24 },
+  "inputs": [
+    { "item": "appliedenergistics2:charged_certus_quartz_crystal", "per": 1 },
+    { "item": "minecraft:redstone", "per": 1 },
+    { "item": "minecraft:quartz", "per": 1 }
+  ],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "toss_inputs" },
+    { "do": "wait_transform", "timeout_s": 30 },
+    { "do": "collect" }
+  ],
+  "hint": "水たまりに3種が揃って落ちているか確認を (帯電Certus・レッドストーン・ネザークォーツ)",
+  "note": "水中反応で fluix crystal x2 が生じる AE2 のワールド内レシピ"
+}

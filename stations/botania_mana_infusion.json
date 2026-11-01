@@ -1,0 +1,16 @@
+{
+  "id": "botania_mana_infusion",
+  "recipeTypes": ["botania:mana_infusion"],
+  "station": { "block": "botania:mana_pool" },
+  "inputs": [
+    { "item": "minecraft:iron_ingot", "per": 1 }
+  ],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "toss_inputs" },
+    { "do": "wait_transform", "timeout_s": 30 },
+    { "do": "collect" }
+  ],
+  "hint": "プールにマナが足りていないか、触媒 (変換に必要なブロック) がプールの下に無い可能性",
+  "note": "input は呼び出し側で対象アイテムに差し替える (デフォルトは manasteel の例)"
+}

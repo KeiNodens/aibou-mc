@@ -1,0 +1,17 @@
+{
+  "id": "tinkers_casting",
+  "recipeTypes": ["tconstruct:casting"],
+  "station": { "block": "tconstruct:seared_faucet" },
+  "collect_block": "tconstruct:casting_table",
+  "inputs": [],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "right_click_station" },
+    { "do": "wait_transform", "timeout_s": 45 },
+    { "do": "collect" }
+  ],
+  "draft": true,
+  "allow_no_output": false,
+  "hint": "スメルタリーに液体が入っているか、蛇口の下に鋳造台と鋳型があるか",
+  "note": "inputs が無いのは「注ぐだけ」の工程のため。成否は collect で鋳造台から取り出したか + インベントリ差分で見る (液体が減るだけの場合は produced が出ず done=false になる点に注意)"
+}

@@ -1,0 +1,15 @@
+{
+  "id": "botania_petal_apothecary",
+  "recipeTypes": ["botania:petal_apothecary"],
+  "station": { "block": "botania:petal_apothecary" },
+  "inputs": [],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "toss_inputs" },
+    { "do": "wait_transform", "timeout_s": 30 },
+    { "do": "collect" }
+  ],
+  "draft": true,
+  "hint": "アポセカリーに水が入っているか (水入りはプレイヤー担当)、最後に種を投げ入れたか",
+  "note": "花びら類は input 引数で渡す。仕上げの種 (minecraft:wheat_seeds) も材料の最後に含めること。block id は実機確認待ち"
+}

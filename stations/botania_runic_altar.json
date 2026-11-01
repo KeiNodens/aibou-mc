@@ -1,0 +1,16 @@
+{
+  "id": "botania_runic_altar",
+  "recipeTypes": ["botania:runic_altar"],
+  "station": { "block": "botania:runic_altar" },
+  "inputs": [],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "toss_inputs" },
+    { "do": "wait_transform", "timeout_s": 120 },
+    { "do": "right_click_station", "with": "botania:twig_wand" },
+    { "do": "collect" }
+  ],
+  "draft": true,
+  "hint": "マナ供給 (スプレッダーの向きと祭壇へのリンク) と living rock の同梱を確認",
+  "note": "材料は input 引数で。マナが満ちてから杖で右クリックして確定する"
+}

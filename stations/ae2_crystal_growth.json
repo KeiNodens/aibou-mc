@@ -1,0 +1,17 @@
+{
+  "id": "ae2_crystal_growth",
+  "recipeTypes": [],
+  "station": { "block": "minecraft:water", "radius": 24 },
+  "inputs": [
+    { "item": "appliedenergistics2:certus_quartz_crystal_seed", "per": 1 }
+  ],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "toss_inputs" },
+    { "do": "wait_transform", "timeout_s": 600 },
+    { "do": "collect" }
+  ],
+  "draft": true,
+  "hint": "種アイテムの id と育成方式は実機で要確認 (1.20.1 の AE2 は芽生え方式が主流。種方式が残っているか recipe_lookup / カタログで確認)",
+  "note": "種の id は候補。Crystal Growth Accelerator 等の設備はプレイヤー担当"
+}
