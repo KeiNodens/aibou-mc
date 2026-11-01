@@ -78,3 +78,35 @@ Silent Gear)。GregTech / Modern Industrialization も No Frills には不在。
    届く可能性の確認)
 3. 本番パックの「定義あり 31」は実機スポットチェックの費用対効果が良い
    (特に Energized Power / Forestry は定義数が多い)
+
+## 追記 (2026-11-01 午後): TFC / Monifactory 監査 + D25 対応化
+
+### Essential TerraFirmaCraft (18 jar)
+
+- TerraFirmaCraft 本体: D25 で def 3 件 (barrel / crucible / anvil) +
+  station 2 件 (quern / charcoal forge) を用意し「部分対応」に。
+  anvil の鍛造ミニゲームと knapping は Screen 操作が本体で、
+  def は材料 slot の保険。pit kiln / bloomery は手順が特殊な
+  ワールド内工程で、経路メモ止まり
+- Jade は look_info で検証済み扱い。残りは Patchouli 等の基盤と
+  TFC アドオン (OreHints、water flasks 等は汎用経路・受動系)
+
+### Monifactory (217 jar)
+
+- ◎ AE2 系・JEI は検証済み資産がそのまま効く
+- GregTech (gtceu): コア 6 機の draft def を用意 (D25)。
+  機械種は膨大だが in/out + バッテリーの共通型 + heuristic 経路で
+  全体をカバーする方針。GT アドオン (monilabs 等) は同族扱い
+- Hostile Neural Networks: simulation chamber の def を用意
+- 残りのコンテンツ系 (Extended Crafting、NuclearCraft、Flux
+  Networks、Laser IO、Packaged 系、Quark 等) は汎用 container /
+  レシピ / Screen 経路を主経路として台帳に明記。大半は
+  ライブラリ・クライアント・性能系
+
+### D25 対応化後の状態
+
+本番・ATM9・TFC・Monifactory の全コンテンツ mod に、def /
+station / 専用 op・スキル / 汎用経路のいずれかが存在する状態に
+なった (docs/mod-support.md の D25 節)。残る対象外は Create
+コントラプション制御と Integrated Dynamics のロジック構築のみ
+(従来裁定)。実機検証は全てバッチ送り。

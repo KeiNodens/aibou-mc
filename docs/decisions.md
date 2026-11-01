@@ -163,3 +163,10 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - **決定**: FD を3経路で扱う。作物は farm スキル拡張 (キャベツ/タマネギは dig+植え直し、トマトは右クリック収穫、米は対象外)、まな板・ストーブ・スキレットは world_craft のステーション定義、cooking pot は専用 cook スキル (レシピ駆動、draft)
 - **理由**: ユーザーから農作物と FD 料理の対応状況の質問があり、現行ギャップ (farm はバニラ5種のみ、FD は機械定義のみ) を埋めるため。FD の調理系は「GUI の鍋」と「ワールド内操作」に分かれ、既存の枠組み (world_craft / レシピ解決) に素直に乗る
 - **根拠**: ユーザーの質問 (2026-11-01) + mod-support.md の FD 棚卸し (cooking_pot [d]、cutting_board/skillet はワールド内操作型)
+
+## D25. 全 mod 対応化 (2026-11-01)
+
+- **決定**: 監査対象の全パック (本番 1.20.1 / ATM9 No Frills・To the Sky / Essential TerraFirmaCraft / Monifactory) の全コンテンツ mod に、aibou-mc 側の対応経路 (機械 def / station 定義 / 専用 op・スキル / 汎用経路の明記) をコードとして用意する。実機検証は従来通りバッチ送り
+- **線引き**: Create のコントラプション制御 (D21) と Integrated Dynamics のロジック構築は従来裁定どおり対象外。multiblock の「形成」は設計図ビルド経路、形成後の操作は def/station で扱う
+- **実装**: 機械 def +31 件 (計 143)、station +9 件 (計 21)、Refined Storage の汎用リフレクション probe op、Waystones の warp スキル、Ad Astra 酸素チェーンの def、TFC / GregTech のコア def
+- **根拠**: ユーザー指示「全部対応アリにしたい。実機検証はまだいいけど」(2026-11-01) + 同日の mod 対応監査

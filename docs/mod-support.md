@@ -268,3 +268,66 @@ Powah / Iron Furnaces / Blood Magic 等はGUI構造が単純なのでdef追加�
 - `jei_search`の`filtered_count`は非同期絞込みのため直後は前回値。
   同クエリ再送または数秒待って再読。
 - EscキーはPauseScreenをトグルするため、`screen`状態確認後に送信すること。
+
+## D25 全 mod 対応化 (2026-11-01 追記)
+
+監査 (mod-support-audit-2026-11-01.md) を受け、全コンテンツ mod に
+対応経路を用意した。いずれも実機未検証 (draft) で、確定は
+discover/probe パイプラインと実機バッチで行う。
+
+### 追加した機械 def (計 143 件に)
+
+- tconstruct: smeltery / melter (形成済み前提。成果物は流体→鋳造)
+- ars_nouveau: imbuement_chamber (GUI が開かない場合の保険。本命は station)
+- evolvedmekanism: solidification_chamber (同上)
+- stevescarts: cart_assembler (最小定義)
+- rftoolsbuilder: builder (設定主体。実建築は build_schematic)
+- productivebees: centrifuge / advanced_beehive
+- bigreactors (Extreme Reactors): reactor_access_port
+- hostilenetworks: simulation_chamber
+- silentgear: salvager (ギアのクラフト自体は通常レシピ経路)
+- pneumaticcraft: pressure_chamber / air_compressor (圧力網はインフラ)
+- evilcraft: blood_infuser
+- ad_astra: oxygen_loader / oxygen_distributor / energizer /
+  fuel_refinery / water_pump / coal_generator / cryo_freezer /
+  nasa_workbench (酸素チェーンを含む未定義分を一括追加)
+- tfc: barrel / crucible / anvil (鍛造ミニゲームは Screen ops が本体)
+- gtceu: macerator / electric_furnace / compressor / extractor /
+  alloy_smelter / bender (共通型 + heuristic で全機械種をカバーする方針)
+
+### 追加した world_craft station (計 21 件に)
+
+botania_mana_enchanter / botania_brewery / ars_imbuement /
+draconicevolution_fusion / occultism_ritual / naturesaura_altar /
+create_basin / tfc_quern / tfc_charcoal_forge
+
+### 専用 op / スキル
+
+- `refinedstorage.status` op + `refinedstorage_status` tool:
+  開いている RS グリッドを汎用リフレクションで走査し在庫を読む probe
+- `warp` スキル: Waystones の選択 Screen を名前で選んでワープ
+
+### 汎用経路を主経路とする mod (台帳への明記)
+
+- アイテム主体 (use_item / 装備 / 攻撃が通常経路で効く): SlashBlade、
+  Iron Jetpacks、Shrink、Reliquary の携帯品、Silent Gear 製ギア、
+  Redstone Arsenal、Mahou Tsukai / Iron's Spells の術具
+- レシピ主体 (recipe.lookup + 通常クラフトで成立): Quark、
+  Supplementaries、Extended Crafting、Silent Gear、Croptopia /
+  Pam's の食料、FD 系アドオン (cooking/cutting レシピ型が共通)
+- 汎用 container / Screen で届く: Laser IO (カード GUI)、
+  Flux Networks (設定 Screen)、Packaged 系 (自動包装機)、
+  NuclearCraft 系機械、Waystones (warp スキル化)、
+  Occultism の storage (携帯端末 menu)、Hostile Neural Networks の
+  deep learner (携帯 menu)
+- ワールド・受動系: Cataclysm 等のボス (通常戦闘)、Allthemodium 等の
+  素材 (通常採掘)、Solar Flux 等の発電 (設置済み前提)、
+  Lost Cities 等のワールド生成、Drawers 系 (右クリック出し入れ)
+- TFC 固有: pit kiln / bloomery は手順が特殊なワールド内工程
+  (経路メモ止まり)、knapping / anvil 鍛造は Screen 操作が本体
+
+### 対象外 (従来裁定の維持)
+
+- Create のコントラプション制御 (列車・可動構造物)
+- Integrated Dynamics のロジックネットワーク構築
+  (端末 GUI の閲覧自体は Screen ops で届く)
