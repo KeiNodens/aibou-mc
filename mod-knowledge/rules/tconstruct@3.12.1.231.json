@@ -1,0 +1,129 @@
+{
+ "extracted_at": "2026-11-01",
+ "mod": "tconstruct",
+ "rules": [
+  {
+   "id": "fluid_units",
+   "quote": "public static final int INGOT = 90;",
+   "source_file": "src/main/java/slimeknights/tconstruct/library/recipe/FluidValues.java",
+   "source_line": 16,
+   "topic": "Tinkers' fluid unit system in mB: 1 metal ingot = 90, 1 nugget = 10, 1 metal block = 810, 1 gem = 100, 1 gem shard = 25, 1 brick = 250, 1 glass block (or obsidian) = 1000; these differ from the 100/1000 mB conventions of most other mods, so cross-mod fluid math must convert",
+   "value": {
+    "brick": 250,
+    "gem": 100,
+    "glass_block": 1000,
+    "ingot": 90,
+    "metal_block": 810,
+    "nugget": 10,
+    "unit": "mB"
+   }
+  },
+  {
+   "id": "smeltery_capacity",
+   "quote": "private static final int CAPACITY_PER_BLOCK = FluidValues.INGOT * 12;",
+   "source_file": "src/main/java/slimeknights/tconstruct/smeltery/block/entity/controller/SmelteryBlockEntity.java",
+   "source_line": 26,
+   "topic": "Smeltery tank capacity: 1080 mB per internal (interior) block of the structure, i.e. 12 ingots per interior block; capacity grows with the interior volume, not with wall count",
+   "value": {
+    "mb_per_interior_block": 1080,
+    "unit": "mB"
+   }
+  },
+  {
+   "id": "smeltery_fuel_scaling",
+   "quote": "private static final int BLOCKS_PER_FUEL = 15;",
+   "source_file": "src/main/java/slimeknights/tconstruct/smeltery/block/entity/controller/SmelteryBlockEntity.java",
+   "source_line": 28,
+   "topic": "Smeltery fuel consumption scales with structure size: every 15 wall blocks add 1 to the fuel rate multiplier, so oversized shells burn fuel faster for the same interior volume",
+   "value": {
+    "wall_blocks_per_fuel_step": 15
+   }
+  },
+  {
+   "id": "lava_fuel_data",
+   "quote": "\"temperature\": 1000",
+   "source_file": "src/generated/resources/data/tconstruct/recipes/smeltery/melting/fuel/lava.json",
+   "source_line": 9,
+   "topic": "Smeltery fuel data (jar defaults, datapack-overridable): lava burns at temperature 1000, one burn cycle consumes 50 mB over a duration of 100 ticks at rate 10; a fuel's temperature caps which materials can melt (melting temperature must be below fuel temperature)",
+   "value": {
+    "amount_mb_per_cycle": 50,
+    "duration_ticks": 100,
+    "lava_temperature": 1000,
+    "rate": 10,
+    "unit": "degrees C (mod scale)"
+   }
+  },
+  {
+   "id": "melter_capacity",
+   "quote": "private static final int TANK_CAPACITY = FluidValues.INGOT * 24;",
+   "source_file": "src/main/java/slimeknights/tconstruct/smeltery/block/entity/controller/MelterBlockEntity.java",
+   "source_line": 46,
+   "topic": "Single-block melter tank capacity: 2160 mB (24 ingots); the melter processes one item at a time and is the early-game alternative to the smeltery",
+   "value": {
+    "capacity": 2160,
+    "unit": "mB"
+   }
+  },
+  {
+   "id": "melting_recipe_data",
+   "quote": "\"temperature\": 800, \"time\": 60",
+   "source_file": "src/generated/resources/data/tconstruct/recipes/smeltery/melting/metal/iron/ingot.json",
+   "source_line": 9,
+   "topic": "Melting is recipe data: each entry states input, fluid result amount, required temperature and time in ticks; example default: an iron ingot melts to 90 mB molten iron at 800 degrees in 60 ticks; lava (1000 degrees) can melt iron but not materials whose temperature exceeds 1000",
+   "value": {
+    "example_iron_ingot": {
+     "mb": 90,
+     "temperature": 800,
+     "time_ticks": 60
+    }
+   }
+  },
+  {
+   "id": "alloying_is_data",
+   "quote": "\"type\": \"tconstruct:alloy\",",
+   "source_file": "src/generated/resources/data/tconstruct/recipes/smeltery/alloys/molten_bronze.json",
+   "source_line": 1,
+   "topic": "Alloys are defined as data recipes under data/tconstruct/recipes/smeltery/alloys/ (bronze, brass, constantan, amethyst bronze, bendalloy, cinderslime and more): an alloy forms automatically in the tank when its component fluids are present in the stated ratio and total; exact ratios live in those JSON files (layer 1 data), not in code constants",
+   "value": {
+    "location": "data/tconstruct/recipes/smeltery/alloys/"
+   }
+  },
+  {
+   "id": "casting_amounts_and_cooling_are_data",
+   "quote": "protected static final LoadableField<Integer,ItemCastingRecipe> COOLING_TIME_FIELD = IntLoadable.FROM_ONE.requiredField(\"cooling_time\", ItemCastingRecipe::getCoolingTime);",
+   "source_file": "src/main/java/slimeknights/tconstruct/library/recipe/casting/ItemCastingRecipe.java",
+   "source_line": 28,
+   "topic": "Casting recipes state their fluid amount and cooling_time in data; there is no global cooling formula, so per-cast wait times must be read from the recipe (layer 1) — a cast that looks stuck is usually still inside its cooling_time",
+   "value": {
+    "fields": [
+     "fluid amount",
+     "cooling_time (ticks)"
+    ]
+   }
+  },
+  {
+   "id": "material_stats_are_data",
+   "quote": "data/tconstruct/tinkering/materials/{definition,stats,recipes}/",
+   "source_file": "src/generated/resources/data/tconstruct/tinkering/materials/definition/iron.json",
+   "source_line": 1,
+   "topic": "Tool material definitions, stats (durability, mining speed, attack, traits) and material recipes are datapack data under data/tconstruct/tinkering/materials/, not code; answer material questions from the live-extracted data (layer 2) of the actual pack, since packs and addons override them",
+   "value": {
+    "location": "data/tconstruct/tinkering/materials/"
+   }
+  },
+  {
+   "id": "foundry_ore_rate",
+   "quote": "// if we have an ore rate, apply it to the output for the foundry",
+   "source_file": "src/main/java/slimeknights/tconstruct/library/recipe/melting/DisplayMeltingRecipe.java",
+   "source_line": 132,
+   "topic": "Melting recipes may carry an ore rate and byproducts that apply in the foundry (the ore-processing variant of the smeltery): the same input yields more primary fluid plus byproduct fluids in a foundry than in a smeltery; the rates are per-recipe data",
+   "value": {
+    "applies_to": "foundry (ore smeltery variant)"
+   }
+  }
+ ],
+ "source_commit": "a5a0324954f71b7620f766fadea0a0adf2984ae0",
+ "source_ref": "tag v3.12.1.231 (scheme=tag)",
+ "source_repo": "https://github.com/SlimeKnights/TinkersConstruct",
+ "version": "3.12.1.231"
+}
