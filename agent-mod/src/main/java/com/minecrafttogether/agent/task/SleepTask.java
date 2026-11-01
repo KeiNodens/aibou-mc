@@ -39,6 +39,13 @@ public class SleepTask extends AgentTask {
         }
 
         if (!started) {
+            // 次元ガード (D44): ベッドが機能しない次元 (ネザー等)
+            // では近づきもしない。DimensionType の性質で判定する
+            // ので未知の次元にも効く (爆発事故の防止)
+            if (!p.level().dimensionType().bedWorks()) {
+                fail("DIMENSION", "beds do not work in this dimension");
+                return;
+            }
             b.getCustomGoalProcess().setGoalAndPath(new GoalNear(bed, 2));
             started = true;
             return;

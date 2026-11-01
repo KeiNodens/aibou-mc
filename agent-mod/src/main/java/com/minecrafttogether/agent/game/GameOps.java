@@ -5,6 +5,7 @@ import com.google.gson.JsonObject;
 import com.minecrafttogether.agent.AgentMod;
 import com.minecrafttogether.agent.task.AgentTask;
 import com.minecrafttogether.agent.task.CombatTask;
+import com.minecrafttogether.agent.task.ShootTask;
 import com.minecrafttogether.agent.task.BuildTask;
 import com.minecrafttogether.agent.task.WaitConditionTask;
 import com.minecrafttogether.agent.task.DeckFollowTask;
@@ -84,6 +85,7 @@ public final class GameOps {
             case "interact" -> interact(params);
             case "entity.attack" -> entityAttack(params);
             case "combat.engage" -> combatEngage(params);
+            case "combat.shoot" -> combatShoot(params);
             case "wait.condition" -> waitCondition(params);
             case "build.place" -> buildPlace(params);
             case "contraption.follow_local" -> contraptionFollowLocal(params);
@@ -2010,6 +2012,37 @@ public final class GameOps {
     }
 
     /**
+     * combat.shoot (D44 基盤): 遠距離攻撃タスクを起動する。
+     * entity_id または固定座標 (x/z 必須、y は省略時 bot の目の高さ)。
+     */
+    private static JsonObject combatShoot(JsonObject params) throws ApiError {
+        LocalPlayer p = requirePlayer();
+        Integer entityId = params.has("entity_id")
+            ? params.get("entity_id").getAsInt() : null;
+        Vec3 fixed = null;
+        if (entityId == null) {
+            if (!params.has("x") || !params.has("z")) {
+                throw new ApiError("BAD_REQUEST",
+                    "combat.shoot needs entity_id or x/z");
+            }
+            double ty = params.has("y") ? params.get("y").getAsDouble()
+                : p.getEyePosition().y;
+            fixed = new Vec3(params.get("x").getAsDouble(), ty,
+                params.get("z").getAsDouble());
+        }
+        int maxShots = params.has("max_shots")
+            ? params.get("max_shots").getAsInt() : 5;
+        int maxSeconds = params.has("max_seconds")
+            ? params.get("max_seconds").getAsInt() : 60;
+        ShootTask t = new ShootTask(TaskManager.get().newId("shoot"),
+            entityId, fixed, maxShots, maxSeconds);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
+        return r;
+    }
+
+    /**
      * wait.condition (D32): 条件待ちタスク。conditions は
      * WaitConditionTask の javadoc 参照。timeout でも SUCCEEDED で
      * reason=timeout を返す (待つこと自体は失敗ではない)。
@@ -2561,6 +2594,20 @@ public final class GameOps {
         r.addProperty("health", p.getHealth());
         r.addProperty("hunger", p.getFoodData().getFoodLevel());
         r.addProperty("air", p.getAirSupply());
+
+        // 状態異常 (D44): ウィザー・浮遊・採掘疲労など、戦闘と
+        // 探索の判断に要る。LLM が「なぜ削れるか」を見られるように
+        JsonArray effects = new JsonArray();
+        for (var ei : p.getActiveEffects()) {
+            JsonObject e = new JsonObject();
+            ResourceLocation ek = BuiltInRegistries.MOB_EFFECT
+                .getKey(ei.getEffect());
+            e.addProperty("id", ek != null ? ek.toString() : "unknown");
+            e.addProperty("amplifier", ei.getAmplifier());
+            e.addProperty("duration_ticks", ei.getDuration());
+            effects.add(e);
+        }
+        r.add("effects", effects);
         r.addProperty("on_ground", p.onGround());
         r.addProperty("name", p.getGameProfile().getName());
 

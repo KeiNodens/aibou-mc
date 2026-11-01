@@ -22,6 +22,7 @@ public final class AgentWsCapabilities {
             "interact",
             "entity.attack",
             "combat.engage",
+            "combat.shoot",
             "wait.condition",
             "build.place",
             "contraption.follow_local",

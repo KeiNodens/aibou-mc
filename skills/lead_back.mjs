@@ -20,6 +20,17 @@ export default {
       trail = JSON.parse(await readFile(TRAIL_URL, 'utf8'));
     } catch { /* trail なし */ }
     const crumbs = Array.isArray(trail?.crumbs) ? trail.crumbs : [];
+    // 次元が違えば足跡は別世界 (D44): 誤案内せず申告する
+    if (trail?.dim) {
+      const st = await ctx.state().catch(() => null);
+      if (st?.dimension && st.dimension !== trail.dim) {
+        await ctx.say('その足跡は別の次元のものだね。今の次元には無いよ');
+        return {
+          done: false, reason: 'different_dimension',
+          trail_dim: trail.dim, current_dim: st.dimension,
+        };
+      }
+    }
     const thinned = [];
     for (let i = crumbs.length - 1; i >= 0; i--) {
       const c = crumbs[i];

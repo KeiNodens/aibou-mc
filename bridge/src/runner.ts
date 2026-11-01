@@ -109,6 +109,9 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
         at: new Date().toISOString(),
         ...(pos ? { pos } : {}),
         ...(d.cause ? { cause: d.cause } : {}),
+        // 次元 (D44): recover が次元跨ぎで誤案内しないように
+        ...(typeof d.dimension === 'string'
+          ? { dimension: d.dimension } : {}),
       });
     }
     if (e.name === 'reflex') {

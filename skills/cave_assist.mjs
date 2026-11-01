@@ -148,6 +148,7 @@ export default {
     const deadline = Date.now() + durMs;
     const st0 = await ctx.state().catch(() => null);
     const botName = st0?.name;
+    const entryDim = st0?.dimension ?? null;
     const entry = st0?.pos ? { x: Math.floor(st0.pos.x), y: Math.floor(st0.pos.y), z: Math.floor(st0.pos.z) } : null;
     const crumbs = entry ? [entry] : [];
     if (entry) {
@@ -168,7 +169,7 @@ export default {
     let tick = 0;
     const saveTrail = async () => {
       try {
-        await writeFile(TRAIL_URL, JSON.stringify({ at: new Date().toISOString(), entry, crumbs }, null, 2));
+        await writeFile(TRAIL_URL, JSON.stringify({ at: new Date().toISOString(), dim: entryDim, entry, crumbs }, null, 2));
       } catch { /* 保存失敗は致命的でない */ }
       ctx.journal?.note('cave_trail', { entry, crumbs: crumbs.length });
     };

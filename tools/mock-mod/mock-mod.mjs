@@ -161,6 +161,15 @@ wss.on('connection', (ws) => {
         tasks.set(taskId, { state: 'succeeded', result });
         send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
       }, 500);
+    } else if (m === 'combat.shoot') {
+      const taskId = `shoot-t${++taskSeq}`;
+      tasks.set(taskId, { state: 'running' });
+      reply(ws, msg, { task_id: taskId });
+      setTimeout(() => {
+        const result = { reason: 'done', shots: p.max_shots ?? 5 };
+        tasks.set(taskId, { state: 'succeeded', result });
+        send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
+      }, 500);
     } else if (m === 'wait.condition') {
       const taskId = `wait-t${++taskSeq}`;
       tasks.set(taskId, { state: 'running' });
