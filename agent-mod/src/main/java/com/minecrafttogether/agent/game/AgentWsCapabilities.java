@@ -30,6 +30,8 @@ public final class AgentWsCapabilities {
             "container.close",
             "inventory.resync",
             "recipe.lookup",
+            "registry.blocks",
+            "projecte.status",
             "craft",
             "emote",
             "respawn",
@@ -81,7 +83,8 @@ public final class AgentWsCapabilities {
         "meta.capabilities", "mod.ping",
         "obs.state", "obs.entity", "obs.scan", "obs.block", "obs.block_state",
         "look_info", "container.read", "container.repo",
-        "item.info", "find_item", "recipe.lookup",
+        "item.info", "find_item", "recipe.lookup", "registry.blocks",
+        "projecte.status",
         "waypoint.get", "waypoint.list",
         "quest.list", "quest.inspect", "screen.read",
         "task.status", "task.result", "task.list"

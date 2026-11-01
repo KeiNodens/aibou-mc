@@ -22,6 +22,8 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.Screenshot;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
@@ -81,6 +83,8 @@ public final class GameOps {
             case "container.close" -> containerClose();
             case "inventory.resync" -> inventoryResync();
             case "recipe.lookup" -> recipeLookup(params);
+            case "registry.blocks" -> registryBlocks(params);
+            case "projecte.status" -> projecteStatus(params);
             case "craft" -> craft(params);
             case "emote" -> emote(params);
             case "respawn" -> respawn();
@@ -1333,6 +1337,129 @@ public final class GameOps {
      * block entityの同期NBT (getUpdateTag) を返す。
      * 機械の進捗・電力・流体等をJade無しでも調べられる診断用。
      */
+    /**
+     * registry.blocks: クライアントレジストリの全ブロックを列挙する。
+     * id / 表示名 / アイテムid / stateプロパティ定義 (名前と取りうる値)。
+     * offset/limit でページング (total は全件数)。bridge 側カタログの材料。
+     */
+    private static JsonObject registryBlocks(JsonObject params) {
+        int offset = params.has("offset") ? params.get("offset").getAsInt() : 0;
+        int limit = params.has("limit") ? params.get("limit").getAsInt() : 2000;
+        JsonArray arr = new JsonArray();
+        int total = 0;
+        for (Block b : BuiltInRegistries.BLOCK) {
+            if (total >= offset && total < offset + limit) {
+                JsonObject e = new JsonObject();
+                ResourceLocation key = BuiltInRegistries.BLOCK.getKey(b);
+                e.addProperty("id", key != null ? key.toString() : "unknown");
+                try { e.addProperty("name", b.getName().getString()); }
+                catch (Throwable ignored) { }
+                Item item = b.asItem();
+                ResourceLocation ikey = item != null
+                    ? BuiltInRegistries.ITEM.getKey(item) : null;
+                if (ikey != null && !"minecraft:air".equals(ikey.toString()))
+                    e.addProperty("item", ikey.toString());
+                var def = b.getStateDefinition();
+                if (def != null && !def.getProperties().isEmpty()) {
+                    JsonObject props = new JsonObject();
+                    for (Property<?> prop : def.getProperties()) {
+                        JsonArray vals = new JsonArray();
+                        Property raw = prop;
+                        for (Object val : prop.getPossibleValues())
+                            vals.add(raw.getName((Comparable) val));
+                        props.add(prop.getName(), vals);
+                    }
+                    e.add("properties", props);
+                }
+                arr.add(e);
+            }
+            total++;
+        }
+        JsonObject r = new JsonObject();
+        r.addProperty("total", total);
+        r.addProperty("offset", offset);
+        r.addProperty("returned", arr.size());
+        r.add("blocks", arr);
+        return r;
+    }
+
+    /**
+     * projecte.status: ProjectE の知識プロバイダから EMC 残高と学習済み
+     * アイテムを読む (soft dependency + リフレクション、D22 段階2)。
+     * 知識と EMC は bot プレイヤー自身のものとして扱う。
+     */
+    private static JsonObject projecteStatus(JsonObject params) throws ApiError {
+        LocalPlayer p = requirePlayer();
+        java.util.List<String> tried = new java.util.ArrayList<>();
+        // (1) ProjectEAPI.getPlayerFor(UUID) → IKnowledgeProvider
+        try {
+            Class<?> api = Class.forName("moze_intel.projecte.api.ProjectEAPI");
+            Object provider = api.getMethod("getPlayerFor", java.util.UUID.class)
+                .invoke(null, p.getUUID());
+            if (provider != null) {
+                JsonObject r = new JsonObject();
+                r.addProperty("supported", true);
+                r.addProperty("via", "ProjectEAPI.getPlayerFor");
+                try {
+                    Object emc = provider.getClass()
+                        .getMethod("getEmc").invoke(provider);
+                    r.addProperty("emc", emc != null ? emc.toString() : "0");
+                } catch (Throwable t) {
+                    tried.add("getEmc: " + t.getClass().getSimpleName());
+                }
+                try {
+                    Object knowledge = provider.getClass()
+                        .getMethod("getKnowledge").invoke(provider);
+                    if (knowledge instanceof java.util.Collection<?> col) {
+                        r.addProperty("learned_count", col.size());
+                        JsonArray sample = new JsonArray();
+                        int i = 0;
+                        for (Object info : col) {
+                            if (i++ >= 100) break;
+                            sample.add(describeKnowledgeEntry(info));
+                        }
+                        r.add("learned_sample", sample);
+                    }
+                } catch (Throwable t) {
+                    tried.add("getKnowledge: " + t.getClass().getSimpleName());
+                }
+                if (!tried.isEmpty()) {
+                    JsonArray ta = new JsonArray();
+                    for (String t : tried) ta.add(t);
+                    r.add("probe_notes", ta);
+                }
+                return r;
+            }
+            tried.add("ProjectEAPI.getPlayerFor returned null");
+        } catch (Throwable t) {
+            tried.add("ProjectEAPI: " + t.getClass().getSimpleName());
+        }
+        throw new ApiError("UNSUPPORTED",
+            "projecte.status: " + String.join("; ", tried));
+    }
+
+    /** 知識エントリ (ItemInfo) からアイテム id 文字列を取り出す */
+    private static String describeKnowledgeEntry(Object info) {
+        for (String mName : new String[]{"getItem", "getStack", "getItemStack"}) {
+            try {
+                Object o = info.getClass().getMethod(mName).invoke(info);
+                if (o instanceof ItemStack st) {
+                    ResourceLocation k = BuiltInRegistries.ITEM.getKey(st.getItem());
+                    return k != null ? k.toString() : String.valueOf(st.getItem());
+                }
+                if (o instanceof Item it) {
+                    ResourceLocation k = BuiltInRegistries.ITEM.getKey(it);
+                    return k != null ? k.toString() : String.valueOf(it);
+                }
+                if (o instanceof ResourceLocation rl) return rl.toString();
+                if (o != null) return String.valueOf(o);
+            } catch (Throwable ignored) { }
+        }
+        String s = String.valueOf(info);
+        return s.length() > 80 ? s.substring(0, 80) : s;
+    }
+
+
     private static JsonObject obsBlockState(JsonObject params) throws ApiError {
         Minecraft mc = Minecraft.getInstance();
         requirePlayer();
