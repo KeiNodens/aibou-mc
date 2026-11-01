@@ -35,5 +35,10 @@ export default {
     if (!found?.matches?.length) {
       throw new Error(`knowledge search empty: ${JSON.stringify(found)}`);
     }
+    // Review F6: mod id must not escape the knowledge dir.
+    const esc = await h.mcp('knowledge', { action: 'get', mod: '../outside', path: 'marker.txt' }).catch((e) => ({ error: String(e) }));
+    if (esc && !esc.error && typeof esc.text === 'string') {
+      throw new Error(`knowledge get escaped the knowledge dir: ${JSON.stringify(esc).slice(0, 120)}`);
+    }
   },
 };

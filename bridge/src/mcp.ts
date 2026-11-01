@@ -717,7 +717,16 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
         if (!dir || !modId || !rel) {
           return err(new Error('mod and path are required for get'));
         }
+        // Review F6: modId itself must stay inside the knowledge dir.
+        // Checking only target-under-base let mod:"../x" or an absolute
+        // mod path move base outside the knowledge dir entirely.
+        if (modId.includes('/') || modId.includes('\\') || modId.includes('..')) {
+          return err(new Error('invalid mod id'));
+        }
         const base = path.resolve(dir, modId);
+        if (base !== dir && !base.startsWith(dir + path.sep)) {
+          return err(new Error('mod escapes the knowledge dir'));
+        }
         const target = path.resolve(base, rel);
         if (!target.startsWith(base + path.sep)) {
           return err(new Error('path escapes the mod knowledge dir'));
