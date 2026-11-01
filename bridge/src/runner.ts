@@ -89,6 +89,7 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
   // 最終の見送り記録
   let lastHumanChatAt = 0;
   let lastFullNoteAt = 0;
+  let lastDimSeen: string | null = null;
   let lastRunEndedAt = 0;
   let lastDeferredAt = 0;
 
@@ -236,6 +237,29 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
         at: Date.now(),
         text: `pos(${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}) ${s.dimension ?? '?'} ${t.is_day ? '昼' : '夜'} hp${s.health} 腹${s.hunger}`,
       };
+      // 未知の次元に入ったら発見を journal へ (D48)。プロファイル
+      // 化は LLM が探索しながら dimension_profile で行う前提で、
+      // ここでは「初めて来た」事実だけを残す
+      const dim = s.dimension as string | undefined;
+      if (dim && dim !== lastDimSeen) {
+        lastDimSeen = dim;
+        const BUILTIN_DIMS = ['minecraft:overworld',
+          'minecraft:the_nether', 'minecraft:the_end'];
+        if (!BUILTIN_DIMS.includes(dim)) {
+          try {
+            const { existsSync, readFileSync } = await import('node:fs');
+            const pf = new URL('../../data/dimension-profiles.json',
+              import.meta.url);
+            const known = existsSync(pf)
+              && JSON.parse(readFileSync(pf, 'utf8'))?.[dim];
+            if (!known) {
+              opts.journal?.append('dimension_discovered', {
+                dimension: dim, at: new Date().toISOString(),
+              });
+            }
+          } catch { /* 記録失敗は致命的でない */ }
+        }
+      }
       // 鞄がほぼ満杯なら LLM の文脈に載せ、journal にも残す (D38)。
       // 「帰る」判断自体は LLM に任せる
       const detail = (s.inventory_detail ?? []) as unknown[];

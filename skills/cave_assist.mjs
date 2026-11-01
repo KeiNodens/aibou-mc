@@ -44,9 +44,13 @@ const NETHER_HOSTILES = new Set([
 const END_HOSTILES = new Set([
   'minecraft:shulker', 'minecraft:endermite', 'minecraft:silverfish',
 ]);
-const hostilesFor = (dim) =>
-  dim === 'minecraft:the_nether' ? NETHER_HOSTILES
+const hostilesFor = (dim, profiles) => {
+  // dimension-profiles.json の上書きがあればそれを正とする (D48)
+  const ov = profiles?.[dim]?.hostiles;
+  if (Array.isArray(ov) && ov.length) return new Set(ov);
+  return dim === 'minecraft:the_nether' ? NETHER_HOSTILES
     : dim === 'minecraft:the_end' ? END_HOSTILES : HOSTILES;
+};
 const TRAIL_URL = new URL('../data/cave-trail.json', import.meta.url);
 const PARTY_TOOLS_URL = new URL('../data/party-tools.json', import.meta.url);
 const PLACES_URL = new URL('../data/places.json', import.meta.url);
@@ -163,7 +167,13 @@ export default {
     const st0 = await ctx.state().catch(() => null);
     const botName = st0?.name;
     const entryDim = st0?.dimension ?? null;
-    const hostiles = hostilesFor(entryDim);
+    let dimProfiles = {};
+    try {
+      dimProfiles = JSON.parse(await readFile(
+        new URL('../data/dimension-profiles.json', import.meta.url),
+        'utf8'));
+    } catch { /* プロファイルなし = 組み込みで動く */ }
+    const hostiles = hostilesFor(entryDim, dimProfiles);
     const inNether = entryDim === 'minecraft:the_nether';
     // 金装備 (防具スロットに golden_ 部位があるか): ピグリン対策
     const wearsGold = (st0?.inventory_detail ?? []).some((sl) =>
