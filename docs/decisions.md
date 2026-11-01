@@ -170,3 +170,9 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - **線引き**: Create のコントラプション制御 (D21) と Integrated Dynamics のロジック構築は従来裁定どおり対象外。multiblock の「形成」は設計図ビルド経路、形成後の操作は def/station で扱う
 - **実装**: 機械 def +31 件 (計 143)、station +9 件 (計 21)、Refined Storage の汎用リフレクション probe op、Waystones の warp スキル、Ad Astra 酸素チェーンの def、TFC / GregTech のコア def
 - **根拠**: ユーザー指示「全部対応アリにしたい。実機検証はまだいいけど」(2026-11-01) + 同日の mod 対応監査
+
+## D27. コントラプションの「難しい部分」への着手 (2026-11-01)
+
+- **決定**: D26 の切り分けで「難しい」とした運転と甲板歩行にも着手する。D21 の「コントラプション制御は対象外」は、組み立て済み構造の *運転・乗車・甲板上の移動* については probe 実装で前進させる (構造自体の設計・形成は従来どおりプレイヤー/設計図の仕事)
+- **実装**: contraption.status / contraption.ride op (反射で座席解決 + interactAt)、ride / train_drive / deck_walk スキル。運転は move.set の通常移動入力で試し、効果は status の速度で測る
+- **根拠**: ユーザー指示「難しい部分もやってみようぜ」(2026-11-01)
