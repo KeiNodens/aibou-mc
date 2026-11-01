@@ -12,6 +12,7 @@ import { RunHold, HoldKind } from './runhold.js';
 import { QuestGraph } from './questgraph.js';
 import { Autonomy } from './autonomy.js';
 import { BotManager } from './bots.js';
+import { BlockCatalog } from './catalog.js';
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
@@ -24,6 +25,24 @@ const err = (e: unknown) => ({
 // 未実装のものはmock-modがUNSUPPORTEDを返す。
 export function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal, runhold?: RunHold, questGraph?: QuestGraph, autonomy?: Autonomy, bots?: BotManager) {
   const server = new McpServer({ name: 'minecraft', version: '0.0.1' });
+
+  // ブロックカタログ (D23/S1b)。data/block-catalog.json にキャッシュし、
+  // 未取得なら mod 接続時に一度だけ取りに行く。
+  const catalog = new BlockCatalog(
+    path.resolve(process.cwd(), 'data', 'block-catalog.json'));
+  let catalogInit = false;
+  let catalogTried = false;
+  const ensureCatalog = async (refresh = false): Promise<BlockCatalog> => {
+    if (!catalogInit) {
+      await catalog.load();
+      catalogInit = true;
+    }
+    if (refresh || (!catalogTried && catalog.size === 0)) {
+      catalogTried = true;
+      await catalog.refresh((m, pr) => mod.call(m, pr)).catch(() => {});
+    }
+    return catalog;
+  };
 
   server.registerTool(
     'send_chat',
@@ -413,6 +432,18 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
     async ({ name, ops, blocks, overwrite }) => {
       try {
+        const cat = await ensureCatalog();
+        if (cat.size) {
+          const ids = new Set<string>();
+          for (const op of (ops as any[]) ?? []) if (op?.block) ids.add(op.block);
+          for (const b of blocks ?? []) ids.add(b.block);
+          const unknown = [...ids].filter(
+            id => id !== 'minecraft:air' && !cat.has(id));
+          if (unknown.length)
+            throw new Error('unknown block ids: ' + unknown.map(id =>
+              `${id} (suggestions: ${cat.suggest(id).join(', ') || 'none'})`
+            ).join('; '));
+        }
         return json(await createSchematicFile({
           name,
           ops: ops as SchemOp[] | undefined,
@@ -421,6 +452,36 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
             path.resolve(process.cwd(), 'data', 'schematics'),
           overwrite,
         }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    'block_search',
+    {
+      description:
+        'Search the pack block catalog (captured from the in-game block ' +
+        'registry) by block id or display-name substring. Returns matching ' +
+        'blocks with their item id and blockstate property vocabulary — ' +
+        'use it to pick real block ids and valid props before ' +
+        'schematic_create. The catalog is captured once while the game is ' +
+        'connected and cached in the bridge; pass refresh to re-capture.',
+      inputSchema: {
+        query: z.string().describe('substring of block id or display name'),
+        limit: z.number().int().optional(),
+        refresh: z.boolean().optional(),
+      },
+    },
+    async ({ query, limit, refresh }) => {
+      try {
+        const cat = await ensureCatalog(refresh);
+        if (!cat.size)
+          return err(new Error('block catalog is empty — connect the game ' +
+            'mod once so the bridge can capture the registry'));
+        return json({ catalog_total: cat.size,
+          matches: cat.search(query, limit ?? 50) });
       } catch (e) {
         return err(e);
       }

@@ -12,7 +12,7 @@
 
 ## S1. schematic 生成
 
-### S1a 形式層（bridge のみ）
+### S1a 形式層（bridge のみ）— ✅ 実装済み (2026-11-01, tools/verify-schematic-create.mjs ALL PASS)
 
 - **readSchem の props 分離修正**: 現行は palette の blockstate 文字列
   （例 `minecraft:oak_stairs[facing=north]`）を丸ごと id としており、
@@ -31,7 +31,7 @@
   ゲーム未接続でも動く（生成は会話時の作業のため）。
 - 上限: 1 辺 256、総セル 2M、実ブロック 500k。名前と id の形式検証あり。
 
-### S1b カタログ層（mod op + bridge）
+### S1b カタログ層（mod op + bridge）— ✅ 実装済み (2026-11-01, gradle build OK / tools/verify-catalog.mjs ALL PASS。実レジストリ dump は実機バッチ)
 
 - **`registry.blocks` op**（agent-mod）: BuiltInRegistries.BLOCK を
   ページング列挙し、id / 表示名 / アイテム id / state プロパティ定義
@@ -41,8 +41,8 @@
   `block_search` ツールで id・表示名の部分一致検索ができる
   （JEI 検索のブロック版）。カタログがある場合、schematic_create は
   未知の id を弾き、近い候補を提示する。
-- **`obs.block_state` に properties を追加**: 配置検証を id だけでなく
-  props まで広げるための下準備（S4 で使用）。
+- **配置検証の下準備は既存だった**: obs.block_state は properties を
+  既に返している（確認済み）。S4 ではスキル側がそれを使う。
 
 ## S2. build_prepare（材料集め）
 

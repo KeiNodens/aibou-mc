@@ -918,3 +918,12 @@ plan-d19 の未実装・一部実装分をまとめて実装。詳細と実機�
 - fixture p7-waypoint: PASS (skill remember → MCP 一覧に可視 /
   MCP 保存 → skill の list・goto が解決 / radius 同等性 / remove 相互可視)
 - 回帰: p5b PASS
+
+## D23/S1 (2026-11-01): schematic 生成 + カタログ
+
+- コード検証済み: verify-schematic-create ALL PASS (生成→読み戻しの
+  round-trip、props 分離、材料集計)、verify-catalog ALL PASS、
+  tsc OK、gradle build OK
+- 要実機: 実パックでの registry.blocks dump とカタログ生成、
+  block_search → schematic_create → build_schematic の通し、
+  生成 .schem の外部ツール互換 (任意)
