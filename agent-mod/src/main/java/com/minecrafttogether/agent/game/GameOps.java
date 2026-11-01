@@ -2003,8 +2003,17 @@ public final class GameOps {
         double leash = params.has("leash") ? params.get("leash").getAsDouble() : 0;
         int maxSeconds = params.has("max_seconds") ? params.get("max_seconds").getAsInt() : 60;
         float hpAbort = params.has("hp_abort") ? params.get("hp_abort").getAsFloat() : 0;
+        java.util.List<String> priority = new java.util.ArrayList<>();
+        if (params.has("priority")) {
+            for (var el : params.getAsJsonArray("priority")) {
+                priority.add(el.getAsString());
+            }
+        }
+        boolean useShield = params.has("use_shield")
+            && params.get("use_shield").getAsBoolean();
         CombatTask t = new CombatTask(TaskManager.get().newId("combat"),
-            entityId, types, anchorEntityId, anchorPos, leash, maxSeconds, hpAbort);
+            entityId, types, anchorEntityId, anchorPos, leash, maxSeconds,
+            hpAbort, priority, useShield);
         TaskManager.get().register(t);
         JsonObject r = new JsonObject();
         r.addProperty("task_id", t.id);
