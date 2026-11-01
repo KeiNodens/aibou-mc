@@ -183,3 +183,11 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - **仕組み**: (1) mod 連動 — projecte_status / refinedstorage_status / contraption 系 / quest 系 / jei_search / warp は、対応 mod が導入されている時だけ出す (agent-mod の meta.mods で判定)。(2) 既定オフ — 低頻度ツール 19 件は普段隠す。(3) 設定ファイル data/tool-config.json の enabled / disabled で誰でも上書きでき、"group:build" 等のグループ指定も可。ファイルは15秒周期で読み直すので再起動なしに反映。(4) AIBOU_TOOL_PROFILE=full で全表示 (検証・fixture 用)
 - **理由**: 統合・改名は fixture と他ホスト (Codex) の互換を壊す。disable() による非表示は tools/list から消えるため、トークン消費と選択の迷いは統合と同等に減らせる。ユーザーの「導入 mod に必要なツールだけオンオフ」「不要なツールは設定でオンオフできたらみんな助かる」の意向に直接沿う形
 - **根拠**: ユーザー指示 (2026-11-01、ツール多すぎ問題への提案承認 + mod 連動トグルの追加提案)
+
+## D29. ドメイン統合 (D28 の第二層) (2026-11-01)
+
+- **決定**: 薄いラッパーの集まり 27 ツールを、action 振り分けの 7 ドメインツールに統合する: quest (list/inspect/frontier/plan/claim/aside)、schematic (inspect/plan/create)、journal (read/checkpoint/snapshot/session_summary/resume_plan)、approvals (list/approve/deny)、task (status/result/cancel_all)、screen (read/click/close)、bots (status/multi/loop_status/loop_resume)
+- **理由**: D28 のゲートは軽い環境で効くが、mod の多い環境 (本番パック・ATM9) ではゲート対象が軒並みオンになり削減が頭打ちになる。統合は環境に依らない削減で、両方合わせて初めて重い環境でも効く
+- **実装方針**: 旧ハンドラ本体をそのまま名前付き定数に移し、ドメインツールが action で振り分ける (ロジック変更なし)。fixture 9 本の呼び出しも新形に移行済み
+- **互換性**: ツール名の破壊的変更。他ホスト (Codex) は新名への追随が必要。allowlist は 102 → 82
+- **根拠**: ユーザーの懸念提起 (2026-11-01「mod多い環境だと結局多くなっちゃいそう」) + 最終判断は凛に委任 (同日)
