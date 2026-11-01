@@ -10,6 +10,8 @@ import com.minecrafttogether.agent.game.GameOps;
 import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Locale;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -66,10 +68,21 @@ public class AgentWsServer extends WebSocketServer {
         // Originがあればlocalhost系のみ許可。無いもの (Node ws等) は許可
         String origin = request.getFieldValue("Origin");
         if (origin != null && !origin.isEmpty()) {
-            String o = origin.toLowerCase(Locale.ROOT);
-            boolean ok = o.startsWith("http://localhost") || o.startsWith("https://localhost")
-                || o.startsWith("http://127.0.0.1") || o.startsWith("https://127.0.0.1")
-                || o.startsWith("http://[::1]") || o.startsWith("https://[::1]");
+            // Review S1: prefix matching let http://localhost.attacker.example
+            // through. Parse the URI and require an exact loopback host.
+            boolean ok = false;
+            try {
+                URI u = new URI(origin.trim());
+                String scheme = u.getScheme();
+                String host = u.getHost();
+                if (scheme != null && host != null
+                        && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"))) {
+                    String h = host.toLowerCase(Locale.ROOT);
+                    ok = h.equals("localhost") || h.equals("127.0.0.1") || h.equals("::1");
+                }
+            } catch (URISyntaxException e) {
+                ok = false;
+            }
             if (!ok) {
                 b.setHttpStatus((short) 403);
                 b.setHttpStatusMessage("Forbidden");
