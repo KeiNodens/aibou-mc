@@ -1,0 +1,97 @@
+// ブランチマイニング (D30): 向いている方角へ 1x2 トンネルを真っ直ぐ
+// 掘り進む。任意で左右の支坑 (spur) も掘る。溶岩・岩盤で停止。
+// 掘った鉱石を数え、torch_every ごとに松明を置く。
+async function gotoCell(ctx, x, y, z) {
+  const g = await ctx.call('baritone.goto', { x, y, z }).catch(() => null);
+  if (g?.task_id) await ctx.waitTask(g.task_id, 20_000).catch(() => null);
+}
+function hotbarSlot(state, item) {
+  return (state?.inventory_detail ?? []).find((s) => s.id === item && s.slot <= 8);
+}
+
+export default {
+  name: 'branch_mine',
+  description:
+    'Branch mining: dig a straight 1x2 tunnel in the facing direction, ' +
+    'optionally with side spurs every N blocks. Stops at lava or ' +
+    'bedrock. Counts ores dug and places torches periodically (needs ' +
+    'torches in the hotbar).',
+  params: {
+    length: { type: 'integer', required: false, description: 'tunnel length in blocks (default 32, max 128)' },
+    spur_every: { type: 'integer', required: false, description: 'dig side spurs every N blocks (0 = off, default 0)' },
+    spur_length: { type: 'integer', required: false, description: 'spur length (default 3)' },
+    torch_every: { type: 'integer', required: false, description: 'torch interval (default 8, 0 = off)' },
+  },
+  async run(ctx, { length = 32, spur_every = 0, spur_length = 3, torch_every = 8 }) {
+    const st = await ctx.state();
+    const start = { x: Math.floor(st.pos.x), y: Math.floor(st.pos.y), z: Math.floor(st.pos.z) };
+    const yawRad = ((st.pos.yaw ?? 0) * Math.PI) / 180;
+    let dx = -Math.sin(yawRad);
+    let dz = Math.cos(yawRad);
+    if (Math.abs(dx) > Math.abs(dz)) { dx = Math.sign(dx); dz = 0; } else { dz = Math.sign(dz); dx = 0; }
+    const ores = {};
+    let dug = 0;
+    let torches = 0;
+    let stopped = null;
+
+    const digCell = async (x, y, z) => {
+      // 上段→下段の順 (落下ブロック対策に下段は再確認してから掘る)
+      for (const dy of [1, 0]) {
+        const bs = await ctx.call('obs.block_state', { x, y: y + dy, z }).catch(() => null);
+        const id = bs?.id;
+        if (!id || id === 'minecraft:air' || id === 'minecraft:water') continue;
+        if (id.includes('lava')) return 'lava';
+        if (id === 'minecraft:bedrock') return 'bedrock';
+        await ctx.call('dig', { x, y: y + dy, z }).catch(() => {});
+        dug++;
+        if (id.includes('_ore') || id === 'minecraft:ancient_debris') {
+          ores[id] = (ores[id] ?? 0) + 1;
+        }
+        await ctx.sleep(420);
+      }
+      return null;
+    };
+    const digRun = async (sx, sz, dirx, dirz, n) => {
+      let cx = sx, cz = sz;
+      for (let i = 0; i < n; i++) {
+        cx += dirx; cz += dirz;
+        const r = await digCell(cx, start.y, cz);
+        if (r) return { x: cx, z: cz, stop: r };
+        await gotoCell(ctx, cx, start.y, cz);
+      }
+      return { x: cx, z: cz, stop: null };
+    };
+
+    let cx = start.x, cz = start.z;
+    for (let step = 1; step <= Math.min(length, 128) && !stopped; step++) {
+      ctx.throwIfCancelled();
+      const r = await digRun(cx, cz, dx, dz, 1);
+      cx = r.x; cz = r.z;
+      if (r.stop) { stopped = r.stop; break; }
+      if (spur_every > 0 && step % spur_every === 0) {
+        for (const side of [-1, 1]) {
+          const px = side * dz, pz = side * dx; // 垂直方向
+          const sr = await digRun(cx, cz, px, pz, spur_length);
+          if (sr.stop) { stopped = sr.stop; break; }
+          // 支坑を逆順に戻る (掘ったので通れる)
+          for (let b = spur_length; b >= 1; b--) {
+            await gotoCell(ctx, cx + px * (b - 1), start.y, cz + pz * (b - 1));
+          }
+        }
+      }
+      if (torch_every > 0 && step % torch_every === 0 && !stopped) {
+        const stNow = await ctx.state().catch(() => null);
+        const slot = hotbarSlot(stNow, 'minecraft:torch');
+        if (slot) {
+          await ctx.call('equip', { slot: slot.slot }).catch(() => {});
+          await ctx.call('use_item', { x: cx, y: start.y - 1, z: cz, face: 'up' }).catch(() => {});
+          torches++;
+        }
+      }
+    }
+    await ctx.say(stopped
+      ? `${stopped === 'lava' ? '溶岩' : '岩盤'}に当たったから止まったよ。${dug}ブロック掘った`
+      : `掘り終わった。${dug}ブロック掘ったよ`);
+    return { done: !stopped, dug, ores, torches, stopped, end: { x: cx, y: start.y, z: cz } };
+  },
+};

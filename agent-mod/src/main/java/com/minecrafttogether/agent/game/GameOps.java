@@ -73,6 +73,7 @@ public final class GameOps {
             case "obs.block_state" -> obsBlockState(params);
             case "look_info" -> lookInfo(params);
             case "interact" -> interact(params);
+            case "entity.attack" -> entityAttack(params);
             case "use_item" -> useItem(params);
             case "container.read" -> containerRead();
             case "container.click" -> containerClick(params);
@@ -1846,6 +1847,29 @@ public final class GameOps {
         r.addProperty("entity_id", e.getId());
         r.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString());
         r.addProperty("result", res.toString().toLowerCase());
+        return r;
+    }
+
+    /** entity.attack: 対象エンティティを通常攻撃する (D30 戦闘アシスト用) */
+    private static JsonObject entityAttack(JsonObject params) throws ApiError {
+        Minecraft mc = Minecraft.getInstance();
+        LocalPlayer p = requirePlayer();
+        Entity e = null;
+        if (params.has("entity_id")) {
+            e = mc.level != null ? mc.level.getEntity(params.get("entity_id").getAsInt()) : null;
+        }
+        if (e == null) throw new ApiError("NOT_FOUND", "no such entity");
+        double reach = p.getEntityReach();
+        if (p.distanceTo(e) > reach + 1.0) {
+            throw new ApiError("OUT_OF_RANGE",
+                String.format("entity is %.1f blocks away (reach %.1f)", p.distanceTo(e), reach));
+        }
+        mc.gameMode.attack(p, e);
+        p.swing(InteractionHand.MAIN_HAND);
+        JsonObject r = new JsonObject();
+        r.addProperty("entity_id", e.getId());
+        r.addProperty("type", BuiltInRegistries.ENTITY_TYPE.getKey(e.getType()).toString());
+        r.addProperty("target_health", e instanceof net.minecraft.world.entity.LivingEntity le ? le.getHealth() : -1);
         return r;
     }
 

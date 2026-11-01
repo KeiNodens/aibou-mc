@@ -17,6 +17,8 @@ export const MOD_GATES: Record<string, string> = {
   train_drive: 'create',
   deck_walk: 'create',
   quest: 'ftbquests',
+  quest_prepare: 'ftbquests',
+  pattern_encode: 'ae2',
   jei_search: 'jei',
   warp: 'waystones',
 };

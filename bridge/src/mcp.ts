@@ -1760,6 +1760,196 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
+  // ---- D30: quest_prepare (クエスト→素材の橋渡し) ----
+  reg(
+    'quest_prepare',
+    {
+      description:
+        'Aggregate the item tasks of a goal quest path (or the current ' +
+        'frontier when goal is omitted) and diff them against the bot ' +
+        'inventory. include_me also counts ME network stock when the bot ' +
+        'is already near the remembered ME terminal (no travel). Returns ' +
+        'per-item need/have/missing and non-item tasks separately.',
+      inputSchema: {
+        goal: z.string().optional().describe('quest title or id; omit for frontier'),
+        include_me: z.boolean().optional(),
+      },
+    },
+    async ({ goal, include_me }) => {
+      try {
+        if (!questGraph?.loaded()) return json({ note: 'quest-graph.json not built' });
+        const ql = await mod.call('quest.list').catch(() => ({ quests: [] }));
+        const done = questGraph.extractCompleted(ql);
+        let targets: ReturnType<QuestGraph['frontier']> = [];
+        if (goal) {
+          const plan = questGraph.plan(goal);
+          if (!plan) return json({ note: `quest not found: ${goal}` });
+          targets = plan.filter((q) => !done.has(q.id));
+        } else {
+          targets = questGraph.frontier(done);
+        }
+        const need = new Map<string, number>();
+        const other: string[] = [];
+        for (const q of targets) {
+          for (const t of q.tasks) {
+            if (t.type === 'item' && t.item) {
+              need.set(t.item, (need.get(t.item) ?? 0) + (t.count ?? 1));
+            } else {
+              other.push(`${q.title}: ${t.type}${t.item ? ' ' + t.item : ''}`);
+            }
+          }
+        }
+        const st = (await mod.call('obs.state').catch(() => null)) as
+          Record<string, unknown> | null;
+        const inv = new Map<string, number>();
+        const rawInv = (st?.inventory ?? st?.inventory_summary) as unknown;
+        if (rawInv && typeof rawInv === 'object' && !Array.isArray(rawInv)) {
+          for (const [id, n] of Object.entries(rawInv as Record<string, number>)) {
+            inv.set(id, Number(n) || 0);
+          }
+        } else if (Array.isArray(rawInv)) {
+          for (const e of rawInv as Array<{ id?: string; count?: number }>) {
+            if (e?.id) inv.set(e.id, (inv.get(e.id) ?? 0) + (e.count ?? 0));
+          }
+        }
+        const me = new Map<string, number>();
+        let meNote: string | undefined;
+        if (include_me) {
+          const fac = journal?.snapshot()?.facilities
+            ?.find((f) => f.kind === 'me_terminal');
+          const pos = (st?.pos ?? {}) as { x?: number; y?: number; z?: number };
+          if (!fac) meNote = 'no me_terminal facility remembered';
+          else if (pos.x === undefined || pos.z === undefined ||
+            Math.hypot(fac.pos.x - pos.x, fac.pos.z - pos.z) > 6) {
+            meNote = 'bot is not near the ME terminal (no travel in prepare)';
+          } else {
+            try {
+              await mod.call('use_item', { x: fac.pos.x, y: fac.pos.y, z: fac.pos.z });
+              const repo = (await mod.call('container.repo')) as
+                { entries?: Array<{ id?: string; amount?: number }> };
+              for (const e of repo.entries ?? []) {
+                if (e?.id) me.set(e.id, (me.get(e.id) ?? 0) + (e.amount ?? 0));
+              }
+              await mod.call('container.close').catch(() => {});
+            } catch (e) {
+              meNote = `ME read failed: ${e instanceof Error ? e.message : String(e)}`;
+            }
+          }
+        }
+        const items = [...need.entries()].map(([id, n]) => {
+          const haveInv = inv.get(id) ?? 0;
+          const haveMe = me.get(id) ?? 0;
+          return { id, need: n, have_inventory: haveInv, have_me: haveMe,
+            missing: Math.max(0, n - haveInv - haveMe) };
+        });
+        return json({
+          quests: targets.map((q) => q.title),
+          items,
+          other_tasks: other,
+          ready: items.every((i) => i.missing === 0),
+          ...(meNote ? { me_note: meNote } : {}),
+        });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  // ---- D30: commission (配置後の機械設定) ----
+  let machineDefsCache: Array<Record<string, unknown>> | null = null;
+  const loadMachineDefs = async () => {
+    if (machineDefsCache) return machineDefsCache;
+    const defs: Array<Record<string, unknown>> = [];
+    for (const dir of [path.resolve(process.cwd(), 'machines'),
+      path.resolve(process.cwd(), '..', 'machines')]) {
+      try {
+        const { readdir } = await import('node:fs/promises');
+        for (const f of await readdir(dir)) {
+          if (!f.endsWith('.json')) continue;
+          try {
+            defs.push(JSON.parse(await readFile(path.join(dir, f), 'utf8')));
+          } catch { /* skip broken def */ }
+        }
+        if (defs.length) break;
+      } catch { /* try next dir */ }
+    }
+    machineDefsCache = defs;
+    return defs;
+  };
+  reg(
+    'commission',
+    {
+      description:
+        'Commission a placed machine: run a configuration plan made of ' +
+        'GUI steps. The plan comes from the machine definition\'s ' +
+        '"commission" array (machines/*.json, matched by the block at ' +
+        'x/y/z) or from an inline plan. Steps: {do:"open"} | ' +
+        '{do:"button", id} | {do:"click_slot", slot, button?, action?} | ' +
+        '{do:"screen_click", text?|index?|x?, y?} | {do:"wait", ms} | ' +
+        '{do:"close"}. Stops at the first failed step and reports all ' +
+        'step results.',
+      inputSchema: {
+        x: z.number().optional(), y: z.number().optional(), z: z.number().optional(),
+        plan: z.array(z.any()).optional().describe('inline commission steps'),
+      },
+    },
+    async ({ x, y, z, plan }) => {
+      try {
+        let block: string | undefined;
+        let def: Record<string, unknown> | undefined;
+        if (x !== undefined && y !== undefined && z !== undefined) {
+          const bs = (await mod.call('obs.block_state', { x, y, z })) as
+            { id?: string; block?: string };
+          block = bs?.id ?? bs?.block;
+          const defs = await loadMachineDefs();
+          def = defs.find((d) => d.block === block);
+        }
+        const steps = (plan ?? (def?.commission as unknown[] | undefined)) as
+          Array<Record<string, unknown>> | undefined;
+        if (!steps?.length) {
+          return json({ ok: false, block,
+            note: 'no commission plan (definition has none and no inline plan given)' });
+        }
+        const results: Array<Record<string, unknown>> = [];
+        for (const step of steps) {
+          const doWhat = String(step.do ?? '');
+          try {
+            let r: unknown = 'ok';
+            if (doWhat === 'open') {
+              r = await mod.call('use_item', { x, y, z });
+            } else if (doWhat === 'button') {
+              r = await mod.call('container.button', { button_id: step.id });
+            } else if (doWhat === 'click_slot') {
+              r = await mod.call('container.click', {
+                slot: step.slot, button: step.button ?? 0,
+                action: step.action ?? 'pickup' });
+            } else if (doWhat === 'screen_click') {
+              const p: Record<string, unknown> = {};
+              for (const k of ['index', 'text', 'x', 'y', 'sidebar']) {
+                if (step[k] !== undefined) p[k] = step[k];
+              }
+              r = await mod.call('screen.click', p);
+            } else if (doWhat === 'wait') {
+              await new Promise((res) => setTimeout(res, Number(step.ms ?? 500)));
+            } else if (doWhat === 'close') {
+              r = await mod.call('container.close');
+            } else {
+              throw new Error(`unknown step: ${doWhat}`);
+            }
+            results.push({ do: doWhat, ok: true, result: r });
+          } catch (e) {
+            results.push({ do: doWhat, ok: false,
+              error: e instanceof Error ? e.message : String(e) });
+            return json({ ok: false, block, steps: results });
+          }
+        }
+        return json({ ok: true, block, steps: results });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
   void applyGate();
   const gateTimer = setInterval(() => { void applyGate(); }, 15_000);
   (gateTimer as unknown as { unref?: () => void }).unref?.();

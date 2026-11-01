@@ -20,6 +20,7 @@ public final class AgentWsCapabilities {
             "obs.block_state",
             "look_info",
             "interact",
+            "entity.attack",
             "use_item",
             "container.read",
             "container.click",

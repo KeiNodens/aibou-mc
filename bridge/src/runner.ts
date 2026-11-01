@@ -90,7 +90,19 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
 
   // 死亡→dead hold、respawnedで解除 (反射イベント経路)
   state.onEvent((e) => {
-    if (e.name === 'death') rh.hold('dead', 'bot died');
+    if (e.name === 'death') {
+      rh.hold('dead', 'bot died');
+      // 死亡地点を記録 (D30 recover 用)。イベントに座標が無い場合は記録のみ
+      const d = (e.data ?? {}) as Record<string, unknown>;
+      const pos = (d.pos ?? (typeof d.x === 'number'
+        ? { x: d.x, y: d.y, z: d.z } : undefined)) as
+        { x: number; y: number; z: number } | undefined;
+      opts.journal?.append('deathpoint', {
+        at: new Date().toISOString(),
+        ...(pos ? { pos } : {}),
+        ...(d.cause ? { cause: d.cause } : {}),
+      });
+    }
     if (e.name === 'reflex') {
       const t = (e.data as Record<string, unknown>)?.type;
       if (t === 'respawned') rh.release('dead');
