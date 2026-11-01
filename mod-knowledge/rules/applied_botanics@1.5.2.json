@@ -1,0 +1,54 @@
+{
+ "extracted_at": "2026-11-01",
+ "mod": "applied_botanics",
+ "rules": [
+  {
+   "id": "mana_per_byte",
+   "quote": "public int getAmountPerByte() { return 500; }",
+   "source_file": "common/src/main/java/appbot/ae2/ManaKeyType.java",
+   "source_line": 43,
+   "topic": "ME mana accounting: 1 byte of mana cell capacity holds 500 mana; the display unit is 1000000 mana (one full mana pool, ManaKeyType.getAmountPerUnit returns the pool capacity)",
+   "value": {
+    "mana_per_byte": 500,
+    "unit_mana": 1000000
+   }
+  },
+  {
+   "id": "mana_cell_ladder",
+   "quote": "public static final RegistryObject<Item> MANA_CELL_1K = ITEMS.register(\"mana_storage_cell_1k\",",
+   "source_file": "forge/src/main/java/appbot/forge/ABItems.java",
+   "source_line": 58,
+   "topic": "Mana storage cells mirror AE2's component ladder 1k/4k/16k/64k/256k with cell bytes = kilobytes x 1000 and AE2-matching idle drains 0.5/1.0/1.5/2.0/2.5; effective mana capacity = bytes x 500, so 1k = 500000 mana (half a pool), 256k = 128000000 mana; portable mana cells exist in the same sizes",
+   "value": {
+    "capacities_mana": {
+     "16k": 8000000,
+     "1k": 500000,
+     "256k": 128000000,
+     "4k": 2000000,
+     "64k": 32000000
+    },
+    "drains": [
+     0.5,
+     1,
+     1.5,
+     2,
+     2.5
+    ]
+   }
+  },
+  {
+   "id": "fluix_mana_pool",
+   "quote": "public static final RegistryObject<Block> FLUIX_MANA_POOL = BLOCKS.register(\"fluix_mana_pool\",",
+   "source_file": "forge/src/main/java/appbot/forge/ABBlocks.java",
+   "source_line": 20,
+   "topic": "The addon also adds a fluix mana pool block that bridges Botania pools and the ME network (mana moves between pools and ME storage through the addon's import/export strategies); pool-side capacity follows Botania's pool rules (see the botania rule file)",
+   "value": {
+    "block": "fluix_mana_pool"
+   }
+  }
+ ],
+ "source_commit": "13791485337304ca3d45b6f40baec20598862732",
+ "source_ref": "tag 1.5.2 (scheme=tag)",
+ "source_repo": "https://github.com/ramidzkh/Applied-Botanics",
+ "version": "1.5.2"
+}
