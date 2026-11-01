@@ -7,10 +7,14 @@ every instance and pack — the cache key is mod id + version +
 source commit.
 
 CONSUMER NOTE: every file in mod-knowledge/ is read by AI agents
-(via the knowledge tool), not by humans. Write for AI readability:
-structured statements, explicit units on every number,
-self-contained rules (no cross-references to "above"), no idioms,
-no narrative framing. Human-oriented prose is a defect here.
+(via the knowledge tool), not by humans. The CANONICAL format is
+AI-readable: structured statements, explicit units on every
+number, self-contained rules (no cross-references to "above").
+Narrative phrasing is tolerated but is not the target format —
+AI-structured text is read more efficiently by the consumer.
+Direction of derivation: human-facing guides, when needed, are
+GENERATED from these AI-format sources by re-reading and
+reformatting. Never maintain human prose as the source of truth.
 
 ## Layout
 - sources.json — mod id -> source repo (seed registry).
