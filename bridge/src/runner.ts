@@ -84,8 +84,14 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
   let timer: NodeJS.Timeout | null = null;
   let worldCache = { at: 0, text: '(世界情報なし)' };
 
+  // 同伴ゲート用の状態 (D36): 人間の最終発言・前回ラン終了・
+  // 最終の見送り記録
+  let lastHumanChatAt = 0;
+  let lastRunEndedAt = 0;
+  let lastDeferredAt = 0;
+
   // 実行管理: codex runの発火は全てpump()を通す (1本のみ並行)
-  const rh = new RunHold(() => run(), () => opts.skills?.runningName() ?? null,
+  const rh = new RunHold(() => runGated(), () => opts.skills?.runningName() ?? null,
     { persistFile: opts.runStateFile });
 
   // 死亡→dead hold、respawnedで解除 (反射イベント経路)
@@ -180,7 +186,6 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
     }
   };
 
-  let lastHumanChatAt = 0;
   state.onChat((c) => {
     if (c.from === botName) return;
     lastHumanChatAt = Date.now();
@@ -238,25 +243,41 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
     return worldCache.text;
   }
 
-  async function run() {
-    // 同伴マナー (D36): プレイヤーが近くにいる間は自律ランを新規に
-    // 始めない。一緒に遊んでいる最中に勝手に目標へ走り出さないため。
-    // 人間の発言直後 (5分以内) のランは指示として通す。
-    if (opts.mod && Date.now() - lastHumanChatAt > 5 * 60_000) {
+  // 同伴マナー (D36 改訂): 「新規の自律開始」だけを見送る。
+  // 見送るのは全部そろった時だけ: プレイヤーが 64 以内にいる /
+  // 実行中のスキルが無い / 前回ラン終了から 10 分以上 (連鎖が冷えて
+  // いる) / 人間の発言から 30 分以上。長いタスクの継続ランは連鎖が
+  // 温かいので止まらない。見送りの journal 記録は 5 分に 1 回まで。
+  async function runGated() {
+    if (opts.mod
+      && !opts.skills?.runningName()
+      && Date.now() - lastRunEndedAt > 10 * 60_000
+      && Date.now() - lastHumanChatAt > 30 * 60_000) {
       try {
         const r = (await opts.mod.call('obs.entity', {
-          name: 'minecraft:player', radius: 32,
+          name: 'minecraft:player', radius: 64,
         })) as { entities?: Array<{ name?: string }> };
         const others = (r?.entities ?? []).filter((e) => e.name !== botName);
         if (others.length) {
-          opts.journal?.append('runner_deferred', {
-            at: new Date().toISOString(),
-            near: others.map((e) => e.name ?? '?'),
-          });
+          if (Date.now() - lastDeferredAt > 5 * 60_000) {
+            lastDeferredAt = Date.now();
+            opts.journal?.append('runner_deferred', {
+              at: new Date().toISOString(),
+              near: others.map((e) => e.name ?? '?'),
+            });
+          }
           return;
         }
       } catch { /* 観測できなければ通常通り開始する */ }
     }
+    try {
+      await run();
+    } finally {
+      lastRunEndedAt = Date.now();
+    }
+  }
+
+  async function run() {
     const chatLog = state
       .chat(50)
       .map((c) => `[${c.from}] ${c.text}`);
