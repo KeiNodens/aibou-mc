@@ -88,6 +88,7 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
   // 同伴ゲート用の状態 (D36): 人間の最終発言・前回ラン終了・
   // 最終の見送り記録
   let lastHumanChatAt = 0;
+  let lastFullNoteAt = 0;
   let lastRunEndedAt = 0;
   let lastDeferredAt = 0;
 
@@ -232,6 +233,18 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
         at: Date.now(),
         text: `pos(${Math.floor(p.x)},${Math.floor(p.y)},${Math.floor(p.z)}) ${s.dimension ?? '?'} ${t.is_day ? '昼' : '夜'} hp${s.health} 腹${s.hunger}`,
       };
+      // 鞄がほぼ満杯なら LLM の文脈に載せ、journal にも残す (D38)。
+      // 「帰る」判断自体は LLM に任せる
+      const detail = (s.inventory_detail ?? []) as unknown[];
+      if (41 - detail.length <= 1) {
+        worldCache.text += ' 鞄ほぼ満杯';
+        if (Date.now() - lastFullNoteAt > 30 * 60_000) {
+          lastFullNoteAt = Date.now();
+          opts.journal?.append('inventory_full', {
+            at: new Date().toISOString(), free: 41 - detail.length,
+          });
+        }
+      }
       // active goalsを世界文脈に並記 (半不変部)
       const goals = opts.journal?.goalGet() ?? [];
       if (goals.length) {

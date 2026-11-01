@@ -35,6 +35,53 @@ const NOTABLE = new Map([
 ]);
 const TRAIL_URL = new URL('../data/cave-trail.json', import.meta.url);
 const PARTY_TOOLS_URL = new URL('../data/party-tools.json', import.meta.url);
+const PLACES_URL = new URL('../data/places.json', import.meta.url);
+
+async function loadPlaces() {
+  try {
+    const d = JSON.parse(await readFile(PLACES_URL, 'utf8'));
+    return Array.isArray(d?.places) ? d : { places: [] };
+  } catch { return { places: [] }; }
+}
+async function recordPlace(kind, ore, pos) {
+  try {
+    const data = await loadPlaces();
+    const dup = data.places.some((pl2) =>
+      pl2.status === 'open' && pl2.kind === kind &&
+      (pl2.ore ?? null) === (ore ?? null) &&
+      Math.abs(pl2.x - pos.x) <= 6 && Math.abs(pl2.z - pos.z) <= 6);
+    if (dup) return;
+    data.places.push({
+      id: `pl-${Date.now().toString(36)}-${data.places.length + 1}`,
+      kind, ...(ore ? { ore } : {}), ...pos,
+      at: new Date().toISOString(), status: 'open', auto: true,
+    });
+    await writeFile(PLACES_URL, JSON.stringify(data, null, 2));
+  } catch { /* 記録失敗は致命的でない */ }
+}
+async function completePlace(ore, pos) {
+  try {
+    const data = await loadPlaces();
+    const cand = data.places
+      .filter((pl2) => pl2.status === 'open' && pl2.kind === 'ore' && pl2.ore === ore)
+      .sort((a, b) =>
+        (Math.abs(a.x - pos.x) + Math.abs(a.z - pos.z)) -
+        (Math.abs(b.x - pos.x) + Math.abs(b.z - pos.z)))[0];
+    if (cand && Math.abs(cand.x - pos.x) <= 10 && Math.abs(cand.z - pos.z) <= 10) {
+      cand.status = 'done';
+      cand.done_at = new Date().toISOString();
+      await writeFile(PLACES_URL, JSON.stringify(data, null, 2));
+    }
+  } catch { /* 同上 */ }
+}
+// 掘るセルの横に溶岩があったら掘らない (D38)
+async function nearLava(ctx, s2) {
+  for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+    const b = await ctx.call('obs.block_state', { x: s2.x + nx, y: s2.y, z: s2.z + nz }).catch(() => null);
+    if (b?.id?.includes('lava')) return true;
+  }
+  return false;
+}
 
 // プレイヤーの幸運: 手持ち観測 (今の手) と事前申告 (所持) を合算し
 // 大きい方を採る。手持ちで確認できた幸運は確定情報で、申告は
@@ -106,6 +153,7 @@ export default {
     if (entry) {
       await ctx.call('waypoint.set', { name: 'cave_entry', ...entry }).catch(() => {});
     }
+    if (entry) await recordPlace('cave', null, entry);
     if (together) await ctx.say('ついていくね').catch(() => {});
     const visited = new Set();
     const announcedVeins = new Set();
@@ -226,11 +274,16 @@ export default {
             const plNow = ents(await ctx.call('obs.entity',
               { name: player ?? pl.name }).catch(() => null))[0] ?? pl;
             if (plNow && dist(plNow, spot) < 1.5) break;
+            if (await nearLava(ctx, spot)) {
+              visited.add(`${spot.x},${spot.y},${spot.z}`);
+              continue;
+            }
             visited.add(`${spot.x},${spot.y},${spot.z}`);
             await ctx.call('dig', { x: spot.x, y: spot.y, z: spot.z }).catch(() => {});
             oresMined++;
             await ctx.sleep(500);
           }
+          await completePlace(pv.ore, pv);
           if (together) {
             await ctx.say(`${NOTABLE.get(pv.ore)}掘ったよ`).catch(() => {});
           }
@@ -252,6 +305,9 @@ export default {
                 ctx.journal?.note('discovery', {
                   ore, x: s.x, y: s.y, z: s.z, together,
                 });
+                if (together) {
+                  await recordPlace('ore', ore, { x: s.x, y: s.y, z: s.z });
+                }
                 if (together) {
                   const fl = fortuneLevel(st);
                   const held = heldFortune(pl);
@@ -300,6 +356,11 @@ export default {
               const plNow = ents(await ctx.call('obs.entity',
                 { name: player ?? pl.name }).catch(() => null))[0] ?? pl;
               if (plNow && dist(plNow, spot) < 2.5) break;
+              // 横に溶岩がある塊は掘らない
+              if (await nearLava(ctx, spot)) {
+                visited.add(`${spot.x},${spot.y},${spot.z}`);
+                continue;
+              }
               visited.add(`${spot.x},${spot.y},${spot.z}`);
               await ctx.call('dig', { x: spot.x, y: spot.y, z: spot.z }).catch(() => {});
               oresMined++;

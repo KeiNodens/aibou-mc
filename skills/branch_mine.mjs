@@ -45,18 +45,35 @@ export default {
     let torches = 0;
     let stopped = null;
 
-    const digCell = async (x, y, z) => {
-      // 上段→下段の順 (落下ブロック対策に下段は再確認してから掘る)
+    const bsAt = async (x, y, z) =>
+      (await ctx.call('obs.block_state', { x, y, z }).catch(() => null))?.id;
+    const digCell = async (x, y, z, dirx, dirz) => {
+      // 掘る対象を先に確定 (上段→下段)
+      const targets = [];
       for (const dy of [1, 0]) {
-        const bs = await ctx.call('obs.block_state', { x, y: y + dy, z }).catch(() => null);
-        const id = bs?.id;
+        const id = await bsAt(x, y + dy, z);
         if (!id || id === 'minecraft:air' || id === 'minecraft:water') continue;
         if (id.includes('lava')) return 'lava';
         if (id === 'minecraft:bedrock') return 'bedrock';
-        await ctx.call('dig', { x, y: y + dy, z }).catch(() => {});
+        targets.push({ y: y + dy, id });
+      }
+      if (!targets.length) return null;
+      // 危険の先読み (D38): 進行方向の奥に溶岩 / 掘るセルの横に溶岩
+      for (const dy of [0, 1]) {
+        const b = await bsAt(x + dirx, y + dy, z + dirz);
+        if (b?.includes('lava')) return 'lava_ahead';
+      }
+      for (const t of targets) {
+        for (const [nx, nz] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = await bsAt(x + nx, t.y, z + nz);
+          if (n?.includes('lava')) return 'lava_adjacent';
+        }
+      }
+      for (const t of targets) {
+        await ctx.call('dig', { x, y: t.y, z }).catch(() => {});
         dug++;
-        if (id.includes('_ore') || id === 'minecraft:ancient_debris') {
-          ores[id] = (ores[id] ?? 0) + 1;
+        if (t.id.includes('_ore') || t.id === 'minecraft:ancient_debris') {
+          ores[t.id] = (ores[t.id] ?? 0) + 1;
         }
         await ctx.sleep(420);
       }
@@ -66,8 +83,14 @@ export default {
       let cx = sx, cz = sz;
       for (let i = 0; i < n; i++) {
         cx += dirx; cz += dirz;
-        const r = await digCell(cx, start.y, cz);
+        const r = await digCell(cx, start.y, cz, dirx, dirz);
         if (r) return { x: cx, z: cz, stop: r };
+        // 落下ガード: 進む先の足元が無ければ進まない
+        const floor = await bsAt(cx, start.y - 1, cz);
+        if (!floor || floor === 'minecraft:air' || floor === 'minecraft:cave_air'
+          || floor === 'minecraft:void_air' || floor === 'minecraft:water') {
+          return { x: cx - dirx, z: cz - dirz, stop: 'drop' };
+        }
         await gotoCell(ctx, cx, start.y, cz);
       }
       return { x: cx, z: cz, stop: null };
@@ -114,8 +137,15 @@ export default {
         }
       }
     }
+    const stopLine = {
+      lava: '溶岩に当たったから止まったよ',
+      lava_ahead: '奥に溶岩があるから止まったよ',
+      lava_adjacent: '横に溶岩があるから止まったよ',
+      bedrock: '岩盤に当たったから止まったよ',
+      drop: '足元が落ちてるから止まったよ',
+    }[stopped];
     await ctx.say(stopped
-      ? `${stopped === 'lava' ? '溶岩' : '岩盤'}に当たったから止まったよ。${dug}ブロック掘った`
+      ? `${stopLine}。${dug}ブロック掘った`
       : `掘り終わった。${dug}ブロック掘ったよ`);
     return { done: !stopped, dug, ores, torches, stopped, waits, together, end: { x: cx, y: start.y, z: cz } };
   },
