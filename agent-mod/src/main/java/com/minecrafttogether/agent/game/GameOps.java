@@ -378,10 +378,14 @@ public final class GameOps {
         }
         // OSレベルのホイール入力 (フォーカス中の窓へ届く) — 先に自窓をフォーカス
         CompletableFuture.runAsync(() -> {
-            org.lwjgl.glfw.GLFW.glfwFocusWindow(
-                Minecraft.getInstance().getWindow().getWindow());
+            long win = Minecraft.getInstance().getWindow().getWindow();
+            org.lwjgl.glfw.GLFW.glfwFocusWindow(win);
             try { Thread.sleep(60); } catch (InterruptedException ie) {
                 Thread.currentThread().interrupt();
+            }
+            if (!verifyGameFocused(win)) {
+                AgentMod.LOGGER.warn("scroll(real): game window not focused; OS wheel input suppressed");
+                return;
             }
             User32.INSTANCE.mouse_event(0x0800, 0, 0, (int) (dy * 120), 0);
         });
@@ -412,6 +416,27 @@ public final class GameOps {
         /** dwFlags: 0x0800=MOUSEEVENTF_WHEEL, dwData=±120刻み */
         void mouse_event(int dwFlags, int dx, int dy, int dwData,
             int dwExtraInfo);
+        com.sun.jna.Pointer GetForegroundWindow();
+    }
+
+    /**
+     * D59/P2-26: OS入力を送る前に、自窓が本当にフォアグラウンドか確認する。
+     * glfwFocusWindow は要求であって保証ではない — 失敗したまま
+     * keybd_event / mouse_event を送ると、入力がユーザーの前面アプリ
+     * (ブラウザ・エディタ) へ届いてしまう
+     */
+    private static boolean verifyGameFocused(long glfwWindow) {
+        try {
+            int focused = org.lwjgl.glfw.GLFW.glfwGetWindowAttrib(
+                glfwWindow, org.lwjgl.glfw.GLFW.GLFW_FOCUSED);
+            if (focused != 1) return false;
+            long hwnd = org.lwjgl.glfw.GLFWNativeWin32.glfwGetWin32Window(glfwWindow);
+            com.sun.jna.Pointer fg = User32.INSTANCE.GetForegroundWindow();
+            return fg != null
+                && com.sun.jna.Pointer.nativeValue(fg) == hwnd;
+        } catch (Throwable t) {
+            return false;
+        }
     }
 
     /** OSレベルの実キー入力 (java.awt.Robot)。GLFW→AWT VK変換できるキーのみ */
@@ -427,10 +452,14 @@ public final class GameOps {
         // 自前でglfwFocusWindowしてから入力を送る
         CompletableFuture.runAsync(() -> {
             try {
-                org.lwjgl.glfw.GLFW.glfwFocusWindow(
-                    Minecraft.getInstance().getWindow().getWindow());
+                long win = Minecraft.getInstance().getWindow().getWindow();
+                org.lwjgl.glfw.GLFW.glfwFocusWindow(win);
                 try { Thread.sleep(60); } catch (InterruptedException ie) {
                     Thread.currentThread().interrupt();
+                }
+                if (!verifyGameFocused(win)) {
+                    AgentMod.LOGGER.warn("key(real): game window not focused; OS key input suppressed");
+                    return;
                 }
                 if (params.has("press") && params.get("press").getAsBoolean()) {
                     User32.INSTANCE.keybd_event((byte) vk, (byte) 0, 0, 0);
@@ -1031,9 +1060,15 @@ public final class GameOps {
         if (target == null)
             throw new ApiError("BAD_REQUEST",
                 "slot_name must be head|chest|legs|feet|offhand");
+        // D59/P2-9: WEAR_SLOTS の番号はプレイヤーインベントリmenu前提。
+        // 別メニューを開いたまま読むと、そのメニュー側の同番号スロットを
+        // 装備と誤認して equipped:true の虚偽報告になった
+        if (p.containerMenu != p.inventoryMenu)
+            throw new ApiError("MENU_OPEN",
+                "close the open container before equip");
         if (!params.has("item")) {
             // item省略時は現在の装備を返す (read)
-            ItemStack cur = p.containerMenu.getSlot(target).getItem();
+            ItemStack cur = p.inventoryMenu.getSlot(target).getItem();
             JsonObject r = new JsonObject();
             r.addProperty("slot", slotName);
             r.addProperty("item", cur.isEmpty() ? null
@@ -1055,11 +1090,12 @@ public final class GameOps {
         int srcMenu = src < 9 ? 36 + src : src; // hotbar→36-44, main→9-35
         Minecraft mc = Minecraft.getInstance();
         // pickup → 対象slotへplace (占有済みならswapになる)
-        mc.gameMode.handleInventoryMouseClick(0, srcMenu, 0,
+        int cid = p.inventoryMenu.containerId;
+        mc.gameMode.handleInventoryMouseClick(cid, srcMenu, 0,
             net.minecraft.world.inventory.ClickType.PICKUP, p);
-        mc.gameMode.handleInventoryMouseClick(0, target, 0,
+        mc.gameMode.handleInventoryMouseClick(cid, target, 0,
             net.minecraft.world.inventory.ClickType.PICKUP, p);
-        ItemStack now = p.containerMenu.getSlot(target).getItem();
+        ItemStack now = p.inventoryMenu.getSlot(target).getItem();
         JsonObject r = new JsonObject();
         r.addProperty("slot", slotName);
         r.addProperty("item", now.isEmpty() ? null

@@ -21,7 +21,7 @@ class ReflexPolicyTest {
         return new ReflexPolicy.In(
             20.0, 20, 300, 0, false, false,
             false, false, false, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
     }
 
     @Test
@@ -34,7 +34,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             20.0, 20, 100, 0, false, false,
             false, false, false, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.DROWN, ReflexPolicy.decide(in, CFG));
     }
 
@@ -43,7 +43,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             7.0, 20, 300, 0, false, false,
             false, false, false, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.RETREAT, ReflexPolicy.decide(in, CFG));
     }
 
@@ -52,7 +52,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             20.0, 20, 300, 3, false, false,
             false, false, false, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.RETREAT, ReflexPolicy.decide(in, CFG));
     }
 
@@ -61,7 +61,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             7.0, 20, 300, 3, true, false,
             false, false, false, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.NONE, ReflexPolicy.decide(in, CFG));
     }
 
@@ -72,7 +72,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             2.0, 20, 300, 5, false, false,
             false, false, false, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.NONE, ReflexPolicy.decide(in, deathCfg));
     }
 
@@ -81,7 +81,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             7.0, 20, 300, 0, false, false,
             false, false, false, true,
-            100_000L, 0L, 90_000L, 0L, 0L); // lastRetreat 10s前 < 60s cooldown
+            100_000L, 0L, 90_000L, 0L, 0L, false); // lastRetreat 10s前 < 60s cooldown
         assertEquals(ReflexPolicy.Kind.NONE, ReflexPolicy.decide(in, CFG));
     }
 
@@ -90,7 +90,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             20.0, 10, 300, 0, false, false,
             false, false, false, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.EAT, ReflexPolicy.decide(in, CFG));
     }
 
@@ -99,7 +99,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             20.0, 10, 300, 0, false, false,
             false, false, false, false, // eatCapable=false
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.NONE, ReflexPolicy.decide(in, CFG));
     }
 
@@ -108,7 +108,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             20.0, 10, 300, 0, false, false,
             false, false, false, true,
-            100_000L, 90_000L, 0L, 0L, 0L); // lastEat 10s前
+            100_000L, 90_000L, 0L, 0L, 0L, false); // lastEat 10s前
         assertEquals(ReflexPolicy.Kind.NONE, ReflexPolicy.decide(in, CFG));
     }
 
@@ -117,7 +117,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             20.0, 20, 300, 0, false, false,
             true, false, false, true,
-            200_000L, 0L, 0L, 0L, 0L); // sleepCooldown(120s)超過
+            200_000L, 0L, 0L, 0L, 0L, false); // sleepCooldown(120s)超過
         assertEquals(ReflexPolicy.Kind.SLEEP, ReflexPolicy.decide(in, CFG));
     }
 
@@ -126,7 +126,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             20.0, 20, 300, 0, false, false,
             true, true, false, true, // 作業中は非強制
-            200_000L, 0L, 0L, 0L, 0L);
+            200_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.NONE, ReflexPolicy.decide(in, CFG));
     }
 
@@ -135,7 +135,7 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             20.0, 20, 300, 0, false, false,
             false, false, true, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
         assertEquals(ReflexPolicy.Kind.RETURN, ReflexPolicy.decide(in, CFG));
     }
 
@@ -144,7 +144,36 @@ class ReflexPolicyTest {
         var in = new ReflexPolicy.In(
             5.0, 5, 50, 5, false, false,
             true, false, true, true,
-            100_000L, 0L, 0L, 0L, 0L);
+            100_000L, 0L, 0L, 0L, 0L, false);
+        assertEquals(ReflexPolicy.Kind.DROWN, ReflexPolicy.decide(in, CFG));
+    }
+
+    @Test
+    void retreatSuppressedDuringRequestedCombat() {
+        // D59/P2-4: 依頼戦闘中は低HPでも RETREAT しない (戦闘側に hp_abort)
+        var in = new ReflexPolicy.In(
+            7.0, 20, 300, 0, false, false,
+            false, false, false, true,
+            100_000L, 0L, 0L, 0L, 0L, true);
+        assertEquals(ReflexPolicy.Kind.NONE, ReflexPolicy.decide(in, CFG));
+    }
+
+    @Test
+    void eatSuppressedDuringUserTask() {
+        // D59/P2-4: EAT はユーザータスク実行中は出さない
+        var in = new ReflexPolicy.In(
+            20.0, 10, 300, 0, false, false,
+            false, true, false, true,
+            100_000L, 0L, 0L, 0L, 0L, false);
+        assertEquals(ReflexPolicy.Kind.NONE, ReflexPolicy.decide(in, CFG));
+    }
+
+    @Test
+    void drownStillBeatsCombatSuppression() {
+        var in = new ReflexPolicy.In(
+            7.0, 10, 50, 0, false, false,
+            false, true, false, true,
+            100_000L, 0L, 0L, 0L, 0L, true);
         assertEquals(ReflexPolicy.Kind.DROWN, ReflexPolicy.decide(in, CFG));
     }
 }

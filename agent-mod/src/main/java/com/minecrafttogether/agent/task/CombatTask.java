@@ -78,6 +78,9 @@ public class CombatTask extends AgentTask {
     }
 
     @Override
+    public boolean movementTask() { return true; }
+
+    @Override
     public void tick() {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer p = mc.player;
@@ -259,6 +262,10 @@ public class CombatTask extends AgentTask {
     }
 
     private void fail(String code, String msg) {
+        // D59/P2-8: 失敗経路でも盾を下ろす (finish/CANCELLING だけが
+        // 下ろしていて、fail 時は keyUse が押されたまま残った)
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) setShield(mc, false);
         errorCode = code; errorMessage = msg; state = State.FAILED;
     }
 
@@ -267,6 +274,9 @@ public class CombatTask extends AgentTask {
 
     @Override
     protected void onPause() {
+        // D59/P2-8: pause 中も盾を下ろす (上げっぱなしで放置しない)
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) setShield(mc, false);
         IBaritone b = GotoTask.baritone();
         if (b != null) stopPathing(b);
     }

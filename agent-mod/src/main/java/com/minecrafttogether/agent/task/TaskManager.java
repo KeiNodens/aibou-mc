@@ -29,12 +29,41 @@ public class TaskManager {
     }
 
     public void register(AgentTask t) {
+        // D59/P2-5: 移動系 (Baritone) タスクは単一排他。同時に走ると
+        // 後発が Baritone の cancelEverything で先行を殺し合った。
+        // 2件目は即 BUSY 失敗にする (bridge のスキル排他と同じ意味論)。
+        // 反射タスク (reflex-*) は安全系なので先行を cancel して割り込む
+        if (t.movementTask()) {
+            for (AgentTask o : tasks.values()) {
+                if (o == t || !o.movementTask() || o.done()) continue;
+                if (o.state != AgentTask.State.RUNNING
+                    && o.state != AgentTask.State.QUEUED
+                    && o.state != AgentTask.State.PAUSED) continue;
+                if (t.id.startsWith("reflex-")) {
+                    o.cancel();
+                } else {
+                    t.state = AgentTask.State.FAILED;
+                    t.errorCode = "BUSY";
+                    t.errorMessage = "movement task already running: " + o.id;
+                }
+                break;
+            }
+        }
         tasks.put(t.id, t);
         order.addLast(t.id);
+        // D59/P2-6: 追放は終了済みタスクだけ。実行中タスクを追うと
+        // 照会キーを保持する呼び出し側が孤児化した。全て実行中なら
+        // 上限超過を許す (保持はメモリのみで実害が小さい)
         while (order.size() > MAX_KEPT) {
-            String evicted = order.pollFirst();
-            tasks.remove(evicted);
-            notified.remove(evicted);
+            String evict = null;
+            for (String id : order) {
+                AgentTask o = tasks.get(id);
+                if (o != null && o.done()) { evict = id; break; }
+            }
+            if (evict == null) break;
+            order.remove(evict);
+            tasks.remove(evict);
+            notified.remove(evict);
         }
     }
 

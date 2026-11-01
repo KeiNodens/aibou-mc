@@ -82,7 +82,8 @@ public final class ReflexGuard {
             countHostiles(p), isInHome(p), alreadyRetreating(),
             ownerSleeping(mc, p), anyUserTaskRunning(),
             justRespawned, AgentCapabilities.isOk("eat"),
-            now, lastEatAt, lastRetreatAt, lastSleepTryAt, lastReturnAt);
+            now, lastEatAt, lastRetreatAt, lastSleepTryAt, lastReturnAt,
+            requestedCombatRunning());
         switch (ReflexPolicy.decide(in, cfg())) {
             case RETREAT -> { lastRetreatAt = now; retreat(mc, p); }
             case EAT -> { lastEatAt = now; eat(mc); }
@@ -184,7 +185,7 @@ public final class ReflexGuard {
             return;
         }
         GotoTask t = new GotoTask(TaskManager.get().newId("reflex-home"),
-            home.x(), home.y(), home.z());
+            home.x(), home.y(), home.z(), true);
         TaskManager.get().register(t);
         emit(mc, p, "retreat", null, 0);
     }
@@ -214,7 +215,7 @@ public final class ReflexGuard {
             return;
         }
         GotoTask t = new GotoTask(TaskManager.get().newId("reflex-return"),
-            target.x(), target.y(), target.z());
+            target.x(), target.y(), target.z(), true);
         TaskManager.get().register(t);
         JsonObject extra = new JsonObject();
         extra.addProperty("target", "home_or_death");
@@ -292,7 +293,7 @@ public final class ReflexGuard {
         if (len < 0.01) { dx = 1; len = 1; }
         int tx = (int) Math.floor(p.getX() + dx / len * FLEE_DIST);
         int tz = (int) Math.floor(p.getZ() + dz / len * FLEE_DIST);
-        GotoTask t = new GotoTask(TaskManager.get().newId("reflex"), tx, -1, tz);
+        GotoTask t = new GotoTask(TaskManager.get().newId("reflex"), tx, -1, tz, false);
         TaskManager.get().register(t);
     }
 

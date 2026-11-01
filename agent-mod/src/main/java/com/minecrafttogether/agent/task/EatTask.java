@@ -40,6 +40,14 @@ public class EatTask extends AgentTask {
         }
 
         if (!started) {
+            // D59/P2-9: 別メニュー (チェスト等) が開いている間は
+            // containerId 0 前提のクリックが届かず、食品が手に渡らない
+            // まま USE_FAILED → eat 能力が恒久喪失していた。メニューが
+            // 開いているのは一過性なので、学習せず即失敗で返す
+            if (p.containerMenu != p.inventoryMenu) {
+                fail("MENU_OPEN", "a container menu is open; cannot eat now");
+                return;
+            }
             int slot = bestFood(p);
             if (slot < 0) {
                 errorCode = "NO_FOOD";
@@ -53,9 +61,10 @@ public class EatTask extends AgentTask {
             if (slot >= 9) {
                 int srcMenu = slot;            // inv 9-35 → menu slot 9-35
                 int dstMenu = 36 + hotbar;     // hotbar i → menu slot 36+i
-                mc.gameMode.handleInventoryMouseClick(0, srcMenu, 0,
+                int cid = p.inventoryMenu.containerId;
+                mc.gameMode.handleInventoryMouseClick(cid, srcMenu, 0,
                     ClickType.PICKUP, p);
-                mc.gameMode.handleInventoryMouseClick(0, dstMenu, 0,
+                mc.gameMode.handleInventoryMouseClick(cid, dstMenu, 0,
                     ClickType.PICKUP, p);
                 swapped = true;
             } else {
@@ -121,9 +130,10 @@ public class EatTask extends AgentTask {
     /** swapした食品の残りを元slotへ戻す (best-effort) */
     private void restore(Minecraft mc, LocalPlayer p) {
         if (!swapped) return;
-        mc.gameMode.handleInventoryMouseClick(0, 36 + hotbar, 0,
+        int cid = p.inventoryMenu.containerId;
+        mc.gameMode.handleInventoryMouseClick(cid, 36 + hotbar, 0,
             ClickType.PICKUP, p);
-        mc.gameMode.handleInventoryMouseClick(0, srcInv, 0,
+        mc.gameMode.handleInventoryMouseClick(cid, srcInv, 0,
             ClickType.PICKUP, p);
         swapped = false;
     }

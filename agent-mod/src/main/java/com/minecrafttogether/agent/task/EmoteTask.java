@@ -12,6 +12,11 @@ public class EmoteTask extends AgentTask {
         this.ticksLeft = durationTicks;
     }
 
+    // D59/P2-8: 基底の cancel() は即 CANCELLED にするため、tick 内の
+    // CANCELLING 分岐 (keyShift 解放) がデッドコードだった
+    @Override
+    public void cancel() { state = State.CANCELLING; }
+
     @Override
     public void tick() {
         Minecraft mc = Minecraft.getInstance();

@@ -39,6 +39,9 @@ public class MineTask extends AgentTask {
     }
 
     @Override
+    public boolean movementTask() { return true; }
+
+    @Override
     public void tick() {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer p = mc.player;

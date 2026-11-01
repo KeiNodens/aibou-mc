@@ -25,6 +25,9 @@ public abstract class AgentTask {
 
     protected AgentTask(String id) { this.id = id; }
 
+    /** Baritone を使う移動系タスクか。TaskManager が単一排他を課す (D59/P2-5) */
+    public boolean movementTask() { return false; }
+
     /** 毎tick呼ばれる。完了時に state を遷移させる */
     public abstract void tick();
 

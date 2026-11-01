@@ -168,6 +168,14 @@ public class ShootTask extends AgentTask {
     private void finish(String reason) {
         Minecraft mc = Minecraft.getInstance();
         if (mc != null) mc.options.keyUse.setDown(false);
+        // D59/P2-8: 1発も撃てなかった理由 (対象なし/矢なし) は失敗。
+        // 旧実装は理由によらず SUCCEEDED で、虚偽成功になっていた
+        if (shots == 0 && (reason.equals("no_target")
+                || reason.equals("out_of_arrows"))) {
+            fail(reason.equals("no_target") ? "NO_TARGET" : "OUT_OF_ARROWS",
+                "no shot fired: " + reason);
+            return;
+        }
         JsonObject r = new JsonObject();
         r.addProperty("reason", reason);
         r.addProperty("shots", shots);
@@ -177,9 +185,17 @@ public class ShootTask extends AgentTask {
 
     @Override
     protected void onPause() {
-        // Release the draw; tick re-draws on resume.
+        // D59/P2-8: 引き絞り中の pause は vanilla が矢を放つ = 実射撃。
+        // その1発を shots に数え、フェーズを最初に戻して resume 後に
+        // 再び引き絞らせる (旧実装はフェーズ据え置きで、resume 後に
+        // 撃っていないのに shots++ だけが進んだ)
         Minecraft mc = Minecraft.getInstance();
         if (mc != null) mc.options.keyUse.setDown(false);
+        if (phase == 1 || phase == 3) {
+            shots++;
+            phase = 0;
+            phaseT = 0;
+        }
     }
 
     @Override

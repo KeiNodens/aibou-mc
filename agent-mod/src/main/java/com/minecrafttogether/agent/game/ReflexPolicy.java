@@ -30,16 +30,21 @@ public final class ReflexPolicy {
         boolean ownerSleeping, boolean anyUserTaskRunning,
         boolean justRespawned, boolean eatCapable,
         long now, long lastEatAt, long lastRetreatAt,
-        long lastSleepTryAt, long lastReturnAt) {}
+        long lastSleepTryAt, long lastReturnAt,
+        boolean combatTaskRunning) {}
 
     /** 優先度: 溺死 > 退避 > 食事 > 睡眠同期 > 死亡後帰還 */
     public static Kind decide(In in, Cfg c) {
         if (in.air < c.airThreshold) return Kind.DROWN;
+        // D59/P2-4 (裁定): 依頼戦闘中は RETREAT を出さない (戦闘側に
+        // hp_abort がある)。EAT は全ユーザータスク実行中は出さない
+        // (SLEEP と同じ抑制)。DROWN は常時最優先のまま
         if (!c.combatDeathMode && !in.inHome && !in.alreadyRetreating
+            && !in.combatTaskRunning
             && in.now - in.lastRetreatAt >= c.retreatCooldownMs
             && (in.health <= c.retreatHp || in.hostiles >= c.retreatHostiles))
             return Kind.RETREAT;
-        if (in.eatCapable && in.hunger <= c.eatFood
+        if (in.eatCapable && !in.anyUserTaskRunning && in.hunger <= c.eatFood
             && in.now - in.lastEatAt >= c.eatCooldownMs)
             return Kind.EAT;
         if (in.ownerSleeping && !in.anyUserTaskRunning

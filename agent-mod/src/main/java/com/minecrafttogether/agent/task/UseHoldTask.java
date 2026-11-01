@@ -83,6 +83,15 @@ public class UseHoldTask extends AgentTask {
         Minecraft mc = Minecraft.getInstance();
         if (mc != null && mc.player != null) release(mc, mc.player);
         else if (mc != null) mc.options.keyUse.setDown(false);
+        // 注: pause の release は弓等では実発射になる (vanilla の入力仕様)
+    }
+
+    // D59/P2-8: resume は保持を最初からやり直す。旧実装は started 据え置きで、
+    // pause で解放済みなのに「保持継続→早期完了」の SUCCEEDED になった
+    @Override
+    protected void onResume() {
+        started = false;
+        t = 0;
     }
 
     @Override

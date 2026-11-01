@@ -18,17 +18,24 @@ public class GotoTask extends AgentTask {
     private final Goal goal;
     private boolean started = false;
 
+    /** D59/P2-7: 4引数版は y を常に明示として扱う。旧実装の
+     *  y>=0 ヒューリスティクスでは、負 y の拠点 (地下基地) への
+     *  退避が GoalXZ になり、地表に着いた時点で「到着」と
+     *  誤認した。y 省略は5引数版で hasY=false を明示すること */
     public GotoTask(String id, int x, int y, int z) {
-        this(id, x, y, z, y >= 0);
+        this(id, x, y, z, true);
     }
 
-    /** Review S3: hasY distinguishes an omitted y from an explicit
+    /** hasY distinguishes an omitted y from an explicit
      *  (possibly negative) y. Negative coordinates are real places
      *  (deepslate depths), not "no height given". */
     public GotoTask(String id, int x, int y, int z, boolean hasY) {
         super(id);
         this.goal = hasY ? new GoalBlock(new BlockPos(x, y, z)) : new GoalXZ(x, z);
     }
+
+    @Override
+    public boolean movementTask() { return true; }
 
     @Override
     public void tick() {

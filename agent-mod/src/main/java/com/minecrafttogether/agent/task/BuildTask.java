@@ -64,6 +64,9 @@ public class BuildTask extends AgentTask {
     }
 
     @Override
+    public boolean movementTask() { return true; }
+
+    @Override
     public void tick() {
         Minecraft mc = Minecraft.getInstance();
         LocalPlayer p = mc.player;
@@ -199,7 +202,10 @@ public class BuildTask extends AgentTask {
                 // InventoryMenu の main スロット番号は item index と一致する (9-35)
                 mc.gameMode.handleInventoryMouseClick(
                     p.inventoryMenu.containerId, i, inv.selected, ClickType.SWAP, p);
-                return inv.getSelected().is(item) || true;
+                // D59/P2-10: swap の成否を実状態で返す。旧実装は
+                // `|| true` で常に成功扱いになり、失敗時に手持ちの
+                // 別アイテムで誤ったブロックを設置していた
+                return inv.getSelected().is(item);
             }
         }
         return false;

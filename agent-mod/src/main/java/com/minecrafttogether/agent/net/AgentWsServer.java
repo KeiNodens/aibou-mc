@@ -142,11 +142,23 @@ public class AgentWsServer extends WebSocketServer {
         String type = msg.get("type").getAsString();
 
         // identify: role申告。controller=全method、observer=READONLYのみ
+        // D59/P1-5: 未知・省略の role は controller へ倒さず切断する
+        // (fail-closed)。旧実装は typo や省略でも全権の controller に
+        // なった。再 identify による role 昇格も許さない
         if ("identify".equals(type)) {
-            String role = msg.has("role")
-                ? msg.get("role").getAsString() : "controller";
-            if (!"controller".equals(role) && !"observer".equals(role)) {
-                role = "controller";
+            if (conn.<String>getAttachment() != null) {
+                AgentMod.LOGGER.warn("[agentmod] re-identify ignored");
+                return;
+            }
+            String role = null;
+            if (msg.has("role") && msg.get("role").isJsonPrimitive()) {
+                String r = msg.get("role").getAsString();
+                if ("controller".equals(r) || "observer".equals(r)) role = r;
+            }
+            if (role == null) {
+                AgentMod.LOGGER.warn("[agentmod] identify with missing/unknown role; closing");
+                conn.close(1002, "identify requires role controller|observer");
+                return;
             }
             conn.setAttachment(role);
             JsonObject ack = new JsonObject();
@@ -213,7 +225,12 @@ public class AgentWsServer extends WebSocketServer {
         evt.addProperty("type", "evt");
         evt.addProperty("name", name);
         evt.add("data", data);
-        broadcast(evt.toString());
+        // D59/P1-5: evt は identify 済み接続にだけ流す (旧実装は
+        // broadcast で未 identify の接続にも chat 等が届いていた)
+        String s = evt.toString();
+        for (WebSocket c : getConnections()) {
+            if (c.isOpen() && c.<String>getAttachment() != null) c.send(s);
+        }
     }
 
     private void ok(WebSocket conn, long id, JsonObject result) {
