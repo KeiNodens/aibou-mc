@@ -1,8 +1,8 @@
 // 倉庫整理: チェストへの預け入れ (deposit) / 取り出し (fetch)。
 // fetch は S3 (D23) で拡張: 指定チェスト → 近いチェスト → 施設記憶の
 // チェスト (近い順) → ME 端末 (座標指定時) の順に探して必要数を集める。
-// container.read の container_idx で「プレイヤー側」と「チェスト側」を区別する
-// (大きい方の container がプレイヤーインベントリ、という mod 側の規約)。
+// container.read の player_container_idx で「プレイヤー側」と「チェスト側」を
+// 区別する (mod がプレイヤーInventoryの container を正確に報告する)。
 const KEEP_DEFAULT = [
   'minecraft:torch',
 ];
@@ -30,7 +30,18 @@ function splitSides(read) {
   const sizes = read?.container_sizes ?? {};
   const idxs = Object.keys(sizes).map(Number);
   if (!read || read.menu_id === 'player_inventory' || idxs.length < 2) return null;
-  const playerIdx = idxs.reduce((a, b) => (sizes[a] >= sizes[b] ? a : b));
+  // Review F1: the mod now reports player_container_idx exactly. The old
+  // "largest container is the player" rule inverts on double chests
+  // (54 storage vs 36 player), swapping fetch and deposit. Fallbacks for
+  // older mod builds: the 36-slot container (player main+hotbar), else
+  // the last container in menu order.
+  let playerIdx;
+  if (typeof read.player_container_idx === 'number'
+    && idxs.includes(read.player_container_idx)) {
+    playerIdx = read.player_container_idx;
+  } else {
+    playerIdx = idxs.find((i) => sizes[i] === 36) ?? idxs[idxs.length - 1];
+  }
   return { playerIdx, menuId: read.menu_id };
 }
 

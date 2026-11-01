@@ -19,8 +19,15 @@ public class GotoTask extends AgentTask {
     private boolean started = false;
 
     public GotoTask(String id, int x, int y, int z) {
+        this(id, x, y, z, y >= 0);
+    }
+
+    /** Review S3: hasY distinguishes an omitted y from an explicit
+     *  (possibly negative) y. Negative coordinates are real places
+     *  (deepslate depths), not "no height given". */
+    public GotoTask(String id, int x, int y, int z, boolean hasY) {
         super(id);
-        this.goal = y >= 0 ? new GoalBlock(new BlockPos(x, y, z)) : new GoalXZ(x, z);
+        this.goal = hasY ? new GoalBlock(new BlockPos(x, y, z)) : new GoalXZ(x, z);
     }
 
     @Override

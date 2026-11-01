@@ -1089,17 +1089,18 @@ public final class GameOps {
         requirePlayer();
         int x, z;
         int y = params.has("y") ? params.get("y").getAsInt() : -1;
+        boolean hasY = params.has("y");
         if (params.has("name")) {
             Waypoints.Wp wp = Waypoints.get(params.get("name").getAsString());
             if (wp == null) throw new ApiError("NOT_FOUND", "unknown waypoint: " + params.get("name").getAsString());
             x = wp.x();
-            if (y == -1) y = wp.y();
+            if (!hasY) { y = wp.y(); hasY = true; }
             z = wp.z();
         } else {
             x = params.get("x").getAsInt();
             z = params.get("z").getAsInt();
         }
-        GotoTask t = new GotoTask(TaskManager.get().newId("goto"), x, y, z);
+        GotoTask t = new GotoTask(TaskManager.get().newId("goto"), x, y, z, hasY);
         TaskManager.get().register(t);
         JsonObject r = new JsonObject();
         r.addProperty("task_id", t.id);
@@ -2214,7 +2215,7 @@ public final class GameOps {
             slots.add(o);
         }
         r.add("slots", slots);
-        // 各containerのslot数 (大きい方がplayer inv側とみなせる)
+        // 各containerのslot数
         JsonObject contCounts = new JsonObject();
         int[] counts = new int[nextIdx[0]];
         for (int i = 0; i < menu.slots.size(); i++) {
@@ -2224,6 +2225,17 @@ public final class GameOps {
             contCounts.addProperty(String.valueOf(i), counts[i]);
         }
         r.add("container_sizes", contCounts);
+        // Review F1: identify the player inventory container exactly.
+        // The old "largest container is the player" heuristic inverts on
+        // double chests (54 storage vs 36 player). The player slots'
+        // container IS the player's Inventory instance.
+        try {
+            LocalPlayer pl = Minecraft.getInstance().player;
+            if (pl != null) {
+                Integer pidx = containers.get(pl.getInventory());
+                if (pidx != null) r.addProperty("player_container_idx", pidx);
+            }
+        } catch (Throwable ignore) {}
         return r;
     }
 
