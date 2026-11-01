@@ -45,3 +45,6 @@ fixture-*.log
 fixture-*.err
 data/cave-trail.json
 run-one.ps1
+data/party-tools.json
+data/places.json
+knowledge/

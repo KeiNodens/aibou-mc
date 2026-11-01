@@ -40,6 +40,8 @@ public final class AgentWsCapabilities {
             "inventory.resync",
             "recipe.lookup",
             "registry.blocks",
+            "registry.items",
+            "probe.energy",
             "projecte.status",
         "refinedstorage.status",
         "contraption.status",
@@ -98,7 +100,7 @@ public final class AgentWsCapabilities {
         "obs.state", "obs.entity", "obs.scan", "obs.block", "obs.block_state",
         "look_info", "container.read", "container.repo",
         "item.info", "find_item", "recipe.lookup", "registry.blocks",
-        "projecte.status",
+        "projecte.status", "registry.items", "probe.energy",
         "waypoint.get", "waypoint.list",
         "quest.list", "quest.inspect", "screen.read",
         "task.status", "task.result", "task.list"

@@ -524,6 +524,162 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   reg(
+    'probe_energy',
+    {
+      description:
+        'Read the Forge Energy (FE) storage exposed by the block ' +
+        'entity at x/y/z, per face (D40 layer 1). Client-side ' +
+        'capability read: values may not be synced for every mod, ' +
+        'treat them as indicative.',
+      inputSchema: {
+        x: z.number(), y: z.number(), z: z.number(),
+      },
+    },
+    async ({ x, y, z }) => {
+      try {
+        return json(await mod.call('probe.energy', { x, y, z }));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  reg(
+    'registry_items',
+    {
+      description:
+        'Enumerate the client item registry (id + display name) with ' +
+        'offset/limit paging (D40 layer 1). The material for the ' +
+        'pack item index; pair with block_search for blocks.',
+      inputSchema: {
+        offset: z.number().int().optional(),
+        limit: z.number().int().optional(),
+        contains: z.string().optional()
+          .describe('filter the returned page by id/name substring'),
+      },
+    },
+    async ({ offset, limit, contains }) => {
+      try {
+        const r = (await mod.call('registry.items',
+          { offset: offset ?? 0, limit: limit ?? 2000 })) as
+          { items?: Array<{ id?: string; name?: string }> };
+        if (contains && Array.isArray(r.items)) {
+          const q = contains.toLowerCase();
+          r.items = r.items.filter((e) =>
+            (e.id ?? '').toLowerCase().includes(q)
+            || (e.name ?? '').toLowerCase().includes(q));
+        }
+        return json(r);
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  // ---- D40 層2: knowledge (jar 同梱ドキュメントの索引) ----
+  let knowledgeIndex: {
+    mods?: Array<Record<string, unknown>>;
+  } | null = null;
+  const knowledgeDir = async (): Promise<string | null> => {
+    for (const dir of [path.resolve(process.cwd(), 'knowledge'),
+      path.resolve(process.cwd(), '..', 'knowledge')]) {
+      try {
+        await readFile(path.join(dir, 'index.json'), 'utf8');
+        return dir;
+      } catch { /* try next */ }
+    }
+    return null;
+  };
+  const loadKnowledge = async () => {
+    if (knowledgeIndex) return knowledgeIndex;
+    const dir = await knowledgeDir();
+    if (!dir) return null;
+    try {
+      knowledgeIndex = JSON.parse(
+        await readFile(path.join(dir, 'index.json'), 'utf8'));
+    } catch { knowledgeIndex = null; }
+    return knowledgeIndex;
+  };
+  reg(
+    'knowledge',
+    {
+      description:
+        'Search the extracted mod documentation (D40 layer 2: ' +
+        'in-jar lang files and Patchouli guides, extracted by ' +
+        'tools/extract_knowledge.py into knowledge/). action=search ' +
+        'finds items/blocks/guides by name or id substring; ' +
+        'action=get reads one extracted file (mod + path from the ' +
+        'index); action=mods lists indexed mods.',
+      inputSchema: {
+        action: z.enum(['search', 'get', 'mods']),
+        query: z.string().optional(),
+        mod: z.string().optional(),
+        path: z.string().optional(),
+        limit: z.number().int().optional(),
+      },
+    },
+    async ({ action, query, mod: modId, path: rel, limit }) => {
+      try {
+        const idx = await loadKnowledge();
+        if (!idx?.mods) {
+          return err(new Error('knowledge index not found — run ' +
+            'tools/extract_knowledge.py against the pack mods dir first'));
+        }
+        if (action === 'mods') {
+          return json({ mods: idx.mods.map((m) => ({
+            id: m.id, name: m.name, version: m.version,
+            lang_entries: m.lang_entries, guides: m.guides_count,
+          })) });
+        }
+        if (action === 'search') {
+          const q = (query ?? '').toLowerCase();
+          if (!q) return err(new Error('query is required for search'));
+          const out: Array<Record<string, unknown>> = [];
+          for (const m of idx.mods) {
+            if (String(m.id).toLowerCase().includes(q)
+              || String(m.name ?? '').toLowerCase().includes(q)) {
+              out.push({ mod: m.id, kind: 'mod', name: m.name,
+                version: m.version });
+            }
+            const entries = (m.entries ?? []) as Array<Record<string, unknown>>;
+            for (const e of entries) {
+              const hay = `${e.key} ${e.en ?? ''} ${e.ja ?? ''}`.toLowerCase();
+              if (hay.includes(q)) {
+                out.push({ mod: m.id, kind: 'lang', ...e });
+                if (out.length >= (limit ?? 20)) break;
+              }
+            }
+            if (out.length >= (limit ?? 20)) break;
+            const guides = (m.guides ?? []) as Array<Record<string, unknown>>;
+            for (const g of guides) {
+              if (String(g.title ?? '').toLowerCase().includes(q)) {
+                out.push({ mod: m.id, kind: 'guide', ...g });
+                if (out.length >= (limit ?? 20)) break;
+              }
+            }
+            if (out.length >= (limit ?? 20)) break;
+          }
+          return json({ matches: out });
+        }
+        // get
+        const dir = await knowledgeDir();
+        if (!dir || !modId || !rel) {
+          return err(new Error('mod and path are required for get'));
+        }
+        const base = path.resolve(dir, modId);
+        const target = path.resolve(base, rel);
+        if (!target.startsWith(base + path.sep)) {
+          return err(new Error('path escapes the mod knowledge dir'));
+        }
+        const text = await readFile(target, 'utf8');
+        return json({ mod: modId, path: rel, text: text.slice(0, 20000) });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  reg(
     'projecte_status',
     {
       description:

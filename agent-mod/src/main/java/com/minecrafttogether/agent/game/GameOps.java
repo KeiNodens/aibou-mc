@@ -37,6 +37,8 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraftforge.common.capabilities.ForgeCapabilities;
+import net.minecraftforge.energy.IEnergyStorage;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
@@ -100,6 +102,8 @@ public final class GameOps {
             case "inventory.resync" -> inventoryResync();
             case "recipe.lookup" -> recipeLookup(params);
             case "registry.blocks" -> registryBlocks(params);
+            case "registry.items" -> registryItems(params);
+            case "probe.energy" -> probeEnergy(params);
             case "projecte.status" -> projecteStatus(params);
             case "refinedstorage.status" -> refinedStorageStatus(params);
             case "contraption.status" -> contraptionStatus(params);
@@ -1399,6 +1403,89 @@ public final class GameOps {
         r.addProperty("offset", offset);
         r.addProperty("returned", arr.size());
         r.add("blocks", arr);
+        return r;
+    }
+
+    /**
+     * registry.items: クライアントレジストリの全アイテムを列挙する
+     * (registry.blocks のアイテム版、D41 層1)。offset/limit ページング。
+     */
+    private static JsonObject registryItems(JsonObject params) {
+        int offset = params.has("offset") ? params.get("offset").getAsInt() : 0;
+        int limit = params.has("limit") ? params.get("limit").getAsInt() : 2000;
+        JsonArray arr = new JsonArray();
+        int total = 0;
+        for (Item it : BuiltInRegistries.ITEM) {
+            if (total >= offset && total < offset + limit) {
+                JsonObject e = new JsonObject();
+                ResourceLocation key = BuiltInRegistries.ITEM.getKey(it);
+                e.addProperty("id", key != null ? key.toString() : "unknown");
+                try { e.addProperty("name", it.getDescription().getString()); }
+                catch (Throwable ignored) { }
+                arr.add(e);
+            }
+            total++;
+        }
+        JsonObject r = new JsonObject();
+        r.addProperty("total", total);
+        r.addProperty("offset", offset);
+        r.addProperty("returned", arr.size());
+        r.add("items", arr);
+        return r;
+    }
+
+    /**
+     * probe.energy: 指定座標の block entity が公開する Forge Energy
+     * (FE) を面ごとに読む (D41 層1)。クライアント側 capability の
+     * 値は mod によって同期されないことがあるため目安として扱う。
+     */
+    private static JsonObject probeEnergy(JsonObject params) throws ApiError {
+        LocalPlayer p = requirePlayer();
+        BlockPos pos = new BlockPos(
+            params.get("x").getAsInt(),
+            params.get("y").getAsInt(),
+            params.get("z").getAsInt());
+        JsonObject r = new JsonObject();
+        r.addProperty("x", pos.getX());
+        r.addProperty("y", pos.getY());
+        r.addProperty("z", pos.getZ());
+        var be = p.level().getBlockEntity(pos);
+        if (be == null) {
+            r.addProperty("supported", false);
+            r.addProperty("reason", "no_block_entity");
+            return r;
+        }
+        JsonObject faces = new JsonObject();
+        boolean any = false;
+        long firstStored = 0;
+        long firstCap = 0;
+        java.util.List<Direction> dirs = new java.util.ArrayList<>();
+        dirs.add(null);
+        for (Direction d : Direction.values()) dirs.add(d);
+        for (Direction dir : dirs) {
+            IEnergyStorage es = be.getCapability(ForgeCapabilities.ENERGY, dir)
+                .orElse(null);
+            if (es == null) continue;
+            JsonObject f = new JsonObject();
+            f.addProperty("stored", es.getEnergyStored());
+            f.addProperty("capacity", es.getMaxEnergyStored());
+            f.addProperty("can_receive", es.canReceive());
+            f.addProperty("can_extract", es.canExtract());
+            faces.add(dir == null ? "unsided" : dir.getName(), f);
+            if (!any) {
+                any = true;
+                firstStored = es.getEnergyStored();
+                firstCap = es.getMaxEnergyStored();
+            }
+        }
+        r.addProperty("supported", any);
+        if (any) {
+            r.addProperty("stored", firstStored);
+            r.addProperty("capacity", firstCap);
+            r.add("faces", faces);
+        }
+        r.addProperty("note",
+            "client-side capability read; values may not be synced for all mods");
         return r;
     }
 
