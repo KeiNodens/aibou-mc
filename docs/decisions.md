@@ -149,3 +149,11 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - **候補**: 対象外のまま / GUI 駆動のみで状態も画面から読む
 - **理由**: ユーザーが愛好してきた mod であり使う意思が明示された。EMC 残高のような数値は画面テキスト依存にせず、Jade/AE2 と同じ soft dependency + リフレクションで確実に読む
 - **根拠**: ユーザー裁定 (2026-11-01)
+
+## D23. schematic 拡充: 生成・材料集め・取り出し・配置 (2026-11-01)
+
+- **決定**: schematic 系を4段で拡充する。S1 生成 (MineBench 方式: プリミティブ/座標列 → Sponge .schem 書き出し。形式層の props 分離修正と、registry.blocks カタログ + block_search を含む)、S2 build_prepare (材料集計→在庫・チェスト・ME 照合→調達と不足報告)、S3 チェスト/ME からの個数指定取り出し (logistics 拡張)、S4 build_schematic v2 (props 検証・配置コンテキスト制御・自動補充・回転)。目標には mod 機械を詰めた工場建築も含め、生成スペックに対で必要な commissioning plan (配置後設定) と意味レベルプリミティブ (machine_row 等) を設計に含める
+- **候補**: 読み取り+建築のみの現状維持 / Litematica 形式での生成
+- **理由**: ユーザーから「AI と話して schematic を作れる」「置くアイテムを一緒に集める」「チェストから取り出せる」の3点と、工場建築・配線の肩代わりへの希望が明示された。MineBench が「モデルによる設計図生成」の成立を実証しており、書き出し形式 (.schem) は既存の読み取り・建築と直結する。block state と mod block の問題は、カタログ (実在 id + state 語彙) と配置層の段階導入で対処する
+- **根拠**: ユーザー裁定 (2026-11-01) + MineBench 調査 (voxel.exec プリミティブと .schem v3 書き出し)
+- **詳細**: docs/design-schematic-expansion.md
