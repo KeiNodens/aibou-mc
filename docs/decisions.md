@@ -241,3 +241,18 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - 副産物: D30 の clear_area.mjs に潜在的な構文エラー (description の
   apostrophe) がありスキルが読み込まれていなかったのを発見・修正。
   全スキルの構文スイープも実施 (他は正常)
+
+## D33 残りの降下候補をすべて mod タスク化 (2026-11-01)
+
+- DeckFollowTask (`contraption.follow_local`): ローカル→グローバル
+  変換 + 素の移動入力で甲板上を追従。キーは終了時に必ず解放
+- FishingTask (`fishing.start`): 投げる→水中の浮きの急落下で
+  アタリ検知→合わせる。釣果の数え上げは bridge (インベントリ差分)
+- DriveTask (`drive.start`): 乗車中に入力を保持し速度を観測。
+  Create が素のキーを読むかは従来どおり実機未検証
+- GlideTask (`glide.start`): 空中前提で目標点へ姿勢制御。離陸の
+  段取りと花火ブーストは bridge に残した (ブーストは task.status を
+  見ながら定期発射)
+- 対応スキル (deck_walk / fishing / train_drive / fly_elytra) は
+  起動と結果の翻訳だけに。これで design-layering の降下候補は全て
+  消化した

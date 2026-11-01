@@ -62,34 +62,29 @@ export default {
     await ctx.call('move.stop').catch(() => {});
     if (!deployed) return { done: false, reason: 'never_airborne' };
 
-    // 滑空ループ: 目標を向き続け、4秒ごとに花火で加速
-    const deadline = Date.now() + max_seconds * 1000;
-    let lastBoost = 0;
-    let landed = false;
+    // 滑空の姿勢制御は mod 側 GlideTask (D33)。花火ブーストだけ
+    // bridge から定期的に撃つ (加速は制御ほど詰めていないため)
+    const gt = await ctx.call('glide.start', {
+      x, y: Math.floor(me.y), z, max_seconds,
+    }).catch(() => null);
+    if (!gt?.task_id) return { done: false, reason: 'op_unavailable' };
+    const deadline = Date.now() + (max_seconds + 10) * 1000;
+    let ev = null;
     while (Date.now() < deadline) {
       ctx.throwIfCancelled();
-      const s = await ctx.state();
-      if (s.on_ground) { landed = true; break; }
-      const dx = x - s.pos.x, dz = z - s.pos.z;
-      const hd = Math.hypot(dx, dz);
-      if (hd < 6) break;
-      await ctx.call('look_at', { x, y: Math.floor(s.pos.y) - 2, z }).catch(() => {});
-      if (Date.now() - lastBoost > 4000) {
-        lastBoost = Date.now();
-        const r = await ctx.state();
-        const rk = (r.inventory_detail ?? []).find(
-          (sl) => sl.id === 'minecraft:firework_rocket' && sl.slot <= 8);
-        if (!rk) break;
-        await ctx.call('equip', { slot: rk.slot });
-        await ctx.call('use_item', {}).catch(() => {});
+      await ctx.sleep(4000);
+      const st2 = await ctx.call('task.status', { task_id: gt.task_id })
+        .catch(() => null);
+      if (!st2 || st2.state === 'succeeded' || st2.state === 'failed'
+        || st2.state === 'cancelled') {
+        ev = st2;
+        break;
       }
-      await ctx.sleep(500);
+      await ctx.call('use_item', {}).catch(() => {}); // 花火ブースト
     }
-    const end = await ctx.state();
-    const hd = Math.round(Math.hypot(x - end.pos.x, z - end.pos.z));
-    await ctx.say(landed || hd < 16
-      ? `着いたよ (目標まで約${hd}ブロック)`
-      : `飛行を打ち切った (目標まで約${hd}ブロック)`);
-    return { done: hd < 16, distance_remaining: hd, landed };
+    const reason = ev?.result?.reason ?? ev?.error_code ?? 'timeout';
+    const arrived = reason === 'arrived';
+    if (arrived) await ctx.say(`(${x}, ${z}) の上空に着いたよ`);
+    return { done: arrived, reason, via: 'glide_task' };
   },
 };

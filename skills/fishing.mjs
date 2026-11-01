@@ -36,46 +36,24 @@ export default {
       return { done: false, reason: 'no_rod_in_hotbar' };
     }
     await ctx.call('equip', { slot: rod.slot });
-    let got = 0;
-    let casts = 0;
-    while (got < catches && casts < max_casts) {
-      ctx.throwIfCancelled();
-      casts++;
-      const before = totalFish(await ctx.state());
-      await ctx.call('use_item', {}); // cast
-      // 浮きが出るまで待つ
-      let bobber = null;
-      for (let i = 0; i < 20 && !bobber; i++) {
-        await ctx.sleep(250);
-        const f = await ctx.call('obs.entity', {
-          name: 'minecraft:fishing_bobber', radius: 32,
-        }).catch(() => null);
-        if (f?.count) bobber = f.entities[0];
-      }
-      if (!bobber) continue; // 投げ損ね
-      // アタリ待ち: 浮きが素早く沈む (y が 0.2 以上下がる) のを検知
-      let prevY = bobber.y;
-      let bite = false;
-      for (let i = 0; i < 160 && !bite; i++) { // 最大40秒
-        await ctx.sleep(250);
-        ctx.throwIfCancelled();
-        const f = await ctx.call('obs.entity', {
-          name: 'minecraft:fishing_bobber', radius: 32,
-        }).catch(() => null);
-        if (!f?.count) { bite = true; break; } // 浮きが消えた = 食った/切れた
-        const y = f.entities[0].y;
-        if (prevY - y >= 0.2) bite = true;
-        prevY = y;
-      }
-      await ctx.call('use_item', {}); // reel in
-      await ctx.sleep(800);
-      const after = totalFish(await ctx.state());
-      if (after > before) {
-        got += after - before;
-        ctx.journal?.checkpoint(`catch_${got}`, {});
-        await ctx.say(`釣れた! (${got}/${catches})`);
-      }
-    }
-    return { done: got > 0, catches: got, casts };
+    // D33: 投げる→アタリ検知→合わせる のループは mod 側 FishingTask。
+    // 釣果の数え上げ (インベントリ差分) は bridge に残す
+    const before = totalFish(await ctx.state());
+    const t = await ctx.call('fishing.start', {
+      max_casts,
+      timeout_seconds: max_casts * 50,
+    }).catch(() => null);
+    if (!t?.task_id) return { done: false, reason: 'op_unavailable' };
+    const ev = await ctx.waitTask(t.task_id, (max_casts * 50 + 15) * 1000)
+      .catch(() => null);
+    const r = ev?.result ?? {};
+    const got = Math.max(0, totalFish(await ctx.state()) - before);
+    if (got > 0) await ctx.say(`${got}匹釣れた`);
+    else if (r.reason === 'rod_gone') await ctx.say('竿が無くなった');
+    return {
+      done: got > 0, catches: got,
+      casts: r.casts ?? 0, bites: r.bites ?? 0,
+      reason: r.reason, via: 'fishing_task',
+    };
   },
 };

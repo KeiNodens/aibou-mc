@@ -179,6 +179,22 @@ wss.on('connection', (ws) => {
         tasks.set(taskId, { state: 'succeeded', result });
         send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
       }, 600);
+    } else if (m === 'contraption.follow_local' || m === 'fishing.start'
+      || m === 'drive.start' || m === 'glide.start') {
+      const taskId = `d33-t${++taskSeq}`;
+      tasks.set(taskId, { state: 'running' });
+      reply(ws, msg, { task_id: taskId });
+      const results = {
+        'contraption.follow_local': { arrived: true, distance: 0.3 },
+        'fishing.start': { reason: 'casts_done', casts: 3, reels: 2, bites: 2 },
+        'drive.start': { reason: 'done', max_speed: 0.8, moved: true, ticks: 160 },
+        'glide.start': { reason: 'arrived', ticks: 100 },
+      };
+      setTimeout(() => {
+        const result = results[m];
+        tasks.set(taskId, { state: 'succeeded', result });
+        send(ws, { type: 'evt', name: 'task.done', data: { task_id: taskId, state: 'succeeded', result } });
+      }, 400);
     } else if (m === 'task.status' || m === 'task.result') {
       const t = tasks.get(p.task_id);
       if (t) reply(ws, msg, { task_id: p.task_id, generation: 1, ...t });

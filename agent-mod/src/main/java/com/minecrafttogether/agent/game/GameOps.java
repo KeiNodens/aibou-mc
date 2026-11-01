@@ -7,6 +7,10 @@ import com.minecrafttogether.agent.task.AgentTask;
 import com.minecrafttogether.agent.task.CombatTask;
 import com.minecrafttogether.agent.task.BuildTask;
 import com.minecrafttogether.agent.task.WaitConditionTask;
+import com.minecrafttogether.agent.task.DeckFollowTask;
+import com.minecrafttogether.agent.task.DriveTask;
+import com.minecrafttogether.agent.task.FishingTask;
+import com.minecrafttogether.agent.task.GlideTask;
 import com.minecrafttogether.agent.task.CraftTask;
 import com.minecrafttogether.agent.task.DigTask;
 import com.minecrafttogether.agent.task.EmoteTask;
@@ -80,6 +84,10 @@ public final class GameOps {
             case "combat.engage" -> combatEngage(params);
             case "wait.condition" -> waitCondition(params);
             case "build.place" -> buildPlace(params);
+            case "contraption.follow_local" -> contraptionFollowLocal(params);
+            case "fishing.start" -> fishingStart(params);
+            case "drive.start" -> driveStart(params);
+            case "glide.start" -> glideStart(params);
             case "use_item" -> useItem(params);
             case "container.read" -> containerRead();
             case "container.click" -> containerClick(params);
@@ -1962,6 +1970,63 @@ public final class GameOps {
         JsonObject r = new JsonObject();
         r.addProperty("task_id", t.id);
         r.addProperty("blocks", list.size());
+        return r;
+    }
+
+    /** contraption.follow_local (D33): DeckFollowTask を開始する */
+    private static JsonObject contraptionFollowLocal(JsonObject params) throws ApiError {
+        requirePlayer();
+        if (!params.has("local")) {
+            throw new ApiError("BAD_REQUEST", "follow_local needs local {x,y,z}");
+        }
+        var l = params.getAsJsonObject("local");
+        var local = new net.minecraft.world.phys.Vec3(
+            l.get("x").getAsDouble(), l.get("y").getAsDouble(), l.get("z").getAsDouble());
+        Integer entityId = params.has("entity_id") ? params.get("entity_id").getAsInt() : null;
+        int maxSeconds = params.has("max_seconds") ? params.get("max_seconds").getAsInt() : 30;
+        DeckFollowTask t = new DeckFollowTask(TaskManager.get().newId("deck"),
+            entityId, local, maxSeconds);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
+        return r;
+    }
+
+    /** fishing.start (D33): FishingTask を開始する (竿は手持ち前提) */
+    private static JsonObject fishingStart(JsonObject params) throws ApiError {
+        requirePlayer();
+        int maxCasts = params.has("max_casts") ? params.get("max_casts").getAsInt() : 10;
+        int timeout = params.has("timeout_seconds") ? params.get("timeout_seconds").getAsInt() : 600;
+        FishingTask t = new FishingTask(TaskManager.get().newId("fish"), maxCasts, timeout);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
+        return r;
+    }
+
+    /** drive.start (D33): DriveTask を開始する (乗車中前提) */
+    private static JsonObject driveStart(JsonObject params) throws ApiError {
+        requirePlayer();
+        boolean forward = !params.has("direction")
+            || !"back".equals(params.get("direction").getAsString());
+        int seconds = params.has("seconds") ? params.get("seconds").getAsInt() : 8;
+        DriveTask t = new DriveTask(TaskManager.get().newId("drive"), forward, seconds);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
+        return r;
+    }
+
+    /** glide.start (D33): GlideTask を開始する (空中前提) */
+    private static JsonObject glideStart(JsonObject params) throws ApiError {
+        requirePlayer();
+        int maxSeconds = params.has("max_seconds") ? params.get("max_seconds").getAsInt() : 60;
+        GlideTask t = new GlideTask(TaskManager.get().newId("glide"),
+            params.get("x").getAsDouble(), params.get("y").getAsDouble(),
+            params.get("z").getAsDouble(), maxSeconds);
+        TaskManager.get().register(t);
+        JsonObject r = new JsonObject();
+        r.addProperty("task_id", t.id);
         return r;
     }
 

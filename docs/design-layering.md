@@ -58,15 +58,15 @@ aibou-mc の実行を mod / bridge / LLM の3層で割り直す。
   world_craft の wait_transform、cook の再オープンポーリング、
   process の完了待ちなど、bridge のポーリング群をまとめて置換
   できる高レバレッジなプリミティブ
-- **P2 contraption 追従タスク**: deck_walk の 350ms 再照準ループを
+- **P2 contraption 追従タスク** ✅ 実装済み (D33): deck_walk の 350ms 再照準ループを
   「移動体上のローカル座標へ移動する」mod タスクに (座標変換は
   mod 側の知識なので相性が良い)
 - **P2 BuildTask** ✅ 実装済み (D32): build_schematic の配置ループ (1ブロックごとに
   WS 往復) を、ブロック列を mod が消化する形に。大規模建築・
   工場で効く。大きいので段階導入
-- **P3 FishingTask**: 浮きの沈み込みを tick で監視 (アタリの窓は短い)
-- **P3 DriveTask**: train_drive のキー保持+速度監視を mod 側に
-- **P3 GlideTask**: fly_elytra の姿勢制御を目標点滑空タスクに
+- **P3 FishingTask** ✅ 実装済み (D33): 浮きの沈み込みを tick で監視 (アタリの窓は短い)
+- **P3 DriveTask** ✅ 実装済み (D33): train_drive のキー保持+速度監視を mod 側に
+- **P3 GlideTask** ✅ 実装済み (D33): fly_elytra の姿勢制御を目標点滑空タスクに
 
 ## 降ろさないもの (理由つき)
 
@@ -78,6 +78,6 @@ aibou-mc の実行を mod / bridge / LLM の3層で割り直す。
 
 ## 実施順序
 
-CombatTask ✅ → wait.condition ✅ → BuildTask ✅ → contraption 追従 → Fishing/Drive/Glide (P3)。
+CombatTask ✅ → wait.condition ✅ → BuildTask ✅ → contraption 追従 ✅ → Fishing/Drive/Glide ✅ (全候補消化、D33)
 各タスクは「開始 op + task.done (理由と戦績) + cancel 可」の形に
 統一し、LLM が節目を見て介入できる粒度を保つ。
