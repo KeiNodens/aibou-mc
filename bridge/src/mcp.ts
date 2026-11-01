@@ -13,6 +13,7 @@ import { QuestGraph } from './questgraph.js';
 import { Autonomy } from './autonomy.js';
 import { BotManager } from './bots.js';
 import { BlockCatalog } from './catalog.js';
+import { computePresentation, loadToolConfig } from './toolgate.js';
 
 const text = (s: string) => ({ content: [{ type: 'text' as const, text: s }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
@@ -25,6 +26,41 @@ const err = (e: unknown) => ({
 // 未実装のものはmock-modがUNSUPPORTEDを返す。
 export function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal, runhold?: RunHold, questGraph?: QuestGraph, autonomy?: Autonomy, bots?: BotManager) {
   const server = new McpServer({ name: 'minecraft', version: '0.0.1' });
+
+  // ツールゲート (D28): 登録ハンドルを集め、mod 連動 + 設定で見せ方を制御
+  const REG = new Map<string, { enable(): void; disable(): void }>();
+  const reg = ((...args: unknown[]) => {
+    const t = (server as any).registerTool(...args);
+    REG.set(args[0] as string, t);
+    return t;
+  }) as unknown as typeof server.registerTool;
+  const gateState = new Map<string, boolean>();
+  let lastMods: Set<string> | null = null;
+  const applyGate = async () => {
+    if (process.env.AIBOU_TOOL_PROFILE === 'full') {
+      for (const [name, t] of REG) {
+        if (gateState.get(name) === false) { t.enable(); gateState.set(name, true); }
+      }
+      return;
+    }
+    if (mod.connected) {
+      try {
+        const r = (await mod.call('meta.mods')) as { mods?: string[] };
+        if (Array.isArray(r?.mods)) lastMods = new Set(r.mods);
+      } catch { /* 前回値を維持 */ }
+    } else {
+      lastMods = null;
+    }
+    const want = computePresentation([...REG.keys()], lastMods, loadToolConfig());
+    for (const [name, t] of REG) {
+      const w = want.get(name) ?? true;
+      if (gateState.get(name) !== w) {
+        if (w) t.enable(); else t.disable();
+        gateState.set(name, w);
+      }
+    }
+  };
+
 
   // ブロックカタログ (D23/S1b)。data/block-catalog.json にキャッシュし、
   // 未取得なら mod 接続時に一度だけ取りに行く。
@@ -44,7 +80,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     return catalog;
   };
 
-  server.registerTool(
+  reg(
     'send_chat',
     {
       description: 'Send a chat message to the in-game chat as the bot player.',
@@ -59,7 +95,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'run_command',
     {
       description:
@@ -75,7 +111,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'get_chat',
     {
       description: 'Get recent in-game chat lines (newest last).',
@@ -84,7 +120,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     async ({ limit }) => json(state.chat(limit ?? 50)),
   );
 
-  server.registerTool(
+  reg(
     'wait_event',
     {
       description:
@@ -101,7 +137,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'get_state',
     {
       description:
@@ -117,7 +153,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'scan_area',
     {
       description: 'Scan surrounding blocks/entities within radius.',
@@ -132,7 +168,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'find_block',
     {
       description:
@@ -152,7 +188,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'use_item',
     {
       description:
@@ -185,7 +221,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'container_read',
     {
       description:
@@ -202,7 +238,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'container_click',
     {
       description:
@@ -235,7 +271,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'container_button',
     {
       description:
@@ -252,7 +288,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'container_trade',
     {
       description:
@@ -269,7 +305,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'container_repo',
     {
       description:
@@ -287,7 +323,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'container_repo_action',
     {
       description:
@@ -326,7 +362,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'respawn',
     {
       description:
@@ -343,7 +379,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'inventory_resync',
     {
       description:
@@ -361,7 +397,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'schematic_inspect',
     {
       description:
@@ -381,7 +417,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'schematic_plan',
     {
       description:
@@ -405,7 +441,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'schematic_create',
     {
       description:
@@ -458,7 +494,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'block_search',
     {
       description:
@@ -488,7 +524,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'projecte_status',
     {
       description:
@@ -508,7 +544,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'refinedstorage_status',
     {
       description:
@@ -528,7 +564,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'contraption_status',
     {
       description:
@@ -553,7 +589,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'contraption_ride',
     {
       description:
@@ -576,7 +612,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'work_journal',
     {
       description:
@@ -602,7 +638,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'work_checkpoint',
     {
       description:
@@ -632,7 +668,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'goal_set',
     {
       description:
@@ -668,7 +704,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'goal_get',
     {
       description: 'List active goals (all goals with all=true).',
@@ -684,7 +720,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'journal_snapshot',
     {
       description:
@@ -703,7 +739,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'quest_list',
     {
       description:
@@ -721,7 +757,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'quest_inspect',
     {
       description:
@@ -740,7 +776,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'quest_frontier',
     {
       description:
@@ -768,7 +804,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'quest_plan',
     {
       description:
@@ -796,7 +832,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'jei_search',
     {
       description:
@@ -817,7 +853,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'emi_search',
     {
       description:
@@ -837,7 +873,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'quest_claim',
     {
       description:
@@ -858,7 +894,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'container_close',
     {
       description: 'Close the currently open container menu.',
@@ -873,7 +909,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'key_list',
     {
       description:
@@ -891,7 +927,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'key',
     {
       description:
@@ -924,7 +960,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'scroll',
     {
       description:
@@ -945,7 +981,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'screen_read',
     {
       description:
@@ -963,7 +999,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'screen_click',
     {
       description:
@@ -989,7 +1025,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'screen_close',
     {
       description: 'Force-close the currently open Screen.',
@@ -1004,7 +1040,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'type_text',
     {
       description:
@@ -1027,7 +1063,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'sign_write',
     {
       description:
@@ -1051,7 +1087,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'container_open_curios',
     {
       description:
@@ -1069,7 +1105,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'recipe_lookup',
     {
       description:
@@ -1086,7 +1122,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'craft_menu',
     {
       description:
@@ -1107,7 +1143,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'mock_gather',
     {
       description:
@@ -1126,7 +1162,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'move',
     {
       description:
@@ -1151,7 +1187,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'stop_move',
     {
       description: 'Release all movement input states.',
@@ -1166,7 +1202,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'block_state',
     {
       description:
@@ -1187,7 +1223,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'look_info',
     {
       description:
@@ -1210,7 +1246,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'find_entity',
     {
       description:
@@ -1227,7 +1263,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'interact',
     {
       description:
@@ -1250,7 +1286,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'look_at',
     {
       description: 'Turn the bot to face a coordinate or entity.',
@@ -1270,7 +1306,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'dig',
     {
       description:
@@ -1295,7 +1331,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'equip',
     {
       description:
@@ -1317,7 +1353,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'item_info',
     {
       description:
@@ -1336,7 +1372,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'toss',
     {
       description: 'Drop the held item (full_stack=true drops the whole stack).',
@@ -1351,7 +1387,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'goto',
     {
       description:
@@ -1374,7 +1410,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'emote',
     {
       description:
@@ -1391,7 +1427,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'screenshot',
     {
       description: "Capture the bot's current first-person view as a PNG image.",
@@ -1411,7 +1447,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'find_item',
     {
       description:
@@ -1428,7 +1464,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'waypoint_save',
     {
       description:
@@ -1462,7 +1498,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'waypoint_list',
     {
       description: 'List saved waypoint names and coordinates.',
@@ -1477,7 +1513,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'waypoint_delete',
     {
       description: 'Delete a saved waypoint by name.',
@@ -1492,7 +1528,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'mine',
     {
       description:
@@ -1516,7 +1552,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'follow',
     {
       description:
@@ -1533,7 +1569,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'stop',
     {
       description: 'Stop all Baritone pathfinding/movement and cancel running tasks.',
@@ -1548,7 +1584,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'task_status',
     {
       description: 'Query execution state of a task (queued/running/succeeded/failed/cancelling/cancelled).',
@@ -1563,7 +1599,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'task_result',
     {
       description: 'Get final result of a finished task.',
@@ -1578,7 +1614,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'cancel_current',
     {
       description:
@@ -1600,7 +1636,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
 
   // ---- 技能層: skills/*.mjs を1ツールずつ公開 ----
   for (const s of skills.list()) {
-    server.registerTool(
+    reg(
       s.name,
       {
         description: `[skill] ${s.description}`,
@@ -1616,7 +1652,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     );
   }
 
-  server.registerTool(
+  reg(
     'reload_skills',
     {
       description: 'Rescan the skills directory and reload skill modules.',
@@ -1628,7 +1664,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'bot_status',
     {
       description: 'Bridge/bot status: WS connectivity to the agent, generation id.',
@@ -1637,7 +1673,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     async () => json({ connected: mod.connected, generation: state.generation }),
   );
 
-  server.registerTool(
+  reg(
     'loop_status',
     {
       description:
@@ -1651,7 +1687,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       : { note: 'runner disabled', connected: mod.connected, generation: state.generation }),
   );
 
-  server.registerTool(
+  reg(
     'loop_resume',
     {
       description:
@@ -1671,7 +1707,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'approve',
     {
       description:
@@ -1690,7 +1726,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'deny',
     {
       description: 'Deny a pending dangerous action (autonomy gate).',
@@ -1707,7 +1743,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'pending_approvals',
     {
       description: 'List actions waiting for approval under the autonomy gate.',
@@ -1719,7 +1755,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     }),
   );
 
-  server.registerTool(
+  reg(
     'session_summary',
     {
       description:
@@ -1738,7 +1774,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'work_resume_plan',
     {
       description:
@@ -1757,7 +1793,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'quest_aside',
     {
       description:
@@ -1793,7 +1829,7 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  server.registerTool(
+  reg(
     'bots_status',
     {
       description:
@@ -1807,6 +1843,10 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
       ],
     }),
   );
+
+  void applyGate();
+  const gateTimer = setInterval(() => { void applyGate(); }, 15_000);
+  (gateTimer as unknown as { unref?: () => void }).unref?.();
 
   return server;
 }

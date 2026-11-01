@@ -63,6 +63,7 @@ public final class GameOps {
         return switch (method) {
             case "mod.ping" -> ping();
             case "meta.capabilities" -> capabilities();
+            case "meta.mods" -> metaMods();
             case "chat.send" -> chatSend(params);
             case "chat.command" -> chatCommand(params);
             case "obs.state" -> obsState();
@@ -1720,6 +1721,24 @@ public final class GameOps {
         var veh = p.getVehicle();
         r.addProperty("riding", veh != null);
         if (veh != null) r.addProperty("vehicle_class", veh.getClass().getName());
+        return r;
+    }
+
+    /**
+     * meta.mods: 導入済み mod id の一覧 (D28 のツールゲート用)。
+     * Forge の ModList をそのまま返す (Forge 自体は常在なので直接利用)。
+     */
+    private static JsonObject metaMods() {
+        JsonArray arr = new JsonArray();
+        try {
+            var list = net.minecraftforge.fml.ModList.get();
+            if (list != null) {
+                for (var info : list.getMods()) arr.add(info.getModId());
+            }
+        } catch (Throwable ignored) { }
+        JsonObject r = new JsonObject();
+        r.add("mods", arr);
+        r.addProperty("count", arr.size());
         return r;
     }
 

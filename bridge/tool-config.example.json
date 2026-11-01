@@ -1,0 +1,4 @@
+{
+  "enabled": ["waypoint_save"],
+  "disabled": ["group:build"]
+}

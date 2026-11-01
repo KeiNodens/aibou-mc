@@ -9,6 +9,7 @@ public final class AgentWsCapabilities {
     public static List<String> all() {
         return List.of(
             "meta.capabilities",
+            "meta.mods",
             "mod.ping",
             "chat.send",
             "chat.command",
@@ -85,7 +86,7 @@ public final class AgentWsCapabilities {
      * controller以外の接続はここに無いreqを拒否される (READONLY)。
      */
     public static final java.util.Set<String> READONLY = java.util.Set.of(
-        "meta.capabilities", "mod.ping",
+        "meta.capabilities", "meta.mods", "mod.ping",
         "obs.state", "obs.entity", "obs.scan", "obs.block", "obs.block_state",
         "look_info", "container.read", "container.repo",
         "item.info", "find_item", "recipe.lookup", "registry.blocks",
