@@ -1,0 +1,12 @@
+{
+  "menu_id": "tfc:barrel",
+  "block": "tfc:barrel",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 樽。流体+item 1slot の密封処理用"
+}

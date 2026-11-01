@@ -1,0 +1,14 @@
+{
+  "menu_id": "ad_astra:nasa_workbench_menu",
+  "block": "ad_astra:nasa_workbench",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): ロケット組立GUI。材料slot多数+完成品slotの複雑GUI、最小定義のみ"
+}

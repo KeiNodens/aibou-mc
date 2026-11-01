@@ -1,0 +1,12 @@
+{
+  "menu_id": "tconstruct:melter",
+  "block": "tconstruct:seared_melter",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 単体メルター。成果物は流体 (鋳造台/流体タンクへ)。燃料slotは別途"
+}

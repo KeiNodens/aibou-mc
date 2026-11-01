@@ -1,0 +1,14 @@
+{
+  "menu_id": "gtceu:electric_furnace",
+  "block": "gtceu:*_electric_furnace",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 電気炉"
+}

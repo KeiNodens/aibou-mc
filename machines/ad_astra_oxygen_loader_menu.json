@@ -1,0 +1,12 @@
+{
+  "menu_id": "ad_astra:oxygen_loader_menu",
+  "block": "ad_astra:oxygen_loader",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 水→酸素の変換機。成果物は酸素 (流体/気体側) で item 出力なし想定"
+}

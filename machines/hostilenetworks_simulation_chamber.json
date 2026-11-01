@@ -1,0 +1,14 @@
+{
+  "menu_id": "hostilenetworks:simulation_chamber",
+  "block": "hostilenetworks:simulation_chamber",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): データモデル投入→予測生成。deep_learner は携帯menuで汎用container経路"
+}

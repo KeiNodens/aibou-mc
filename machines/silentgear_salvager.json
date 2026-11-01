@@ -1,0 +1,18 @@
+{
+  "menu_id": "silentgear:salvager",
+  "block": "silentgear:salvager",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 解体系。ギア自体のクラフトは通常クラフト経路 (レシピ帳)"
+}

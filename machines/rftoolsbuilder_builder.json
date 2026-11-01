@@ -1,0 +1,12 @@
+{
+  "menu_id": "rftoolsbuilder:builder",
+  "block": "rftoolsbuilder:builder",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 設定主体のGUI。実建築は build_schematic が担当し、builder は形状カードslot等の最小定義"
+}

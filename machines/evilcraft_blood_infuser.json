@@ -1,0 +1,14 @@
+{
+  "menu_id": "evilcraft:blood_infuser",
+  "block": "evilcraft:blood_infuser",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): ブラッド注入機。血液タンクは流体側"
+}

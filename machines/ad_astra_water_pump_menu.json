@@ -1,0 +1,10 @@
+{
+  "menu_id": "ad_astra:water_pump_menu",
+  "block": "ad_astra:water_pump",
+  "input": [],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 汲み上げ機。item slot はほぼ持たない想定"
+}

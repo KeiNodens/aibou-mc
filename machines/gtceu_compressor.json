@@ -1,0 +1,14 @@
+{
+  "menu_id": "gtceu:compressor",
+  "block": "gtceu:*_compressor",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 圧縮機"
+}

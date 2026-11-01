@@ -7,6 +7,9 @@ import buildSchematic from '../skills/build_schematic.mjs';
 import worldCraft from '../skills/world_craft.mjs';
 import farm from '../skills/farm.mjs';
 import cook from '../skills/cook.mjs';
+import warp from '../skills/warp.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
 
 let fails = 0;
 const check = (label, cond, extra = '') => {
@@ -365,6 +368,59 @@ const chestRead = (chestSlots) => ({
     ctxD.calls.filter((c) => c.method === 'container.click' && c.params.action === 'pickup').length >= 4);
   check('T6d result taken by quick_move',
     ctxD.calls.some((c) => c.method === 'container.click' && c.params.action === 'quick_move' && c.params.slot === 8));
+}
+
+// ---------- T7: D25 coverage batch (defs validity / warp / new stations) ----------
+{
+  // (a) machines/*.json と stations/*.json が全て妥当な形か
+  let defCount = 0;
+  for (const f of fs.readdirSync('machines')) {
+    if (!f.endsWith('.json')) continue;
+    const d = JSON.parse(fs.readFileSync(path.join('machines', f), 'utf8'));
+    if (!d.menu_id || !Array.isArray(d.input) || !Array.isArray(d.output))
+      throw new Error('bad machine def: ' + f);
+    defCount++;
+  }
+  check('T7a machine defs valid', defCount >= 126, defCount + ' defs');
+  let stCount = 0;
+  for (const f of fs.readdirSync('stations')) {
+    if (!f.endsWith('.json')) continue;
+    const d = JSON.parse(fs.readFileSync(path.join('stations', f), 'utf8'));
+    if (!d.id || !d.station?.block || !Array.isArray(d.steps))
+      throw new Error('bad station def: ' + f);
+    stCount++;
+  }
+  check('T7a station defs valid', stCount >= 19, stCount + ' stations');
+
+  // (b) warp: 宛先を名前で選んでクリックする
+  const ctxW = makeCtx({
+    'obs.block': { found: [{ x: 1, y: 64, z: 1 }] },
+    'baritone.goto': { task_id: 't' },
+    'look_at': {},
+    'use_item': {},
+    'screen.read': { widgets: [{ text: 'Spawn Base' }, { text: 'Home Sweet' }] },
+    'screen.click': {},
+  }, { state: { inventory_detail: [] } });
+  const rw = await warp.run(ctxW, { name: 'home' });
+  check('T7b warp picked destination', rw.done === true && rw.destination === 'Home Sweet', JSON.stringify(rw));
+
+  // (c) world_craft: naturesaura_altar (wait ステップ経由) が通る
+  let placed = false;
+  const ctxN = makeCtx({
+    'obs.block': { found: [{ x: 5, y: 64, z: 5 }] },
+    'baritone.goto': { task_id: 't' },
+    'look_at': {},
+    'equip': {},
+    'use_item': () => { placed = true; return {}; },
+  }, {
+    state: () => placed
+      ? { inventory_detail: [{ slot: 0, id: 'naturesaura:infused_iron', count: 1 }] }
+      : { inventory_detail: [{ slot: 0, id: 'minecraft:iron_ingot', count: 1 }] },
+  });
+  const rn = await worldCraft.run(ctxN, {
+    station: 'naturesaura_altar', input: 'minecraft:iron_ingot', at: { x: 5, y: 64, z: 5 },
+  });
+  check('T7c altar run done', rn.done === true, JSON.stringify(rn));
 }
 
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');

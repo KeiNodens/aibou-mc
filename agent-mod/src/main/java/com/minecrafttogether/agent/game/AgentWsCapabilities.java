@@ -32,6 +32,8 @@ public final class AgentWsCapabilities {
             "recipe.lookup",
             "registry.blocks",
             "projecte.status",
+        "refinedstorage.status",
+            "refinedstorage.status",
             "craft",
             "emote",
             "respawn",

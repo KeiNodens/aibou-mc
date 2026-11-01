@@ -1,0 +1,15 @@
+{
+  "menu_id": "gtceu:alloy_smelter",
+  "block": "gtceu:*_alloy_smelter",
+  "input": [
+    0,
+    1
+  ],
+  "output": [
+    2
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 合金炉 (2入力想定)"
+}

@@ -1,0 +1,14 @@
+{
+  "menu_id": "pneumaticcraft:pressure_chamber",
+  "block": "pneumaticcraft:pressure_chamber_interface",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 圧力室インターフェース。圧力ネットワークはプレイヤー側インフラ"
+}

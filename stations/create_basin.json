@@ -1,0 +1,29 @@
+{
+  "id": "create_basin",
+  "recipeTypes": [
+    "create:mixing",
+    "create:compacting"
+  ],
+  "station": {
+    "block": "create:basin"
+  },
+  "inputs": [],
+  "steps": [
+    {
+      "do": "goto_station"
+    },
+    {
+      "do": "toss_inputs"
+    },
+    {
+      "do": "wait",
+      "timeout_s": 20
+    },
+    {
+      "do": "collect"
+    }
+  ],
+  "draft": true,
+  "hint": "大釜の上のミキサー/プレスと動力、取り出し口 (シュート等) はプレイヤー側インフラ",
+  "note": "投入と待機まで。成果物の取り出しは設置側の搬送に依存する"
+}

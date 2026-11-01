@@ -1,0 +1,14 @@
+{
+  "menu_id": "gtceu:extractor",
+  "block": "gtceu:*_extractor",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 抽出機。流体出力はタンク側"
+}

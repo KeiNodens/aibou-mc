@@ -1,0 +1,16 @@
+{
+  "menu_id": "productivebees:centrifuge",
+  "block": "productivebees:centrifuge",
+  "input": [
+    0
+  ],
+  "output": [
+    1,
+    2,
+    3
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): ハニカム投入→遠心分離。流体出力はタンク側"
+}

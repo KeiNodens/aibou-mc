@@ -1,0 +1,12 @@
+{
+  "menu_id": "tfc:anvil",
+  "block": "tfc:*_anvil",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 金床。鍛造ミニゲーム本体は Screen 側のボタン操作 (screen ops) で、def は材料slotの保険"
+}

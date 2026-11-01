@@ -1,0 +1,16 @@
+{
+  "menu_id": "productivebees:advanced_beehive",
+  "block": "productivebees:advanced_beehive",
+  "input": [],
+  "output": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 巣箱は蜂ケージ + ハニカム出力の保管container想定"
+}

@@ -1,0 +1,12 @@
+{
+  "menu_id": "ad_astra:fuel_refinery_menu",
+  "block": "ad_astra:fuel_refinery",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 原油→燃料。成果物は流体側"
+}

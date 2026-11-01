@@ -1,0 +1,14 @@
+{
+  "menu_id": "ars_nouveau:imbuement_chamber",
+  "block": "ars_nouveau:imbuement_chamber",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): GUIが開かない報告あり。開けた場合の保険 + 本命は station (place_on) 経路"
+}

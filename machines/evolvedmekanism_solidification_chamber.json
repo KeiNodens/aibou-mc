@@ -1,0 +1,14 @@
+{
+  "menu_id": "evolvedmekanism:solidification_chamber",
+  "block": "evolvedmekanism:solidification_chamber",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): GUIが開かない報告あり。開けた場合の保険として定義だけ置く"
+}

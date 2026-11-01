@@ -1,0 +1,20 @@
+{
+  "menu_id": "tconstruct:smeltery",
+  "block": "tconstruct:smeltery_controller",
+  "input": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 形成済みスモルタリー前提。溶融slotはタンク段数で変動。成果物は流体→鋳造経由。GUIが開かない件は実機で再確認"
+}

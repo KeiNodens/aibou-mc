@@ -1,0 +1,31 @@
+{
+  "id": "occultism_ritual",
+  "recipeTypes": [
+    "occultism:ritual"
+  ],
+  "station": {
+    "block": "occultism:golden_sacrificial_bowl"
+  },
+  "inputs": [],
+  "steps": [
+    {
+      "do": "goto_station"
+    },
+    {
+      "do": "place_on"
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "wait",
+      "timeout_s": 30
+    },
+    {
+      "do": "collect"
+    }
+  ],
+  "draft": true,
+  "hint": "ペンタクル (儀式陣) の構築と材料ボウルの配置はプレイヤー側/設計図経由",
+  "note": "儀式の起動 (発動アイテム設置→右クリック) のみを担当する"
+}

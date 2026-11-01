@@ -1,0 +1,14 @@
+{
+  "menu_id": "ad_astra:energizer_menu",
+  "block": "ad_astra:energizer",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): エネルギー充填機 (電池・宇宙服等への充電)"
+}

@@ -1,0 +1,26 @@
+{
+  "id": "tfc_charcoal_forge",
+  "recipeTypes": [],
+  "station": {
+    "block": "tfc:charcoal_forge"
+  },
+  "inputs": [],
+  "steps": [
+    {
+      "do": "goto_station"
+    },
+    {
+      "do": "place_on"
+    },
+    {
+      "do": "wait",
+      "timeout_s": 60
+    },
+    {
+      "do": "collect"
+    }
+  ],
+  "draft": true,
+  "hint": "木炭と送風 (ふいご) はプレイヤー側。着火済み前提",
+  "note": "加熱専用。GUI def (保険) と併用。温度管理は対象外"
+}

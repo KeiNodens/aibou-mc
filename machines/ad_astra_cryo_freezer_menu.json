@@ -1,0 +1,14 @@
+{
+  "menu_id": "ad_astra:cryo_freezer_menu",
+  "block": "ad_astra:cryo_freezer",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 冷却機 (氷→乾いた氷 等)"
+}

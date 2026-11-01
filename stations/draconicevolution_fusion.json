@@ -1,0 +1,34 @@
+{
+  "id": "draconicevolution_fusion",
+  "recipeTypes": [
+    "draconicevolution:fusion_crafting"
+  ],
+  "station": {
+    "block": "draconicevolution:fusion_crafting_core"
+  },
+  "inputs": [],
+  "steps": [
+    {
+      "do": "goto_station"
+    },
+    {
+      "do": "place_on"
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "wait",
+      "timeout_s": 25
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "collect"
+    }
+  ],
+  "draft": true,
+  "hint": "インジェクター配置と給電、触媒アイテムの配置はプレイヤー側",
+  "note": "コアに主材料を置いて起動するワールド内クラフト。周辺配置はインフラ扱い"
+}

@@ -1,0 +1,14 @@
+{
+  "menu_id": "gtceu:macerator",
+  "block": "gtceu:*_macerator",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 粉砕機。GT機械は in/out + バッテリーslot の共通型が基本"
+}

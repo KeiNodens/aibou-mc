@@ -509,6 +509,26 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
   );
 
   server.registerTool(
+    'refinedstorage_status',
+    {
+      description:
+        'Probe the open Refined Storage grid/menu for a network item ' +
+        'snapshot (generic reflection over the menu object, soft ' +
+        'dependency). Open a grid first. Errors with UNSUPPORTED when ' +
+        'no stacks are discoverable; the response names the menu class ' +
+        'seen, for live tuning (D25).',
+      inputSchema: {},
+    },
+    async () => {
+      try {
+        return json(await mod.call('refinedstorage.status', {}));
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
+  server.registerTool(
     'work_journal',
     {
       description:

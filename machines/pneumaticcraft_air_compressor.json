@@ -1,0 +1,12 @@
+{
+  "menu_id": "pneumaticcraft:air_compressor",
+  "block": "pneumaticcraft:air_compressor",
+  "input": [
+    0
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): 燃料slot想定。圧力生成は設置済み前提"
+}

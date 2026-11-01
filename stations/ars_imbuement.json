@@ -1,0 +1,31 @@
+{
+  "id": "ars_imbuement",
+  "recipeTypes": [
+    "ars_nouveau:imbuement"
+  ],
+  "station": {
+    "block": "ars_nouveau:imbuement_chamber"
+  },
+  "inputs": [],
+  "steps": [
+    {
+      "do": "goto_station"
+    },
+    {
+      "do": "place_on"
+    },
+    {
+      "do": "wait",
+      "timeout_s": 30
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "collect"
+    }
+  ],
+  "draft": true,
+  "hint": "チャンバー近くにソース (Source Jar 等) があるか",
+  "note": "GUI が開かないため place_on 経路が本命。レシピ型は実機で要確認"
+}

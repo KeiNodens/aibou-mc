@@ -1,0 +1,14 @@
+{
+  "menu_id": "gtceu:bender",
+  "block": "gtceu:*_bender",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): ベンダー (板曲げ)。金型slotは別途"
+}

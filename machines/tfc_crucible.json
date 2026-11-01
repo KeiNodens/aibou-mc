@@ -1,0 +1,15 @@
+{
+  "menu_id": "tfc:crucible",
+  "block": "tfc:crucible",
+  "input": [
+    0,
+    1,
+    2,
+    3
+  ],
+  "output": [],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): るつぼ。成果物は溶融金属 (流体側)。slot構成は実機で要確認"
+}

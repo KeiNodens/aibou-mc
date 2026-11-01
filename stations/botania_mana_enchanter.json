@@ -1,0 +1,29 @@
+{
+  "id": "botania_mana_enchanter",
+  "recipeTypes": [],
+  "station": {
+    "block": "botania:enchanter"
+  },
+  "inputs": [],
+  "steps": [
+    {
+      "do": "goto_station"
+    },
+    {
+      "do": "place_on"
+    },
+    {
+      "do": "wait",
+      "timeout_s": 30
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "collect"
+    }
+  ],
+  "draft": true,
+  "hint": "エンチャンター周囲にマナ供給 (スパーク/プール) があるか",
+  "note": "置いたアイテムにマナでエンチャントを付与するワールド内装置。材料は引数 input で指定"
+}

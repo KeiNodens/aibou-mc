@@ -1,0 +1,14 @@
+{
+  "menu_id": "bigreactors:reactor_access_port",
+  "block": "bigreactors:reactor_access_port",
+  "input": [
+    0
+  ],
+  "output": [
+    1
+  ],
+  "insert": "direct",
+  "verified_input": false,
+  "draft": true,
+  "notes": "draft (D25): Extreme Reactors の燃料投入/廃棄物取出口。原子炉本体GUIは状態監視主体"
+}

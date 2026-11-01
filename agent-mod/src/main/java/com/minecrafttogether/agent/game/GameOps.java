@@ -85,6 +85,7 @@ public final class GameOps {
             case "recipe.lookup" -> recipeLookup(params);
             case "registry.blocks" -> registryBlocks(params);
             case "projecte.status" -> projecteStatus(params);
+            case "refinedstorage.status" -> refinedStorageStatus(params);
             case "craft" -> craft(params);
             case "emote" -> emote(params);
             case "respawn" -> respawn();
@@ -1436,6 +1437,105 @@ public final class GameOps {
         }
         throw new ApiError("UNSUPPORTED",
             "projecte.status: " + String.join("; ", tried));
+    }
+
+    /**
+     * refinedstorage.status: 開いている Refined Storage グリッド等の
+     * メニューから、ネットワーク在庫スナップショットを汎用リフレクションで
+     * 読む probe (soft dependency、D25)。RS のクライアント側スタック表現は
+     * 版で変わるため、フィールドを走査して ItemStack を公開する要素を拾う。
+     * 拾えなければ UNSUPPORTED で、見えたクラス名を返す (実機調整用)。
+     */
+    private static JsonObject refinedStorageStatus(JsonObject params)
+            throws ApiError {
+        LocalPlayer p = requirePlayer();
+        java.util.List<String> tried = new java.util.ArrayList<>();
+        Object menu = p.containerMenu;
+        if (menu == null)
+            throw new ApiError("UNSUPPORTED",
+                "refinedstorage.status: no menu open");
+        String menuClass = menu.getClass().getName();
+        if (!menuClass.toLowerCase().contains("refinedstorage"))
+            tried.add("open menu is " + menuClass + " (RS grid may not be open)");
+        JsonArray entries = new JsonArray();
+        java.util.Set<Object> seen = java.util.Collections.newSetFromMap(
+            new java.util.IdentityHashMap<>());
+        collectRsStacks(menu, entries, seen, 0);
+        if (entries.size() > 0) {
+            JsonObject r = new JsonObject();
+            r.addProperty("supported", true);
+            r.addProperty("via", menuClass);
+            r.addProperty("count", entries.size());
+            r.add("entries", entries);
+            if (!tried.isEmpty()) {
+                JsonArray ta = new JsonArray();
+                for (String t : tried) ta.add(t);
+                r.add("probe_notes", ta);
+            }
+            return r;
+        }
+        tried.add("no item stacks discoverable under " + menuClass);
+        throw new ApiError("UNSUPPORTED",
+            "refinedstorage.status: " + String.join("; ", tried));
+    }
+
+    private static void collectRsStacks(Object root, JsonArray out,
+            java.util.Set<Object> seen, int depth) {
+        if (root == null || depth > 3 || out.size() >= 200) return;
+        if (!seen.add(root)) return;
+        ItemStack st = asItemStack(root);
+        if (st != null) {
+            if (!st.isEmpty()) {
+                JsonObject e = new JsonObject();
+                ResourceLocation k = BuiltInRegistries.ITEM.getKey(st.getItem());
+                e.addProperty("id", k != null ? k.toString()
+                    : String.valueOf(st.getItem()));
+                long count = st.getCount();
+                for (String mName : new String[]{"getAmount", "getQuantity"}) {
+                    try {
+                        Object a = root.getClass().getMethod(mName).invoke(root);
+                        if (a instanceof Number n) { count = n.longValue(); break; }
+                    } catch (Throwable ignored) { }
+                }
+                e.addProperty("count", count);
+                out.add(e);
+            }
+            return;
+        }
+        if (root instanceof java.util.Collection<?> col) {
+            for (Object e : col) collectRsStacks(e, out, seen, depth);
+            return;
+        }
+        if (root instanceof java.util.Map<?, ?> map) {
+            for (Object e : map.values()) collectRsStacks(e, out, seen, depth);
+            return;
+        }
+        String cn = root.getClass().getName();
+        if (depth > 0 && !cn.startsWith("com.refinedmods")) return;
+        for (Class<?> c = root.getClass(); c != null && c != Object.class;
+                c = c.getSuperclass()) {
+            for (java.lang.reflect.Field f : c.getDeclaredFields()) {
+                if (java.lang.reflect.Modifier.isStatic(f.getModifiers()))
+                    continue;
+                try {
+                    f.setAccessible(true);
+                    Object v = f.get(root);
+                    if (v != null) collectRsStacks(v, out, seen, depth + 1);
+                } catch (Throwable ignored) { }
+            }
+        }
+    }
+
+    /** オブジェクト自身 or そのアクセサから ItemStack を取り出す */
+    private static ItemStack asItemStack(Object o) {
+        if (o instanceof ItemStack st) return st;
+        for (String mName : new String[]{"getStack", "getItemStack"}) {
+            try {
+                Object v = o.getClass().getMethod(mName).invoke(o);
+                if (v instanceof ItemStack st) return st;
+            } catch (Throwable ignored) { }
+        }
+        return null;
     }
 
     /** 知識エントリ (ItemInfo) からアイテム id 文字列を取り出す */

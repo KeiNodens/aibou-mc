@@ -1,0 +1,31 @@
+{
+  "id": "tfc_quern",
+  "recipeTypes": [],
+  "station": {
+    "block": "tfc:quern"
+  },
+  "inputs": [],
+  "steps": [
+    {
+      "do": "goto_station"
+    },
+    {
+      "do": "place_on"
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "collect"
+    }
+  ],
+  "draft": true,
+  "hint": "石臼に材料が乗っているか (粉砕は右クリック複数回)",
+  "note": "TFC の石臼はワールド内操作型。成果物は臼の上/周囲に出る"
+}

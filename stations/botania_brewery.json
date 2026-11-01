@@ -1,0 +1,29 @@
+{
+  "id": "botania_brewery",
+  "recipeTypes": [],
+  "station": {
+    "block": "botania:brewery"
+  },
+  "inputs": [],
+  "steps": [
+    {
+      "do": "goto_station"
+    },
+    {
+      "do": "place_on"
+    },
+    {
+      "do": "wait",
+      "timeout_s": 30
+    },
+    {
+      "do": "right_click_station"
+    },
+    {
+      "do": "collect"
+    }
+  ],
+  "draft": true,
+  "hint": "醸造器にマナが供給されているか、材料バイアルを持っているか",
+  "note": "Botania の醸造はワールド内操作型。GUI は開かない (台帳通り)"
+}
