@@ -76,6 +76,8 @@ export default {
     'prerequisite is reported. List stations by calling with no station.',
   params: {
     station: { type: 'string', required: false, description: 'station definition id (omit to list)' },
+    target: { type: 'string', required: false, description: 'result item id: resolve inputs from the live recipe (recipe.lookup, filtered by the station recipeTypes)' },
+    amount: { type: 'integer', required: false, description: 'desired output amount with target (crafts are rounded up)' },
     crafts: { type: 'integer', required: false, description: 'how many crafts to run (default 1)' },
     input: { type: 'string', required: false, description: 'override the input item (single-input stations)' },
     x: { type: 'integer', required: false, description: 'station X (default: scan for the station block)' },
@@ -97,6 +99,37 @@ export default {
     let inputs = (def.inputs ?? []).map((i) => ({
       item: i.item, count: (i.per ?? 1) * crafts,
     }));
+    let recipeUsed = null;
+    let inputsSource = 'definition';
+    // target 指定時は実レシピから材料を組む (JEI/EMI が表示するのと同じ
+    // RecipeManager のデータ。station の recipeTypes で絞る)
+    if (args.target) {
+      const r = await ctx.call('recipe.lookup', { item: args.target })
+        .catch(() => null);
+      const all = r?.recipes ?? [];
+      const candidates = def.recipeTypes?.length
+        ? all.filter((rec) => def.recipeTypes.includes(rec.type))
+        : all;
+      const rec = candidates[0];
+      if (rec) {
+        const perCraft = new Map();
+        for (const ing of rec.ingredients ?? []) {
+          if (ing.empty || !ing.options?.length) continue;
+          const id = ing.options[0];
+          perCraft.set(id, (perCraft.get(id) ?? 0) + (ing.count ?? 1));
+        }
+        if (perCraft.size) {
+          const ops = args.amount
+            ? Math.max(1, Math.ceil(
+              args.amount / Math.max(1, rec.result?.count ?? 1)))
+            : crafts;
+          inputs = [...perCraft.entries()]
+            .map(([item, c]) => ({ item, count: c * ops }));
+          recipeUsed = { id: rec.id, type: rec.type, result: rec.result };
+          inputsSource = 'recipe';
+        }
+      }
+    }
     if (args.input && inputs.length === 1)
       inputs = [{ item: args.input, count: inputs[0].count }];
     if (args.input && inputs.length === 0)
@@ -256,6 +289,7 @@ export default {
     return {
       done: !!done, station: def.id, consumed, produced,
       transform_seen: transformSeen, log,
+      recipe_used: recipeUsed, inputs_source: inputsSource,
       hint: done ? undefined : (def.hint ?? null),
     };
   },

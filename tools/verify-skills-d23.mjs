@@ -216,5 +216,53 @@ const chestRead = (chestSlots) => ({
     JSON.stringify(list.stations?.map((s) => s.id)));
 }
 
+// ---------- T5: world_craft が target からレシピ材料を引く ----------
+{
+  let tossed = false;
+  let entityCalls = 0;
+  const ctx = makeCtx({
+    'obs.block': { found: [{ x: 5, y: 64, z: 5 }] },
+    'baritone.goto': { task_id: 't' },
+    'equip': {},
+    'toss': () => { tossed = true; return { dropped: true }; },
+    'obs.entity': () => {
+      entityCalls++;
+      return entityCalls <= 1
+        ? { entities: [{ id: 'minecraft:item', x: 5, y: 64, z: 5 }] }
+        : { entities: [] };
+    },
+    'recipe.lookup': {
+      recipes: [{
+        id: 'botania:mana_infusion/manasteel',
+        type: 'botania:mana_infusion',
+        ingredients: [{ options: ['minecraft:iron_ingot'], count: 1 }],
+        result: { id: 'botania:manasteel_ingot', count: 1 },
+      }, {
+        id: 'minecraft:manasteel_from_smelting',
+        type: 'minecraft:smelting',
+        ingredients: [{ options: ['minecraft:iron_ingot'], count: 1 }],
+        result: { id: 'botania:manasteel_ingot', count: 1 },
+      }],
+      count: 2,
+    },
+  }, {
+    state: () => tossed
+      ? { inventory_detail: [
+          { slot: 0, id: 'minecraft:iron_ingot', count: 1 },
+          { slot: 1, id: 'botania:manasteel_ingot', count: 2 },
+        ] }
+      : { inventory_detail: [{ slot: 0, id: 'minecraft:iron_ingot', count: 3 }] },
+  });
+  const r = await worldCraft.run(ctx, {
+    station: 'botania_mana_infusion', target: 'botania:manasteel_ingot', amount: 2,
+  });
+  check('T5 recipe filtered by station type',
+    r.recipe_used?.type === 'botania:mana_infusion', JSON.stringify(r.recipe_used));
+  check('T5 inputs from recipe x2 crafts',
+    r.consumed?.['minecraft:iron_ingot'] === 2, JSON.stringify(r.consumed));
+  check('T5 produced x2', r.produced?.['botania:manasteel_ingot'] === 2);
+  check('T5 inputs_source=recipe', r.inputs_source === 'recipe');
+}
+
 console.log(fails ? `\n${fails} FAILURES` : '\nALL PASS');
 process.exit(fails ? 1 : 0);
