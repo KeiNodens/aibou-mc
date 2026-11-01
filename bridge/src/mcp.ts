@@ -756,7 +756,15 @@ export async function createMcpServer(state: State, mod: ModClient, skills: Skil
         if (!target.startsWith(base + path.sep)) {
           return err(new Error('path escapes the mod knowledge dir'));
         }
-        const text = await readFile(target, 'utf8');
+        // D59/P2-27: 字句検証だけでは symlink / junction を辿る脱出が
+        // 通るため、実パスでも基底の内側かを確認する
+        const { realpath } = await import('node:fs/promises');
+        const realBase = await realpath(base);
+        const realTarget = await realpath(target);
+        if (!realTarget.startsWith(realBase + path.sep)) {
+          return err(new Error('path escapes the mod knowledge dir (symlink)'));
+        }
+        const text = await readFile(realTarget, 'utf8');
         return json({ mod: modId, path: rel, text: text.slice(0, 20000) });
       } catch (e) {
         return err(e);

@@ -54,9 +54,19 @@ export function blockStateString(id: string,
   return `${id}[${inner}]`;
 }
 
+const MAX_NBT_FILE_BYTES = 64 * 1024 * 1024;
+const MAX_NBT_INFLATED_BYTES = 256 * 1024 * 1024;
+
 async function loadNbt(path: string): Promise<any> {
   let buf = await readFile(path);
-  if (buf[0] === 0x1f && buf[1] === 0x8b) buf = gunzipSync(buf);
+  // D59/P2-21: サイズ上限 (旧実装は無制限で、細工ファイルの展開で
+  // メモリを枯渇させられた)
+  if (buf.length > MAX_NBT_FILE_BYTES) {
+    throw new Error(`schematic file too large: ${buf.length} bytes (cap ${MAX_NBT_FILE_BYTES})`);
+  }
+  if (buf[0] === 0x1f && buf[1] === 0x8b) {
+    buf = gunzipSync(buf, { maxOutputLength: MAX_NBT_INFLATED_BYTES });
+  }
   const { parsed } = await nbt.parse(buf);
   return v(parsed);
 }
@@ -100,26 +110,62 @@ function readSchem(root: any): { size: Vec3; blocks: SchematicBlock[] } {
 }
 
 // .litematic: Regions{...} 毎に bit-packing された BlockStates (long配列)。
-function readLitematic(root: any): { size: Vec3; blocks: SchematicBlock[] } {
+// D59/P2-21: リージョンの Position と Size の符号 (向き) を尊重する。
+// 旧実装は両方を無視して全リージョンを原点に重ねていた。座標は全体の
+// バウンディングボックス最小角を原点に正規化して返す。
+const MAX_LITEMATIC_CELLS = 8_000_000;
+
+function readLitematic(root: any): { size: Vec3; blocks: SchematicBlock[]; regions: number } {
   const regions = v(root.Regions) ?? {};
-  let size: Vec3 = { x: 0, y: 0, z: 0 };
-  const blocks: SchematicBlock[] = [];
-  for (const r of Object.values<any>(regions)) {
+  const raw: SchematicBlock[] = [];
+  let lo = { x: Infinity, y: Infinity, z: Infinity };
+  let hi = { x: -Infinity, y: -Infinity, z: -Infinity };
+  const regionList = Object.values<any>(regions);
+  for (const r of regionList) {
     const rg = v(r);
     const sz = v(rg.Size);
-    const sx = Math.abs(num(v(sz.x))), sy = Math.abs(num(v(sz.y))), sz2 = Math.abs(num(v(sz.z)));
-    size = { x: Math.max(size.x, sx), y: Math.max(size.y, sy), z: Math.max(size.z, sz2) };
+    const pos = v(rg.Position) ?? {};
+    // Size は符号付き: 負なら Position から負方向へ伸びる
+    const s = {
+      x: num(v(sz.x)), y: num(v(sz.y)), z: num(v(sz.z)),
+    };
+    const p = {
+      x: num(v(pos.x)), y: num(v(pos.y)), z: num(v(pos.z)),
+    };
+    const sx = Math.abs(s.x), sy = Math.abs(s.y), sz2 = Math.abs(s.z);
+    const total = sx * sy * sz2;
+    if (total > MAX_LITEMATIC_CELLS) {
+      throw new Error(`litematic region too large: ${total} cells (cap ${MAX_LITEMATIC_CELLS})`);
+    }
+    // リージョンの占有範囲 (両端) を全体 bbox へ
+    const rlo = {
+      x: Math.min(p.x, p.x + s.x + (s.x >= 0 ? -1 : 1)),
+      y: Math.min(p.y, p.y + s.y + (s.y >= 0 ? -1 : 1)),
+      z: Math.min(p.z, p.z + s.z + (s.z >= 0 ? -1 : 1)),
+    };
+    const rhi = {
+      x: Math.max(p.x, p.x + s.x + (s.x >= 0 ? -1 : 1)),
+      y: Math.max(p.y, p.y + s.y + (s.y >= 0 ? -1 : 1)),
+      z: Math.max(p.z, p.z + s.z + (s.z >= 0 ? -1 : 1)),
+    };
+    lo = { x: Math.min(lo.x, rlo.x), y: Math.min(lo.y, rlo.y), z: Math.min(lo.z, rlo.z) };
+    hi = { x: Math.max(hi.x, rhi.x), y: Math.max(hi.y, rhi.y), z: Math.max(hi.z, rhi.z) };
     const pal: { id: string; props?: Record<string, string> }[] =
-      (v(rg.BlockStatePalette) ?? []).map((p: any) => {
-        const pp = v(p);
+      (v(rg.BlockStatePalette) ?? []).map((pp0: any) => {
+        const pp = v(pp0);
         const props: Record<string, string> = {};
         if (pp.Properties) for (const [k, t] of Object.entries(v(pp.Properties))) props[k] = String(v(t));
         return { id: String(v(pp.Name)), props: Object.keys(props).length ? props : undefined };
       });
     const bits = Math.max(2, Math.ceil(Math.log2(Math.max(1, pal.length))));
     const longs = (v(rg.BlockStates) ?? []) as (bigint | number)[];
+    // BlockStates の実長と宣言セル数の照合 (切り詰められた細工ファイルを弾く)
+    const needLongs = Math.ceil((total * bits) / 64);
+    if (longs.length < needLongs) {
+      throw new Error(
+        `litematic BlockStates truncated: have ${longs.length} longs, need ${needLongs} for ${total} cells`);
+    }
     const mask = (1n << BigInt(bits)) - 1n;
-    const total = sx * sy * sz2;
     for (let i = 0; i < total; i++) {
       const bitOff = BigInt(i * bits);
       const li = Number(bitOff >> 6n);
@@ -130,12 +176,22 @@ function readLitematic(root: any): { size: Vec3; blocks: SchematicBlock[] } {
         val |= (BigInt(longs[li + 1] ?? 0) << BigInt(64 - off)) & mask;
       const entry = pal[Number(val)];
       if (entry && entry.id !== 'minecraft:air') {
-        const x = i % sx, z = Math.floor(i / sx) % sz2, y = Math.floor(i / (sx * sz2));
-        blocks.push({ x, y, z, id: entry.id, props: entry.props });
+        const ix = i % sx, iz = Math.floor(i / sx) % sz2, iy = Math.floor(i / (sx * sz2));
+        raw.push({
+          x: p.x + (s.x >= 0 ? ix : -ix),
+          y: p.y + (s.y >= 0 ? iy : -iy),
+          z: p.z + (s.z >= 0 ? iz : -iz),
+          id: entry.id, props: entry.props,
+        });
       }
     }
   }
-  return { size, blocks };
+  if (!raw.length) return { size: { x: 0, y: 0, z: 0 }, blocks: [], regions: regionList.length };
+  const blocks = raw.map((b) => ({ ...b, x: b.x - lo.x, y: b.y - lo.y, z: b.z - lo.z }));
+  return {
+    size: { x: hi.x - lo.x + 1, y: hi.y - lo.y + 1, z: hi.z - lo.z + 1 },
+    blocks, regions: regionList.length,
+  };
 }
 
 function pickReader(path: string, root: any) {
@@ -148,12 +204,16 @@ function pickReader(path: string, root: any) {
 
 export async function inspectSchematic(path: string): Promise<SchematicInfo> {
   const root = await loadNbt(path);
-  const { size, blocks } = pickReader(path, root);
+  const r = pickReader(path, root) as {
+    size: Vec3; blocks: SchematicBlock[]; regions?: number;
+  };
+  const { size, blocks } = r;
   const mat = new Map<string, number>();
   for (const b of blocks) mat.set(b.id, (mat.get(b.id) ?? 0) + 1);
   return {
     format: path.toLowerCase().endsWith('.schem') ? 'schem' : 'litematic',
-    regions: 1,
+    // D59/P2-21: 実リージョン数を返す (旧実装は常に 1 固定だった)
+    regions: r.regions ?? 1,
     size,
     palette_size: mat.size,
     solid_blocks: blocks.length,
@@ -458,6 +518,35 @@ export async function createSchematicFile(opts: {
 }> {
   if (!/^[a-zA-Z0-9_-]{1,64}$/.test(opts.name))
     throw new Error(`invalid schematic name: ${opts.name}`);
+  // D59/P1-6: 座標は整数のみ許可する。旧実装は小数座標 (例: to.x=2.5) で
+  // cable_run / line の到達比較 (cur !== to) が永遠に一致せず、同期ループの
+  // まま bridge 全体が固まった (実プローブで再現済み)。範囲もここで制限する
+  const intVec = (v: Vec3, label: string): Vec3 => {
+    for (const ax of ['x', 'y', 'z'] as const) {
+      if (!Number.isInteger(v[ax]) || Math.abs(v[ax]) > 100_000) {
+        throw new Error(`${label}.${ax} must be an integer within ±100000: ${v[ax]}`);
+      }
+    }
+    return v;
+  };
+  const intCoord = (n: number, label: string): number => {
+    if (!Number.isInteger(n) || Math.abs(n) > 100_000) {
+      throw new Error(`${label} must be an integer within ±100000: ${n}`);
+    }
+    return n;
+  };
+  for (const op of opts.ops ?? []) {
+    if (op.op === 'block') {
+      intCoord(op.x, 'block.x'); intCoord(op.y, 'block.y'); intCoord(op.z, 'block.z');
+    } else if (op.op === 'box' || op.op === 'line' || op.op === 'cable_run') {
+      intVec(op.from, `${op.op}.from`); intVec(op.to, `${op.op}.to`);
+    } else if (op.op === 'machine_row' || op.op === 'power_spine') {
+      intVec(op.at, `${op.op}.at`);
+    }
+  }
+  for (const b of opts.blocks ?? []) {
+    intCoord(b.x, 'blocks.x'); intCoord(b.y, 'blocks.y'); intCoord(b.z, 'blocks.z');
+  }
   const grid = new SchemGrid();
   const rawMachines: { pos: Vec3; id: string; facing?: string;
     faces?: { input?: RelFace; output?: RelFace; power?: RelFace } }[] = [];
@@ -491,7 +580,10 @@ export async function createSchematicFile(opts: {
       const cur = { ...op.from };
       addCable(cur.x, cur.y, cur.z, op);
       for (const axis of ['x', 'z', 'y'] as const) {
+        // 整数検証済みでも、防御として歩数上限を置く (P1-6)
+        let steps = 0;
         while (cur[axis] !== op.to[axis]) {
+          if (++steps > 4096) throw new Error(`cable_run too long on axis ${axis}`);
           cur[axis] += Math.sign(op.to[axis] - cur[axis]);
           addCable(cur.x, cur.y, cur.z, op);
         }
