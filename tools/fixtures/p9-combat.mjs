@@ -9,9 +9,9 @@ export default {
       inventory: {}, inventory_detail: [],
     }));
     ctx.stub('obs.entity', (p) => {
-      const player = { id: 99, type: 'minecraft:player', name: 'Daigo', x: 2, y: 64, z: 0 };
+      const player = { id: 99, type: 'minecraft:player', name: 'Player', x: 2, y: 64, z: 0 };
       const zombie = { id: 55, type: 'minecraft:zombie', x: 4, y: 64, z: 0 };
-      if (p.name === 'Daigo') return { entities: [player] };
+      if (p.name === 'Player') return { entities: [player] };
       if (!p.name) return { entities: [player, zombie] };
       return { entities: [] };
     });
@@ -50,7 +50,7 @@ export default {
       throw new Error(`fight wrong: ${JSON.stringify(f)}`);
     }
     // cave_assist: ゾンビが近いので engage が走る (fights >= 1)
-    await h.mcp('cave_assist', { player: 'Daigo', seconds: 5, ores: false, torches: false });
+    await h.mcp('cave_assist', { player: 'Player', seconds: 5, ores: false, torches: false });
     const ca = await lastResult('cave_assist');
     if (!ca || ca.fights < 1) {
       throw new Error(`cave_assist wrong: ${JSON.stringify(ca)}`);
@@ -64,7 +64,7 @@ export default {
         (e) => e.kind === 'work.end' && e.skill === 'cave_assist');
     };
     const before = (await caveEnds()).length;
-    await h.mcp('cave_assist', { player: 'Daigo', seconds: 14, fight: false, torches: false });
+    await h.mcp('cave_assist', { player: 'Player', seconds: 14, fight: false, torches: false });
     let ca2 = null;
     for (let i = 0; i < 40 && !ca2; i++) {
       const ends = await caveEnds();

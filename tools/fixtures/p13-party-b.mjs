@@ -1,5 +1,5 @@
 // P13b fixture (D35d): 手持ちは幸運なしでも、事前申告 (所持 3) が
-// あれば合算で大晃の方が高いと判断し、凛 (幸運1) は掘らない。
+// あれば合算でプレイヤーの方が高いと判断し、凛 (幸運1) は掘らない。
 export default {
   async script(ctx) {
     ctx.stub('obs.state', () => ({
@@ -14,10 +14,10 @@ export default {
     }));
     ctx.stub('obs.entity', (p) => {
       const player = {
-        id: 99, type: 'minecraft:player', name: 'Daigo', x: 3, y: 64, z: 4,
+        id: 99, type: 'minecraft:player', name: 'Player', x: 3, y: 64, z: 4,
         held: { id: 'minecraft:stone_pickaxe', ench: [] },
       };
-      if (p.name === 'Daigo' || !p.name) return { entities: [player] };
+      if (p.name === 'Player' || !p.name) return { entities: [player] };
       return { entities: [] };
     });
     const dugSpots = new Set();
@@ -44,18 +44,18 @@ export default {
       }
       return null;
     };
-    // 事前申告: 大晃は幸運3を「持っている」 (スキルは非同期なので
+    // 事前申告: プレイヤーは幸運3を「持っている」 (スキルは非同期なので
     // journal の work.end で完了を確認してから次へ進む)
-    await h.mcp('party_tools', { action: 'declare', player: 'Daigo', fortune: 3 });
+    await h.mcp('party_tools', { action: 'declare', player: 'Player', fortune: 3 });
     const decRes = await lastResult('party_tools');
     if (!decRes || decRes.fortune !== 3) {
       throw new Error(`declare wrong: ${JSON.stringify(decRes)}`);
     }
-    await h.mcp('cave_assist', { player: 'Daigo', seconds: 15, fight: false, torches: false });
+    await h.mcp('cave_assist', { player: 'Player', seconds: 15, fight: false, torches: false });
     const ca = await lastResult('cave_assist');
     if (!ca || ca.ores_mined !== 0) {
       throw new Error(`declared-fortune wrong: ${JSON.stringify(ca)}`);
     }
-    await h.mcp('party_tools', { action: 'clear', player: 'Daigo' });
+    await h.mcp('party_tools', { action: 'clear', player: 'Player' });
   },
 };

@@ -14,13 +14,13 @@ export default {
     }));
     ctx.stub('obs.entity', (p) => {
       const player = {
-        id: 99, type: 'minecraft:player', name: 'Daigo', x: 3, y: 64, z: 4,
+        id: 99, type: 'minecraft:player', name: 'Player', x: 3, y: 64, z: 4,
         held: {
           id: 'minecraft:diamond_pickaxe',
           ench: [{ id: 'minecraft:fortune', lvl: 3 }],
         },
       };
-      if (p.name === 'Daigo' || !p.name) return { entities: [player] };
+      if (p.name === 'Player' || !p.name) return { entities: [player] };
       return { entities: [] };
     });
     const dugSpots = new Set();
@@ -47,7 +47,7 @@ export default {
       }
       return null;
     };
-    await h.mcp('cave_assist', { player: 'Daigo', seconds: 15, fight: false, torches: false });
+    await h.mcp('cave_assist', { player: 'Player', seconds: 15, fight: false, torches: false });
     const ca = await lastResult('cave_assist');
     if (!ca || ca.ores_mined !== 0) {
       throw new Error(`player-fortune-higher wrong: ${JSON.stringify(ca)}`);

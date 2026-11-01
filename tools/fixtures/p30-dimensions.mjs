@@ -10,9 +10,9 @@ export default {
       inventory: {}, inventory_detail: [],
     }));
     ctx.stub('obs.entity', (p) => {
-      const player = { id: 99, type: 'minecraft:player', name: 'Daigo', x: 2, y: 64, z: 2 };
+      const player = { id: 99, type: 'minecraft:player', name: 'Player', x: 2, y: 64, z: 2 };
       const lich = { id: 77, type: 'twilightforest:lich', name: 'Lich', x: 4, y: 64, z: 2, dist: 3 };
-      if (p.name === 'Daigo' || p.name === 'minecraft:player') return { entities: [player] };
+      if (p.name === 'Player' || p.name === 'minecraft:player') return { entities: [player] };
       if (!p.name) return { entities: [player, lich] };
       return { entities: [] };
     });
@@ -45,7 +45,7 @@ export default {
     // cave_assist がリッチを敵として交戦するか (combat.engage は
     // モック標準ハンドラが受ける)
     await h.mcp('cave_assist', {
-      player: 'Daigo', seconds: 10, fight: true, ores: false, torches: false,
+      player: 'Player', seconds: 10, fight: true, ores: false, torches: false,
     });
     const cave = await lastResult('cave_assist', 1);
     if (!cave || (cave.fights ?? 0) < 1) {

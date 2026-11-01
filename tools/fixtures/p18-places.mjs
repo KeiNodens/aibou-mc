@@ -9,8 +9,8 @@ export default {
       inventory: {}, inventory_detail: [],
     }));
     ctx.stub('obs.entity', (p) => {
-      const player = { id: 99, type: 'minecraft:player', name: 'Daigo', x: 3, y: 64, z: 4 };
-      if (p.name === 'Daigo' || p.name === 'minecraft:player' || !p.name) {
+      const player = { id: 99, type: 'minecraft:player', name: 'Player', x: 3, y: 64, z: 4 };
+      if (p.name === 'Player' || p.name === 'minecraft:player' || !p.name) {
         return { entities: [player] };
       }
       return { entities: [] };
@@ -59,7 +59,7 @@ export default {
       return null;
     };
     // cave_assist がダイヤ発見を自動記録する
-    await h.mcp('cave_assist', { player: 'Daigo', seconds: 12, fight: false, torches: false });
+    await h.mcp('cave_assist', { player: 'Player', seconds: 12, fight: false, torches: false });
     const ca = await lastResult('cave_assist');
     if (!ca) throw new Error('cave_assist did not finish');
     let beforeP = await countEnds('places');

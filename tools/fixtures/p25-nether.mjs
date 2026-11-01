@@ -11,8 +11,8 @@ export default {
       inventory: {}, inventory_detail: [],
     }));
     ctx.stub('obs.entity', (p) => {
-      const player = { id: 99, type: 'minecraft:player', name: 'Daigo', x: 2, y: 64, z: 2 };
-      if (p.name === 'Daigo' || p.name === 'minecraft:player' || !p.name) {
+      const player = { id: 99, type: 'minecraft:player', name: 'Player', x: 2, y: 64, z: 2 };
+      if (p.name === 'Player' || p.name === 'minecraft:player' || !p.name) {
         return { entities: [player] };
       }
       return { entities: [] };
@@ -53,7 +53,7 @@ export default {
       }
       return null;
     };
-    await h.mcp('cave_assist', { player: 'Daigo', seconds: 14, fight: false, torches: false, mode: 'quiet' });
+    await h.mcp('cave_assist', { player: 'Player', seconds: 14, fight: false, torches: false, mode: 'quiet' });
     const r = await lastResult('cave_assist');
     if (!r || r.ores_mined !== 2) {
       throw new Error(`nether ores wrong (expect quartz+debris=2, gold skipped): ${JSON.stringify(r)}`);

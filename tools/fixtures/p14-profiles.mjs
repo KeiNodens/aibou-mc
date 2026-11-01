@@ -22,9 +22,9 @@ export default {
     // ので、名前検索の総回数で段階を切り替える。
     let listCalls = 0;
     let nameCalls = 0;
-    const mateFar = { id: 99, type: 'minecraft:player', name: 'Daigo', x: 0, y: 64, z: -30 };
+    const mateFar = { id: 99, type: 'minecraft:player', name: 'Player', x: 0, y: 64, z: -30 };
     const mateNear = {
-      id: 99, type: 'minecraft:player', name: 'Daigo', x: 0, y: 64, z: 4,
+      id: 99, type: 'minecraft:player', name: 'Player', x: 0, y: 64, z: 4,
       armor: [
         { slot: 'head', id: 'ad_astra:space_suit_helmet', ench: [] },
         { slot: 'chest', id: 'ad_astra:space_suit_chestplate', ench: [] },
@@ -41,7 +41,7 @@ export default {
         if (listCalls === 2) return { entities: [mateNear] };
         return { entities: [] };
       }
-      if (p.name === 'Daigo') {
+      if (p.name === 'Player') {
         // 合流待ちのポーリング: 数回は遠いまま、その後近づく
         nameCalls++;
         return { entities: [nameCalls <= 5 ? mateFar : mateNear] };

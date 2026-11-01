@@ -13,8 +13,8 @@ export default {
       }],
     }));
     ctx.stub('obs.entity', (p) => {
-      const player = { id: 99, type: 'minecraft:player', name: 'Daigo', x: 3, y: 64, z: 4 };
-      if (p.name === 'Daigo' || !p.name) return { entities: [player] };
+      const player = { id: 99, type: 'minecraft:player', name: 'Player', x: 3, y: 64, z: 4 };
+      if (p.name === 'Player' || !p.name) return { entities: [player] };
       return { entities: [] };
     });
     const dugSpots = new Set();
@@ -41,7 +41,7 @@ export default {
       }
       return null;
     };
-    await h.mcp('cave_assist', { player: 'Daigo', seconds: 15, fight: false, torches: false });
+    await h.mcp('cave_assist', { player: 'Player', seconds: 15, fight: false, torches: false });
     const ca = await lastResult('cave_assist');
     if (!ca || ca.ores_mined !== 1) {
       throw new Error(`fortune joint dig wrong: ${JSON.stringify(ca)}`);

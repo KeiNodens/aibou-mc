@@ -16,8 +16,8 @@ export default {
         ? 'minecraft:iron_ore' : 'minecraft:stone',
     }));
     ctx.stub('obs.entity', (p) => {
-      if (p.name === 'Daigo') {
-        return { entities: [{ id: 99, type: 'minecraft:player', name: 'Daigo', x: 2, y: 64, z: 0 }] };
+      if (p.name === 'Player') {
+        return { entities: [{ id: 99, type: 'minecraft:player', name: 'Player', x: 2, y: 64, z: 0 }] };
       }
       if (p.name === 'minecraft:cow') {
         return { entities: [
@@ -26,7 +26,7 @@ export default {
         ] };
       }
       if (p.name === 'minecraft:player') {
-        return { entities: [{ id: 99, type: 'minecraft:player', name: 'Daigo', x: 2, y: 64, z: 0 }] };
+        return { entities: [{ id: 99, type: 'minecraft:player', name: 'Player', x: 2, y: 64, z: 0 }] };
       }
       return { entities: [] };
     });
@@ -53,7 +53,7 @@ export default {
       throw new Error(`branch_mine wrong: ${JSON.stringify(bm)}`);
     }
     // cave_assist: 4 秒だけ随行して trail を残す
-    await h.mcp('cave_assist', { player: 'Daigo', seconds: 4, ores: false });
+    await h.mcp('cave_assist', { player: 'Player', seconds: 4, ores: false });
     const ca = await lastResult('cave_assist');
     if (!ca || !ca.entry || ca.crumbs < 1) {
       throw new Error(`cave_assist wrong: ${JSON.stringify(ca)}`);
