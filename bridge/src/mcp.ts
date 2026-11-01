@@ -2075,6 +2075,74 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
+  // ---- D49: quest_guide (frontier の推奨順つき提示) ----
+  reg(
+    'quest_guide',
+    {
+      description:
+        'Recommend what to do next in FTB Quests: the current ' +
+        'frontier ranked by readiness — quests whose item tasks the ' +
+        'bot inventory already satisfies come first, each with its ' +
+        'missing items and rewards. This is the Minemind-style ' +
+        '"always know the frontier" view, as a ranked shortlist for ' +
+        'the LLM to pick from and explain.',
+      inputSchema: {
+        limit: z.number().optional().describe('max recommendations (default 8)'),
+      },
+    },
+    async ({ limit }) => {
+      try {
+        if (!questGraph?.loaded()) return json({ note: 'quest-graph.json not built' });
+        const ql = await mod.call('quest.list').catch(() => ({ quests: [] }));
+        const done = questGraph.extractCompleted(ql);
+        const frontier = questGraph.frontier(done);
+        const st = (await mod.call('obs.state').catch(() => null)) as
+          Record<string, unknown> | null;
+        const inv = new Map<string, number>();
+        const rawInv = (st?.inventory ?? st?.inventory_summary) as unknown;
+        if (rawInv && typeof rawInv === 'object' && !Array.isArray(rawInv)) {
+          for (const [id, n] of Object.entries(rawInv as Record<string, number>)) {
+            inv.set(id, Number(n) || 0);
+          }
+        }
+        const recs = frontier.map((q) => {
+          const missing: Array<{ item: string; need: number; have: number }> = [];
+          let missingTotal = 0;
+          for (const t of q.tasks) {
+            if (t.type === 'item' && t.item) {
+              const need = t.count ?? 1;
+              const have = inv.get(t.item) ?? 0;
+              if (have < need) {
+                missing.push({ item: t.item, need, have });
+                missingTotal += need - have;
+              }
+            }
+          }
+          const nonItem = q.tasks.filter((t) => t.type !== 'item').length;
+          return {
+            id: q.id, title: q.title, chapter: q.chapter,
+            ready: missing.length === 0 && nonItem === 0,
+            items_ready: missing.length === 0,
+            missing, missing_total: missingTotal,
+            non_item_tasks: nonItem,
+            rewards: q.rewards,
+          };
+        });
+        recs.sort((a, b) =>
+          Number(b.items_ready) - Number(a.items_ready)
+          || a.missing_total - b.missing_total
+          || a.title.localeCompare(b.title));
+        return json({
+          frontier_count: frontier.length,
+          completed: done.size,
+          recommendations: recs.slice(0, limit ?? 8),
+        });
+      } catch (e) {
+        return err(e);
+      }
+    },
+  );
+
   // ---- D30: commission (配置後の機械設定、実行器は commission.ts) ----
   reg(
     'commission',

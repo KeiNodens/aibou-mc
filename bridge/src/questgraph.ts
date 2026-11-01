@@ -51,6 +51,7 @@ export class QuestGraph {
   private byId = new Map<string, QuestNode>(); // canonId → node
   private knownCompleted = new Set<string>();  // canonId
   private pollTimer: NodeJS.Timeout | null = null;
+  private watchStarting: NodeJS.Timeout | null = null;
   // set-aside (P4): 繰り返し失敗したクエストを frontier から外す
   private failures = new Map<string, number>(); // canonId → 失敗回数
   private aside = new Set<string>();            // canonId
@@ -225,11 +226,25 @@ export class QuestGraph {
    * episode記録 + screenshot (撮れれば)。goal未登録でも軽量に動く。
    */
   startWatch(state: State, mod: ModClient, journal?: Journal) {
-    if (this.pollTimer || !this.loaded()) return;
+    if (this.pollTimer || this.watchStarting) return;
+    if (!this.loaded()) {
+      // グラフが後から作られるケース (初回起動など) に備え、
+      // 読めるようになるまで開始を遅延する (D49)
+      this.watchStarting = setInterval(() => {
+        if (this.loaded()) {
+          clearInterval(this.watchStarting!);
+          this.watchStarting = null;
+          this.startWatch(state, mod, journal);
+        }
+      }, 15_000);
+      this.watchStarting.unref?.();
+      return;
+    }
     this.pollTimer = setInterval(async () => {
       try {
         const res = await mod.call('quest.list');
         const now = this.extractCompleted(res);
+        const prevFrontier = this.frontier(this.knownCompleted);
         const fresh = [...now].filter((id) => !this.knownCompleted.has(id));
         for (const cid of fresh) {
           const q = this.byId.get(cid);
@@ -239,11 +254,26 @@ export class QuestGraph {
             action: 'quest:complete',
             result: `completed: ${title}`, ok: true,
           });
+          journal?.append('quest_completed', { id: cid, title });
           console.log(`[questgraph] quest completed: ${title}`);
+          // ゲーム内にも知らせる (D49: 一緒に進んでる感の核)
+          mod.call('chat.send', { text: `クエスト「${title}」終わったよ` })
+            .catch(() => {});
           // 完了スクショット (撮れる環境のみ。失敗は無視)
           mod.call('screenshot').catch(() => {});
         }
         this.knownCompleted = now;
+        // 新しく開いたクエスト (frontier の増加) も知らせる
+        if (fresh.length) {
+          const unlocked = this.frontier(now).filter((q) =>
+            !prevFrontier.some((p) => p.id === q.id));
+          for (const q of unlocked.slice(0, 3)) {
+            journal?.append('quest_unlocked', { id: q.id, title: q.title });
+            mod.call('chat.send', {
+              text: `新しいクエスト「${q.title}」が開いたよ`,
+            }).catch(() => {});
+          }
+        }
       } catch {
         // quest.list非対応 (modpackにFTB無し等) — 次回再試行
       }
