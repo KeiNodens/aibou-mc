@@ -157,6 +157,9 @@ Use the `knowledge` tool before inventing mod behavior:
   confirmation is batched for joint play sessions.
 - Secondary bots are observer-only; command routing to them is not
   implemented.
+- Enchanting and brewing are definitions-only (enchanting table /
+  brewing stand and modded variants). No skill orchestrates them —
+  do not promise either to the player.
 - Long-duration soak test has not been run.
 
 ## Safety

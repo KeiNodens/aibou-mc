@@ -207,6 +207,7 @@ knowledge) is implemented and fixture-verified against a mock mod
 | AE2 autocraft, real job completion | Packet path implemented; end-to-end job on a pattern-provided network unverified |
 | Layer-3 rule coverage | Source analysis proceeds mod by mod (ProjectE → AE2 → Twilight Forest → Mekanism → RFTools); endgame mod support builds on these rules |
 | Commission plans | Framework + auto-run after builds are in; bundled plans await live GUI data |
+| Enchanting & brewing skills | Machine/station definitions exist, but no dedicated skills yet — the enchanting flow (XP, lapis, offer selection) and brewing (bottle handling, potion steps) are not covered |
 
 ## Optional integrations
 
