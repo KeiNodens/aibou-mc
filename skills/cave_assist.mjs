@@ -44,6 +44,17 @@ async function gotoNear(ctx, p, timeout = 25_000) {
   const g = await ctx.call('baritone.goto', { x: Math.floor(p.x), y: Math.floor(p.y), z: Math.floor(p.z) }).catch(() => null);
   if (g?.task_id) await ctx.waitTask(g.task_id, timeout).catch(() => null);
 }
+// 幸運つきツルハシを持っているか (掘る役の分担判断に使う)
+function fortuneLevel(state) {
+  let best = 0;
+  for (const s of state?.inventory_detail ?? []) {
+    if (!String(s.id).endsWith('pickaxe')) continue;
+    for (const e of s.attrs?.ench ?? []) {
+      if (e.id === 'minecraft:fortune') best = Math.max(best, e.lvl ?? 1);
+    }
+  }
+  return best;
+}
 function hotbarSlot(state, item) {
   return (state?.inventory_detail ?? []).find((s) => s.id === item && s.slot <= 8);
 }
@@ -78,6 +89,7 @@ export default {
     if (together) await ctx.say('ついていくね').catch(() => {});
     const visited = new Set();
     const announcedVeins = new Set();
+    const pendingVeins = [];
     let torchesPlaced = 0;
     let oresMined = 0;
     let fights = 0;
@@ -176,6 +188,34 @@ export default {
             }
           }
         }
+        // 幸運持ちの時に告知した notable: プレイヤーが近くに来たら
+        // 凛が掘る (一緒に掘る形)。足元まで寄られたら譲る
+        if (pendingVeins.length && dist(pl, pendingVeins[0]) <= 4) {
+          const pv = pendingVeins.shift();
+          const fslot = (st?.inventory_detail ?? []).find((s2) =>
+            s2.slot <= 8 && String(s2.id).endsWith('pickaxe') &&
+            (s2.attrs?.ench ?? []).some((e) => e.id === 'minecraft:fortune'));
+          if (fslot) await ctx.call('equip', { slot: fslot.slot }).catch(() => {});
+          await gotoNear(ctx, pv);
+          for (let n = 0; n < 8; n++) {
+            const f = await ctx.call('obs.block', { block: pv.ore, radius: 3 }).catch(() => null);
+            const spots = f?.found ?? [];
+            if (!spots.length) break;
+            const spot = spots.reduce((a, b) =>
+              dist(pv, a) <= dist(pv, b) ? a : b);
+            const plNow = ents(await ctx.call('obs.entity',
+              { name: player ?? pl.name }).catch(() => null))[0] ?? pl;
+            if (plNow && dist(plNow, spot) < 1.5) break;
+            visited.add(`${spot.x},${spot.y},${spot.z}`);
+            await ctx.call('dig', { x: spot.x, y: spot.y, z: spot.z }).catch(() => {});
+            oresMined++;
+            await ctx.sleep(500);
+          }
+          if (together) {
+            await ctx.say(`${NOTABLE.get(pv.ore)}掘ったよ`).catch(() => {});
+          }
+          continue;
+        }
         // 鉱石手伝い (6 tick に 1 回)
         if (ores && tick % 6 === 0) {
           let target = null;
@@ -193,8 +233,15 @@ export default {
                   ore, x: s.x, y: s.y, z: s.z, together,
                 });
                 if (together) {
-                  await ctx.say(`${NOTABLE.get(ore)}見つけた！掘らずに残してあるから、こっち来て`)
-                    .catch(() => {});
+                  const fl = fortuneLevel(st);
+                  if (fl > 0) {
+                    pendingVeins.push({ ore, x: s.x, y: s.y, z: s.z });
+                    await ctx.say(`${NOTABLE.get(ore)}見つけた！凛は幸運${fl}あるよ。近くに来たら掘るね`)
+                      .catch(() => {});
+                  } else {
+                    await ctx.say(`${NOTABLE.get(ore)}見つけた！掘らずに残してあるから、こっち来て`)
+                      .catch(() => {});
+                  }
                 }
               }
               if (together) continue;

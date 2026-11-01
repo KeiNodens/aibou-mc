@@ -2505,7 +2505,21 @@ public final class GameOps {
             slot.addProperty("count", s.getCount());
             JsonObject attrs = new JsonObject();
             if (s.isDamageableItem()) attrs.addProperty("damage", s.getDamageValue());
-            if (s.isEnchanted()) attrs.addProperty("enchanted", true);
+            if (s.isEnchanted()) {
+                attrs.addProperty("enchanted", true);
+                // エンチャントの中身 (id + レベル) も返す — 幸運の有無で
+                // 「誰が掘るか」が変わるため、LLM 側が判別できるように
+                JsonArray ench = new JsonArray();
+                net.minecraft.world.item.enchantment.EnchantmentHelper
+                    .getEnchantments(s).forEach((e, lvl) -> {
+                        JsonObject eo = new JsonObject();
+                        var ek = BuiltInRegistries.ENCHANTMENT.getKey(e);
+                        eo.addProperty("id", ek != null ? ek.toString() : "unknown");
+                        eo.addProperty("lvl", lvl);
+                        ench.add(eo);
+                    });
+                attrs.add("ench", ench);
+            }
             if (s.hasTag()) {
                 // 同idバリアントの識別用にNBTキー一覧を添付 (mode/material等)
                 JsonArray nkeys = new JsonArray();
