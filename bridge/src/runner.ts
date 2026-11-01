@@ -127,16 +127,31 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
       }
     }
     // 承認要求: 危険操作がgateに掛かった → chatで通知
+    // D59/P2-1: 対象の引数も併記する (何を承認するのか分かるように)
     if (e.name === 'approval') {
       const d = e.data as Record<string, unknown>;
+      let paramsNote = '';
+      try {
+        const s = JSON.stringify(d.params ?? {});
+        if (s && s !== '{}') paramsNote = ` (${s.slice(0, 120)})`;
+      } catch { /* 併記できなくても通知自体は出す */ }
       void opts.mod?.call('chat.send', {
-        text: `${d.method} は承認が必要だよ。OKなら .ok ${d.id}、やめなら .deny ${d.id}`,
+        text: `${d.method}${paramsNote} は承認が必要だよ。OKなら .ok ${d.id}、やめなら .deny ${d.id}`,
       }).catch(() => {});
     }
   });
 
   // bot自身の発言はchatイベントとして戻ってくるが、それで起動すると無限ループするので除外する
   const botName = opts.botName ?? 'Rin';
+
+  // D59/P1-2: 発言者認証。ドット命令の決裁系 (.ok/.deny/.goal) と hold 解除は
+  // オーナーの発言のみに限定する (chat の from は表示名しか材料がない前提)。
+  // BRIDGE_OWNER 未設定時は従来どおり全員可 (起動時に警告)。
+  const ownerName = process.env.BRIDGE_OWNER;
+  if (!ownerName) {
+    console.log('[runner] BRIDGE_OWNER is not set: dot-command approvals and hold releases accept ANY player. Set BRIDGE_OWNER to the owner player name to restrict them.');
+  }
+  const isOwner = (from: string) => !ownerName || from === ownerName;
 
   // 機械指示プレフィックス「.」: LLMを通さない確定的コマンド。消費したらtrue
   const handleDot = (c: { from: string; text: string }): boolean => {
@@ -147,6 +162,12 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
     const arg = sp < 0 ? '' : t.slice(sp + 1).trim();
     const say = (text: string) =>
       void opts.mod?.call('chat.send', { text }).catch(() => {});
+    // 決裁系コマンドはオーナーのみ (P1-2)。読み取り (.goals) は誰でも可
+    if ((cmd === 'ok' || cmd === 'approve' || cmd === 'deny' || cmd === 'goal')
+        && !isOwner(c.from)) {
+      say(`.${cmd} はオーナーだけだよ`);
+      return true;
+    }
     switch (cmd) {
       case 'goal':
         if (!arg) {
@@ -216,10 +237,14 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
         // BUSY等で直接起動できない場合はLLM経路へフォールスルー
       }
     }
-    // 新しい指示 = 人間の介入。stop/failed/blockedを解除してrunを要求
-    rh.release('owner_stop');
-    rh.release('failed');
-    rh.release('blocked');
+    // 新しい指示 = 人間の介入。stop/failed/blockedの解除はオーナーのみ
+    // (P1-2: 他プレイヤーの一言でオーナーの「止まれ」が無効化されないように)。
+    // run の要求自体は誰の発言でも積む (pump は hold 中は進まない)
+    if (isOwner(c.from)) {
+      rh.release('owner_stop');
+      rh.release('failed');
+      rh.release('blocked');
+    }
     rh.requestRun();
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => void rh.pump(), opts.debounceMs ?? 1500);
@@ -361,6 +386,12 @@ export function startRunner(state: State, opts: RunnerOpts): RunHold {
       opts.cwd,
       '-c',
       `mcp_servers.minecraft.url="${opts.mcpUrl}"`,
+      // D59/P1-1: BRIDGE_TOKEN 設定時は通常トークンだけを Codex に渡す。
+      // 管理用トークン (BRIDGE_ADMIN_TOKEN) は渡さない — runner が自分の
+      // 危険操作を自己承認できないようにするための分離。
+      ...(process.env.BRIDGE_TOKEN
+        ? ['-c', 'mcp_servers.minecraft.bearer_token_env_var="BRIDGE_TOKEN"']
+        : []),
       '-o',
       outFile,
       '-',

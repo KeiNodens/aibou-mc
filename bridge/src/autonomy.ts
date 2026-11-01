@@ -28,7 +28,7 @@ const DANGEROUS = new Set([
 
 /** 読み取り専用: レベル0でも承認不要 (observerと同等) */
 const READONLY = new Set([
-  'meta.capabilities', 'mod.ping', 'obs.state', 'obs.entity', 'obs.scan',
+  'meta.capabilities', 'meta.mods', 'mod.ping', 'obs.state', 'obs.entity', 'obs.scan',
   'obs.block', 'obs.block_state', 'look_info', 'container.read',
   'container.repo', 'item.info', 'find_item', 'recipe.lookup',
   'waypoint.get', 'waypoint.list', 'quest.list', 'quest.inspect',
@@ -46,10 +46,29 @@ export interface ApprovalReq {
 const APPROVE_TTL_MS = 5 * 60_000;
 const APPROVE_GRACE_MS = 60_000;
 
+/** params の安定ダイジェスト (キー順を正規化した JSON)。承認のバインド用 */
+export function paramsDigest(params: Record<string, unknown>): string {
+  const norm = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(norm);
+    if (v && typeof v === 'object') {
+      const o: Record<string, unknown> = {};
+      for (const k of Object.keys(v as Record<string, unknown>).sort()) {
+        o[k] = norm((v as Record<string, unknown>)[k]);
+      }
+      return o;
+    }
+    return v;
+  };
+  return JSON.stringify(norm(params));
+}
+
 export class Autonomy {
   private seq = 0;
   private pending = new Map<string, ApprovalReq>();
-  private approvedUntil = new Map<string, number>();
+  /** 承認済みグラント: method → (params ダイジェスト, 期限)。
+   *  D59/P2-1: 旧実装は method 単位で任意の引数が通ったため、
+   *  承認した特定の呼出 (method + params) にだけバインドする */
+  private grants = new Map<string, { digest: string; until: number }>();
   private profile: string;
 
   constructor(private state?: State) {
@@ -75,9 +94,11 @@ export class Autonomy {
     if (lv === 2 || READONLY.has(method)) return { ok: true };
     if (lv === 1 && !DANGEROUS.has(method)) return { ok: true };
 
-    // 承認済みmethodはgrace period内で通過
-    const until = this.approvedUntil.get(method);
-    if (until && Date.now() < until) return { ok: true };
+    // 承認済みグラント (同一 method + 同一 params) は TTL 内で通過
+    const g = this.grants.get(method);
+    if (g && Date.now() < g.until && g.digest === paramsDigest(params)) {
+      return { ok: true };
+    }
 
     const req: ApprovalReq = {
       id: `a${++this.seq}`, method, params, at: Date.now(),
@@ -90,14 +111,16 @@ export class Autonomy {
     return { ok: false, req };
   }
 
-  /** id指定または最新のpendingを承認 → そのmethodを5分間通す */
+  /** id指定または最新のpendingを承認 → その呼出 (method+params) を5分間通す */
   approve(id?: string): { approved: ApprovalReq | null; pending: number } {
     const r = id
       ? this.pending.get(id) ?? null
       : [...this.pending.values()].sort((a, b) => b.at - a.at)[0] ?? null;
     if (!r) return { approved: null, pending: this.pending.size };
     this.pending.delete(r.id);
-    this.approvedUntil.set(r.method, Date.now() + APPROVE_TTL_MS);
+    this.grants.set(r.method, {
+      digest: paramsDigest(r.params), until: Date.now() + APPROVE_TTL_MS,
+    });
     return { approved: r, pending: this.pending.size };
   }
 

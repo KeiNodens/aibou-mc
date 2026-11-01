@@ -22,9 +22,13 @@ export class State {
     this.chatListeners.push(fn);
   }
 
-  /** 全イベントの購読 (runholdの死亡/反射hook用) */
-  onEvent(fn: (e: Evt) => void) {
+  /** 全イベントの購読 (runholdの死亡/反射hook用)。解除関数を返す */
+  onEvent(fn: (e: Evt) => void): () => void {
     this.evtListeners.push(fn);
+    return () => {
+      const i = this.evtListeners.indexOf(fn);
+      if (i >= 0) this.evtListeners.splice(i, 1);
+    };
   }
 
   push(name: string, data: unknown): Evt {

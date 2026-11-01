@@ -18,6 +18,19 @@ import { fileURLToPath } from 'node:url';
 const MOD_URL = process.env.MOD_URL ?? 'ws://127.0.0.1:25587';
 const MCP_PORT = Number(process.env.MCP_PORT ?? 25589);
 const BRIDGE_TOKEN = process.env.BRIDGE_TOKEN;
+const ADMIN_TOKEN = process.env.BRIDGE_ADMIN_TOKEN;
+// D59/P1-3: 既定は loopback のみ bind する。非 loopback は BRIDGE_HOST 明示 +
+// BRIDGE_TOKEN 必須 (無認証のまま LAN/外部へ晒れる構成を起動時に拒否する)。
+// Tailscale Serve 経由の Muse 接続は PC 内で localhost へ中継されるため影響なし。
+const MCP_HOST = process.env.BRIDGE_HOST ?? '127.0.0.1';
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', '::1', 'localhost']);
+if (!LOOPBACK_HOSTS.has(MCP_HOST) && !BRIDGE_TOKEN) {
+  console.error(`[bridge] BRIDGE_HOST=${MCP_HOST} requires BRIDGE_TOKEN; refusing to start unauthenticated on a non-loopback interface`);
+  process.exit(1);
+}
+if (BRIDGE_TOKEN && !ADMIN_TOKEN) {
+  console.warn('[bridge] BRIDGE_ADMIN_TOKEN is not set: approval/admin operations (approve, deny, loop_resume, /api/approvals decisions) are DISABLED over HTTP. In-game owner .ok/.deny still works.');
+}
 const RUNNER = process.env.RUNNER !== 'off';
 const SKILLS_DIR =
   process.env.SKILLS_DIR ??
@@ -87,12 +100,41 @@ if (process.env.PRISM_AUTOLAUNCH === '1') {
 const app = express();
 app.use(express.json());
 
-// トンネルで /mcp を外部公開する場合の保護。BRIDGE_TOKEN 設定時は
+// トンネルで /mcp を外部公開する場合の保護。トークン設定時は
 // Authorization: Bearer <token> を要求する。未設定なら従来どおり無認証。
+// D59/P1-1: 管理用トークン (BRIDGE_ADMIN_TOKEN) を通常トークンと分離する。
+// admin トークンは通常トークンのスーパーセット (全 API を通る)。
+// 承認系の「決裁」だけは admin トークン必須にし、runner の Codex (通常
+// トークンのみ所持) が自分の危険操作を自己承認できないようにする。
+const bearerOf = (req: express.Request) => {
+  const h = req.headers.authorization;
+  return h?.startsWith('Bearer ') ? h.slice('Bearer '.length) : null;
+};
 const requireAuth: express.RequestHandler = (req, res, next) => {
-  if (!BRIDGE_TOKEN) return next();
-  if (req.headers.authorization === `Bearer ${BRIDGE_TOKEN}`) return next();
+  if (!BRIDGE_TOKEN && !ADMIN_TOKEN) return next();
+  const b = bearerOf(req);
+  if (b && (b === BRIDGE_TOKEN || b === ADMIN_TOKEN)) return next();
   res.status(401).json({ error: 'unauthorized' });
+};
+const requireAdmin: express.RequestHandler = (req, res, next) => {
+  if (!BRIDGE_TOKEN && !ADMIN_TOKEN) return next(); // ローカル開発 (無認証構成)
+  if (ADMIN_TOKEN && bearerOf(req) === ADMIN_TOKEN) return next();
+  res.status(403).json({ error: 'admin token required' });
+};
+const isAdminCaller = (req: express.Request) =>
+  (!BRIDGE_TOKEN && !ADMIN_TOKEN) ||
+  (!!ADMIN_TOKEN && bearerOf(req) === ADMIN_TOKEN);
+/** 管理系 MCP ツール: これらの tools/call は admin 呼び出し元でのみ許可 */
+const ADMIN_TOOLS = new Set(['approve', 'deny', 'loop_resume']);
+const adminToolInBody = (body: unknown): string | null => {
+  const msgs = Array.isArray(body) ? body : [body];
+  for (const m of msgs) {
+    const r = m as { method?: string; params?: { name?: string } };
+    if (r?.method === 'tools/call' && r.params?.name && ADMIN_TOOLS.has(r.params.name)) {
+      return r.params.name;
+    }
+  }
+  return null;
 };
 
 app.get('/healthz', (_req, res) => {
@@ -110,24 +152,26 @@ app.get('/events', requireAuth, (req, res) => {
   });
   res.write(`data: ${JSON.stringify({ name: 'hello', seq: state.latestSeq() })}\n\n`);
   let closed = false;
-  state.onEvent((e) => {
+  // D59/P2-23: 切断時に購読を解除する (旧実装は listener と res 参照が
+  // 再接続のたびに単調増加した)
+  const off = state.onEvent((e) => {
     if (closed) return;
     try { res.write(`data: ${JSON.stringify(e)}\n\n`); } catch { closed = true; }
   });
   const hb = setInterval(() => {
     if (!closed) { try { res.write(': ping\n\n'); } catch { closed = true; } }
   }, 25_000);
-  req.on('close', () => { closed = true; clearInterval(hb); });
+  req.on('close', () => { closed = true; clearInterval(hb); off(); });
 });
 
 // 承認API + 簡易UI (P6): pending の確認と approve/deny をブラウザから。
 app.get('/api/approvals', requireAuth, (_req, res) => {
   res.json({ level: autonomy.level(), pending: autonomy.list() });
 });
-app.post('/api/approvals/:id/approve', requireAuth, (req, res) => {
+app.post('/api/approvals/:id/approve', requireAdmin, (req, res) => {
   res.json(autonomy.approve(req.params.id));
 });
-app.post('/api/approvals/:id/deny', requireAuth, (req, res) => {
+app.post('/api/approvals/:id/deny', requireAdmin, (req, res) => {
   res.json(autonomy.deny(req.params.id));
 });
 app.get('/approvals', (_req, res) => {
@@ -148,9 +192,19 @@ app.post('/inject', requireAuth, (req, res) => {
 // 1リクエストの処理完了で閉じるため、リクエストごとに server+transport を作る
 // （SDK推奨パターン）。
 app.all('/mcp', requireAuth, async (req, res) => {
+  // D59/P1-1: 管理系ツール (approve/deny/loop_resume) の呼出は admin
+  // 呼び出し元のみ。JSON-RPC の中身を見て HTTP 層で止める
+  const adminTool = adminToolInBody(req.body);
+  if (adminTool && !isAdminCaller(req)) {
+    res.status(403).json({
+      jsonrpc: '2.0', id: (req.body as { id?: unknown })?.id ?? null,
+      error: { code: -32001, message: `tool '${adminTool}' requires the admin token (BRIDGE_ADMIN_TOKEN)` },
+    });
+    return;
+  }
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   transport.onerror = (e) => console.log('[mcp transport]', e);
-  const server = createMcpServer(state, mod, skills, journal, runhold, questGraph, autonomy, bots);
+  const server = await createMcpServer(state, mod, skills, journal, runhold, questGraph, autonomy, bots);
   res.on('close', () => {
     transport.close().catch(() => {});
     server.close().catch(() => {});
@@ -170,20 +224,42 @@ const APPROVALS_PAGE = `<!doctype html>
 <style>body{font-family:system-ui;margin:2em}button{margin:0 .3em}
 code{background:#eee;padding:.1em .3em}</style></head>
 <body><h1>承認待ち (autonomy gate)</h1>
-<p>token: <input id="tok" type="password" size="40">
+<p>admin token: <input id="tok" type="password" size="40">
 <button onclick="refresh()">更新</button></p>
 <div id="list">...</div>
 <script>
-const H=()=>({Authorization:'Bearer '+document.getElementById('tok').value});
+// D59/P1-4: pending の内容 (method/params) は LLM や mod が生成し得る
+// 非信頼データ。innerHTML へ無エスケープで流す旧実装は、細工した params で
+// このページに任意スクリプトを埋め、保持するトークンを窃取できた。
+// 表示は全て textContent / DOM API で行う。
+const tokEl=document.getElementById('tok');
+tokEl.value=localStorage.getItem('aibouAdminTok')||'';
+const H=()=>({Authorization:'Bearer '+tokEl.value});
 async function refresh(){
+  localStorage.setItem('aibouAdminTok',tokEl.value);
   const r=await fetch('/api/approvals',{headers:H()});
   const d=await r.json();
   const el=document.getElementById('list');
-  if(!d.pending||!d.pending.length){el.textContent='承認待ちはありません (level '+d.level+')';return;}
-  el.innerHTML=d.pending.map(p=>'<div><code>'+p.id+'</code> '+p.method+
-    ' <small>'+JSON.stringify(p.params)+'</small>'+
-    ' <button onclick="act(\''+p.id+'\',\'approve\')">承認</button>'+
-    '<button onclick="act(\''+p.id+'\',\'deny\')">拒否</button></div>').join('');
+  el.textContent='';
+  if(!d.pending||!d.pending.length){
+    el.textContent='承認待ちはありません (level '+d.level+')';return;
+  }
+  for(const p of d.pending){
+    const row=document.createElement('div');
+    const code=document.createElement('code');
+    code.textContent=p.id;
+    row.append(code,document.createTextNode(' '+p.method+' '));
+    const small=document.createElement('small');
+    small.textContent=JSON.stringify(p.params);
+    row.append(small,document.createTextNode(' '));
+    for(const [kind,label] of [['approve','承認'],['deny','拒否']]){
+      const b=document.createElement('button');
+      b.textContent=label;
+      b.onclick=()=>act(p.id,kind);
+      row.append(b,document.createTextNode(' '));
+    }
+    el.append(row);
+  }
 }
 async function act(id,kind){
   await fetch('/api/approvals/'+id+'/'+kind,{method:'POST',headers:H()});
@@ -192,7 +268,7 @@ async function act(id,kind){
 setInterval(refresh,5000);
 </script></body></html>`;
 
-app.listen(MCP_PORT, () => console.log(`[bridge] MCP http://127.0.0.1:${MCP_PORT}/mcp`));
+app.listen(MCP_PORT, MCP_HOST, () => console.log(`[bridge] MCP http://${MCP_HOST}:${MCP_PORT}/mcp`));
 
 // 実行管理 (Run/Hold)。runner無効時も状態公開用に作っておく
 const runhold: RunHold | undefined = RUNNER

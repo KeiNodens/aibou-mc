@@ -25,14 +25,39 @@ const err = (e: unknown) => ({
 
 // M2.5向けツール群。mod側の実装があるmethodはWS経由で呼び、
 // 未実装のものはmock-modがUNSUPPORTEDを返す。
-export function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal, runhold?: RunHold, questGraph?: QuestGraph, autonomy?: Autonomy, bots?: BotManager) {
+export async function createMcpServer(state: State, mod: ModClient, skills: Skills, journal?: Journal, runhold?: RunHold, questGraph?: QuestGraph, autonomy?: Autonomy, bots?: BotManager) {
   const server = new McpServer({ name: 'minecraft', version: '0.0.1' });
 
   // ツールゲート (D28): 登録ハンドルを集め、mod 連動 + 設定で見せ方を制御
   const REG = new Map<string, { enable(): void; disable(): void }>();
+  // D59/P2-3: bot を動かす直接ツール群。スキル実行中は writer lease として
+  // BUSY を返す (旧実装は直接ツールがスキル排他を素通りし、実行中スキルと
+  // 同じ bot を奪い合えた)。緊急停止系 (stop/stop_move/cancel_current) と
+  // 読み取り系・報告系 (send_chat 等) は対象外
+  const WRITER_TOOLS = new Set([
+    'run_command', 'use_item', 'container_click', 'container_button',
+    'container_trade', 'container_repo_action', 'container_close',
+    'craft_menu', 'move', 'dig', 'equip', 'toss', 'goto', 'mine', 'follow',
+    'interact', 'look_at', 'key', 'scroll', 'screen_click', 'type_text',
+    'sign_write', 'container_open_curios', 'quest_claim', 'respawn',
+    'waypoint_save', 'waypoint_delete', 'emote', 'mock_gather', 'jei_search',
+    'inventory_resync',
+  ]);
   const reg = ((...args: unknown[]) => {
+    const name = args[0] as string;
+    if (WRITER_TOOLS.has(name) && typeof args[2] === 'function') {
+      const cb = args[2] as (...a: unknown[]) => Promise<unknown>;
+      args[2] = async (...a: unknown[]) => {
+        const running = skills.runningName();
+        if (running) {
+          return err(new Error(
+            `BUSY: skill '${running}' is running (writer lease); direct bot control is blocked until it finishes or is stopped`));
+        }
+        return cb(...a);
+      };
+    }
     const t = (server as any).registerTool(...args);
-    REG.set(args[0] as string, t);
+    REG.set(name, t);
     return t;
   }) as unknown as typeof server.registerTool;
   const gateState = new Map<string, boolean>();
@@ -2179,7 +2204,10 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
   );
 
-  void applyGate();
+  // D59/P1-9: 初回ゲート適用を完了してからサーバーを返す。
+  // 旧実装は非同期の後追い適用で、起動直後の tools/list が
+  // ゲート前の全ツール一覧を返す窓があった (15秒ポーリングで自己回復はする)。
+  await applyGate();
   const gateTimer = setInterval(() => { void applyGate(); }, 15_000);
   (gateTimer as unknown as { unref?: () => void }).unref?.();
   // Review F7: HTTP mode creates one server per request; the gate
