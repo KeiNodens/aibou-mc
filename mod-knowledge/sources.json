@@ -66,6 +66,18 @@
                  "ad_astra_giselle_addon":  {
                                                 "repo":  "https://github.com/gisellevonbingen-Minecraft/Ad-Astra-Giselle-Addon",
                                                 "note":  "branch 1.20.1-rework = 6.27 at pin; tags stop at 6.9"
-                                            }
+                                            },
+                 "thermal_foundation":  {
+                                            "repo":  "https://github.com/CoFH/ThermalCore",
+                                            "note":  "numbers live in ThermalCore (bundled into the foundation jar); 11.0.6 window pin 9a9b4977; foundation repo pin 0e7b76ac (CoFH/ThermalFoundation); CoFHCore 11.0.2 single-commit window 6c9344a7 also cached"
+                                        },
+                 "thermal_expansion":  {
+                                           "repo":  "https://github.com/CoFH/ThermalExpansion",
+                                           "note":  "branch 1.20.1, last commit of 11.0.1 window (CI build .29)"
+                                       },
+                 "thermal_dynamics":  {
+                                          "repo":  "https://github.com/CoFH/ThermalDynamics",
+                                          "note":  "branch 1.20.1, last commit of 11.0.1 window (CI build .23)"
+                                      }
              }
 }
