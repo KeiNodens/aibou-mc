@@ -600,18 +600,47 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     } catch { knowledgeIndex = null; }
     return knowledgeIndex;
   };
+  // D40 層3: 解析済みルール (mod-knowledge/rules/, 共有・版固定)
+  const rulesDir = async (): Promise<string | null> => {
+    for (const dir of [path.resolve(process.cwd(), 'mod-knowledge', 'rules'),
+      path.resolve(process.cwd(), '..', 'mod-knowledge', 'rules')]) {
+      try {
+        const { readdir } = await import('node:fs/promises');
+        await readdir(dir);
+        return dir;
+      } catch { /* try next */ }
+    }
+    return null;
+  };
+  const loadRuleFiles = async (): Promise<Array<Record<string, unknown>>> => {
+    const dir = await rulesDir();
+    if (!dir) return [];
+    const { readdir } = await import('node:fs/promises');
+    const out: Array<Record<string, unknown>> = [];
+    for (const f of await readdir(dir)) {
+      if (!f.endsWith('.json')) continue;
+      try {
+        const d = JSON.parse(await readFile(path.join(dir, f), 'utf8'));
+        out.push({ file: f, ...d });
+      } catch { /* skip broken rule file */ }
+    }
+    return out;
+  };
   reg(
     'knowledge',
     {
       description:
         'Search the extracted mod documentation (D40 layer 2: ' +
         'in-jar lang files and Patchouli guides, extracted by ' +
-        'tools/extract_knowledge.py into knowledge/). action=search ' +
-        'finds items/blocks/guides by name or id substring; ' +
-        'action=get reads one extracted file (mod + path from the ' +
-        'index); action=mods lists indexed mods.',
+        'tools/extract_knowledge.py into knowledge/) and the ' +
+        'analysed rule store (layer 3: mod-knowledge/rules/, ' +
+        'shared across packs, pinned by mod version). ' +
+        'action=search finds items/blocks/guides and rules by ' +
+        'substring; action=get reads one extracted file (mod + ' +
+        'path from the index); action=mods lists indexed mods; ' +
+        'action=rules lists analysed rule files.',
       inputSchema: {
-        action: z.enum(['search', 'get', 'mods']),
+        action: z.enum(['search', 'get', 'mods', 'rules']),
         query: z.string().optional(),
         mod: z.string().optional(),
         path: z.string().optional(),
@@ -620,13 +649,22 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
     },
     async ({ action, query, mod: modId, path: rel, limit }) => {
       try {
+        if (action === 'rules') {
+          const files = await loadRuleFiles();
+          return json({ rule_files: files.map((f) => ({
+            file: f.file, mod: f.mod, version: f.version,
+            source_repo: f.source_repo, source_commit: f.source_commit,
+            rules: Array.isArray(f.rules) ? f.rules.length : 0,
+          })) });
+        }
         const idx = await loadKnowledge();
-        if (!idx?.mods) {
+        if (!idx?.mods && action !== 'search') {
           return err(new Error('knowledge index not found — run ' +
             'tools/extract_knowledge.py against the pack mods dir first'));
         }
+        const packMods = idx?.mods ?? [];
         if (action === 'mods') {
-          return json({ mods: idx.mods.map((m) => ({
+          return json({ mods: packMods.map((m) => ({
             id: m.id, name: m.name, version: m.version,
             lang_entries: m.lang_entries, guides: m.guides_count,
           })) });
@@ -635,7 +673,20 @@ export function createMcpServer(state: State, mod: ModClient, skills: Skills, jo
           const q = (query ?? '').toLowerCase();
           if (!q) return err(new Error('query is required for search'));
           const out: Array<Record<string, unknown>> = [];
-          for (const m of idx.mods) {
+          // 層3 ルールも検索対象 (topic / value / id の部分一致)
+          for (const f of await loadRuleFiles()) {
+            const rules = (f.rules ?? []) as Array<Record<string, unknown>>;
+            for (const r of rules) {
+              const hay = `${r.id ?? ''} ${r.topic ?? ''} ${JSON.stringify(r.value ?? '')}`.toLowerCase();
+              if (hay.includes(q)) {
+                out.push({ mod: f.mod, version: f.version,
+                  kind: 'rule', ...r });
+                if (out.length >= (limit ?? 20)) break;
+              }
+            }
+            if (out.length >= (limit ?? 20)) break;
+          }
+          for (const m of packMods) {
             if (String(m.id).toLowerCase().includes(q)
               || String(m.name ?? '').toLowerCase().includes(q)) {
               out.push({ mod: m.id, kind: 'mod', name: m.name,

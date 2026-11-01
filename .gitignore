@@ -48,3 +48,4 @@ run-one.ps1
 data/party-tools.json
 data/places.json
 knowledge/
+mod-knowledge/.sources/
