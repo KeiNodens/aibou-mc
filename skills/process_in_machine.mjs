@@ -202,6 +202,6 @@ export default {
     await ctx.say(`${short(first)} を${produced}個作ったよ (${roles.source === 'definition' ? '定義' : '推定'}slot)`);
     const got = Object.fromEntries(ids.map((k) => [k, seen[k]]));
     if (seen.__mismatch) got.output_mismatch = seen.__mismatch;
-    return { done: true, produced, items: got, via: roles.source };
+    return { done: true, inserted, produced, items: got, via: roles.source };
   },
 };
