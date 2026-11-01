@@ -157,3 +157,9 @@ mods.tomlの `side` は依存要求であり実行側を保証しない。候補
 - **理由**: ユーザーから「AI と話して schematic を作れる」「置くアイテムを一緒に集める」「チェストから取り出せる」の3点と、工場建築・配線の肩代わりへの希望が明示された。MineBench が「モデルによる設計図生成」の成立を実証しており、書き出し形式 (.schem) は既存の読み取り・建築と直結する。block state と mod block の問題は、カタログ (実在 id + state 語彙) と配置層の段階導入で対処する
 - **根拠**: ユーザー裁定 (2026-11-01) + MineBench 調査 (voxel.exec プリミティブと .schem v3 書き出し)
 - **詳細**: docs/design-schematic-expansion.md
+
+## D24. Farmer's Delight 対応 (2026-11-01)
+
+- **決定**: FD を3経路で扱う。作物は farm スキル拡張 (キャベツ/タマネギは dig+植え直し、トマトは右クリック収穫、米は対象外)、まな板・ストーブ・スキレットは world_craft のステーション定義、cooking pot は専用 cook スキル (レシピ駆動、draft)
+- **理由**: ユーザーから農作物と FD 料理の対応状況の質問があり、現行ギャップ (farm はバニラ5種のみ、FD は機械定義のみ) を埋めるため。FD の調理系は「GUI の鍋」と「ワールド内操作」に分かれ、既存の枠組み (world_craft / レシピ解決) に素直に乗る
+- **根拠**: ユーザーの質問 (2026-11-01) + mod-support.md の FD 棚卸し (cooking_pot [d]、cutting_board/skillet はワールド内操作型)

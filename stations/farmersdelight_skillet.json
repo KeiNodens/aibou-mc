@@ -1,0 +1,16 @@
+{
+  "id": "farmersdelight_skillet",
+  "recipeTypes": ["minecraft:campfire_cooking"],
+  "station": { "block": "farmersdelight:skillet" },
+  "inputs": [],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "place_on" },
+    { "do": "wait", "timeout_s": 25 },
+    { "do": "right_click_station" },
+    { "do": "collect" }
+  ],
+  "draft": true,
+  "hint": "スキレットの下に熱源 (ストーブや火) があるか",
+  "note": "焚き火レシピ流用。ストーブより速い想定"
+}

@@ -194,7 +194,13 @@ export default {
         }
         case 'right_click_station': {
           if (step.with) {
-            if (!(await ensureHeld(ctx, step.with)))
+            let heldTool = await ensureHeld(ctx, step.with);
+            if (!heldTool && Array.isArray(step.with_alt)) {
+              for (const alt of step.with_alt) {
+                if (await ensureHeld(ctx, alt)) { heldTool = true; break; }
+              }
+            }
+            if (!heldTool)
               return { done: false, reason: 'tool_missing', item: step.with, log };
           }
           const target = step.target_block
@@ -205,6 +211,11 @@ export default {
           await ctx.call('use_item', { x: target.x, y: target.y, z: target.z });
           await ctx.sleep(300);
           log.push('right_click_station');
+          break;
+        }
+        case 'wait': {
+          await ctx.sleep((step.timeout_s ?? 10) * 1000);
+          log.push('wait');
           break;
         }
         case 'wait_transform': {

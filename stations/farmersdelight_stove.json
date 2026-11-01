@@ -1,0 +1,16 @@
+{
+  "id": "farmersdelight_stove",
+  "recipeTypes": ["minecraft:campfire_cooking"],
+  "station": { "block": "farmersdelight:stove" },
+  "inputs": [],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "place_on" },
+    { "do": "wait", "timeout_s": 35 },
+    { "do": "right_click_station" },
+    { "do": "collect" }
+  ],
+  "draft": true,
+  "hint": "ストーブが着火しているか (FD のストーブ自体が熱源)",
+  "note": "焚き火レシピ (campfire_cooking) がそのまま使える。置けるのは1回に1アイテム"
+}

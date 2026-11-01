@@ -7,6 +7,12 @@ const CROPS = {
   'minecraft:potatoes': { maxAge: 7, seed: 'minecraft:potato', label: 'じゃがいも' },
   'minecraft:beetroots': { maxAge: 3, seed: 'minecraft:beetroot_seeds', label: 'ビートルート' },
   'minecraft:nether_wart': { maxAge: 3, seed: 'minecraft:nether_wart', label: 'ネザーウォート' },
+  // Farmer's Delight (age は実機で要確認のものを含む)
+  'farmersdelight:cabbages': { maxAge: 7, seed: 'farmersdelight:cabbage_seeds', label: 'キャベツ' },
+  'farmersdelight:onions': { maxAge: 7, seed: 'farmersdelight:onion', label: 'タマネギ' },
+  // トマトは壊さず右クリックで実だけ取る (株は残る)。植え直しなし
+  'farmersdelight:tomatoes': { maxAge: 7, seed: null, harvest: 'use', label: 'トマト' },
+  // 米 (farmersdelight:rice) は水中+上下二段構造のため未対応
 };
 
 async function gotoNear(ctx, p) {
@@ -22,8 +28,10 @@ export default {
   name: 'farm',
   description:
     'Harvest mature crops and replant them. Supports wheat, carrots, ' +
-    'potatoes, beetroots and nether wart. Maturity is judged from the ' +
-    'block-state age property; seeds must be in the hotbar to replant.',
+    'potatoes, beetroots, nether wart, and Farmer\'s Delight cabbages, ' +
+    'onions and tomatoes (tomatoes are picked by right-click, the plant ' +
+    'stays). Maturity is judged from the block-state age property; ' +
+    'seeds must be in the hotbar to replant.',
   params: {
     crop: { type: 'string', required: false, description: 'crop block id (default minecraft:wheat)' },
     radius: { type: 'integer', required: false, description: 'search radius (default 16, max 64)' },
@@ -60,6 +68,16 @@ export default {
       if (!Number.isFinite(age) || age < def.maxAge) continue;
 
       await gotoNear(ctx, p);
+      if (def.harvest === 'use') {
+        // 右クリックで実だけ収穫。age が下がれば成功とみなす
+        await ctx.call('use_item', { x: p.x, y: p.y, z: p.z }).catch(() => null);
+        await ctx.sleep(400);
+        const after = await ctx.call('obs.block_state', { x: p.x, y: p.y, z: p.z })
+          .catch(() => null);
+        const ageAfter = Number(after?.properties?.age ?? NaN);
+        if (Number.isFinite(ageAfter) && ageAfter < age) harvested++;
+        continue;
+      }
       const d = await ctx.call('dig', { x: p.x, y: p.y, z: p.z }).catch(() => null);
       if (d?.task_id) {
         const dt = await ctx.waitTask(d.task_id, 20_000);
@@ -71,6 +89,7 @@ export default {
       await ctx.sleep(600);
 
       // 植え直し: 種がホットバーにあれば土 (y-1) の上面へ使う
+      if (!def.seed) continue;
       const now = await ctx.state();
       const seedSlot = hotbarSlot(now, def.seed);
       if (seedSlot) {

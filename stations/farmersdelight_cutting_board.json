@@ -1,0 +1,15 @@
+{
+  "id": "farmersdelight_cutting_board",
+  "recipeTypes": ["farmersdelight:cutting"],
+  "station": { "block": "farmersdelight:cutting_board" },
+  "inputs": [],
+  "steps": [
+    { "do": "goto_station" },
+    { "do": "place_on" },
+    { "do": "right_click_station", "with": "farmersdelight:iron_knife",
+      "with_alt": ["farmersdelight:flint_knife", "farmersdelight:golden_knife", "farmersdelight:diamond_knife", "farmersdelight:netherite_knife"] },
+    { "do": "collect" }
+  ],
+  "hint": "ナイフ類を bot が持っているか、まな板の上に材料が乗っているか",
+  "note": "target で cutting レシピから材料を引く想定。結果物はアイテムとして周囲に飛ぶ"
+}
