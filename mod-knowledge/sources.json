@@ -38,6 +38,10 @@
                  "ad_astra_giselle_addon":  {
                                                 "repo":  "https://github.com/gisellevonbingen-Minecraft/Ad-Astra-Giselle-Addon",
                                                 "note":  "branch 1.20.1-rework = 6.27 at pin; tags stop at 6.9"
-                                            }
+                                            },
+                 "enchantinginfuser":  {
+                                           "repo":  "https://github.com/Fuzss/enchanting-infuser",
+                                           "note":  "branch 1.20.1 = 8.0.3 at pin"
+                                       }
              }
 }
