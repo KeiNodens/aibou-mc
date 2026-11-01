@@ -110,6 +110,10 @@
                  "rftoolsutility":  {
                                         "repo":  "https://github.com/McJtyMods/RFToolsUtility",
                                         "note":  "branch 1.20, version-window pin for 6.0.7 (tip is 6.0.8)"
-                                    }
+                                    },
+                 "industrialforegoing":  {
+                                             "repo":  "https://github.com/Buuz135/Industrial-Foregoing",
+                                             "note":  "branch 1.20 tip = 3.5.22 release-day state (Modrinth date match; version assembled in build.gradle)"
+                                         }
              }
 }
